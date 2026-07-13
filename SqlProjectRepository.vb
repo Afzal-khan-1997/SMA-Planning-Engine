@@ -684,8 +684,6 @@ Public Class SqlProjectRepository
                             .ProjectCode = "TPL-" & MakeSafeCode(projectType),
                             .ProjectName = projectType & " Project Template",
                             .ClientName = "SQL Template",
-                            .VersionNumber = "1.0",
-                            .ProjectSize = "Small",
                             .TemplateName = projectType,
                             .ProjectType = projectType,
                             .ReportType = projectType

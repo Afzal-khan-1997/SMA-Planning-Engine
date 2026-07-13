@@ -11,9 +11,9 @@ Public Class LiveProjectCatalogService
             CreateSmaBreProjectTemplate(),
             CreateSmaRolProjectTemplate(),
             CreateSmaWithinProjectTemplate(),
-            New LiveProjectItem With {.ProjectCode = "TPL-BRE-ROL", .ProjectName = "SMA BRE/ROL Update", .ClientName = "Template", .VersionNumber = "1.0", .ProjectSize = "Small", .TemplateName = "BRE/ROL Update template", .ProjectType = "Update"},
-            New LiveProjectItem With {.ProjectCode = "TPL-BRE-WITHIN", .ProjectName = "SMA BRE Within Update", .ClientName = "Template", .VersionNumber = "1.0", .ProjectSize = "Small", .TemplateName = "BRE Within Update", .ProjectType = "Update"},
-            New LiveProjectItem With {.ProjectCode = "TPL-FEEDBACK", .ProjectName = "SMA Feedback update", .ClientName = "Template", .VersionNumber = "1.0", .ProjectSize = "Small", .TemplateName = "Feedback Change", .ProjectType = "Feedback"}
+            New LiveProjectItem With {.ProjectCode = "TPL-BRE-ROL", .ProjectName = "SMA BRE/ROL Update", .ClientName = "Template", .TemplateName = "BRE/ROL Update template", .ProjectType = "Update"},
+            New LiveProjectItem With {.ProjectCode = "TPL-BRE-WITHIN", .ProjectName = "SMA BRE Within Update", .ClientName = "Template", .TemplateName = "BRE Within Update", .ProjectType = "Update"},
+            New LiveProjectItem With {.ProjectCode = "TPL-FEEDBACK", .ProjectName = "SMA Feedback update", .ClientName = "Template", .TemplateName = "Feedback Change", .ProjectType = "Feedback"}
         }
     End Sub
 
@@ -26,8 +26,6 @@ Public Class LiveProjectCatalogService
             .ProjectCode = "TPL-NEW-BRE",
             .ProjectName = "SMA - BRE Project",
             .ClientName = "Template",
-            .VersionNumber = "1.0",
-            .ProjectSize = "Small",
             .TemplateName = "SMA New Project",
             .ProjectType = "New"
         }
@@ -38,8 +36,6 @@ Public Class LiveProjectCatalogService
             .ProjectCode = "TPL-NEW-ROL",
             .ProjectName = "SMA - ROL Project",
             .ClientName = "Template",
-            .VersionNumber = "1.0",
-            .ProjectSize = "Small",
             .TemplateName = "SMA New Project",
             .ProjectType = "New"
         }
@@ -50,8 +46,6 @@ Public Class LiveProjectCatalogService
             .ProjectCode = "TPL-NEW-WITHIN",
             .ProjectName = "SMA - Within Project",
             .ClientName = "Template",
-            .VersionNumber = "1.0",
-            .ProjectSize = "Small",
             .TemplateName = "SMA New Project",
             .ProjectType = "New"
         }
@@ -113,8 +107,8 @@ Public Class LiveProjectItem
     Public Property ProjectCode As String = ""
     Public Property ProjectName As String = ""
     Public Property ClientName As String = ""
-    Public Property VersionNumber As String = "1.0"
-    Public Property ProjectSize As String = "Small"
+    Public Property VersionNumber As String = ""
+    Public Property ProjectSize As String = ""
     Public Property TemplateName As String = "New Project"
     Public Property ProjectType As String = "New"
     Public Property SavedProjectId As Integer
