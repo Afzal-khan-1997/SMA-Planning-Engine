@@ -1,0 +1,5014 @@
+Imports System.ComponentModel
+Imports System.ComponentModel.Design
+Imports System.Configuration
+Imports System.Drawing.Drawing2D
+Imports System.Globalization
+Imports System.IO
+
+Public Class SMASchedulerForm
+    Private ReadOnly _tasks As New BindingList(Of ScheduleTask)
+    Private ReadOnly _engine As New ScheduleEngine()
+    Private ReadOnly _xlsxExportService As New XlsxExportService()
+    Private ReadOnly _projectLibrary As New ProjectLibraryService()
+    Private ReadOnly _sqlRepository As SqlProjectRepository = CreateSqlRepository()
+    Private ReadOnly _taskCatalogService As TaskCatalogService
+    Private ReadOnly _employeeCatalogService As EmployeeCatalogService
+    Private ReadOnly _taskCatalog As New BindingList(Of TaskCatalogItem)
+    Private ReadOnly _employees As New BindingList(Of String)
+
+    Private _plannerLegendGrid As DataGridView
+    Private _scheduleProjectButton As Button
+    Private _projectDetailsCaptionLabel As Label
+    Private _projectDetailsValueLabel As Label
+    Private ReadOnly _plannerPieCharts As New List(Of PlannerPieChartPanel)
+    Private ReadOnly _plannerLegendGrids As New List(Of DataGridView)
+    Private ReadOnly _plannerTaskCountLabels As New List(Of Label)
+    Private ReadOnly _plannerDurationLabels As New List(Of Label)
+    Private _currentTheme As SchedulerThemePalette = SchedulerThemePalette.ThemeByName("Dusk")
+    Private _projectType As String = "New"
+    Private _projectDetailsText As String = ""
+    Private ReadOnly _capacityDateColumns As New Dictionary(Of Integer, Date)
+    Private ReadOnly _taskViewDateColumns As New Dictionary(Of Integer, Date)
+    Private ReadOnly _resourceUsageDateColumns As New Dictionary(Of Integer, Date)
+    Private ReadOnly _resourceUtilizationDateColumns As New Dictionary(Of Integer, Date)
+    Private ReadOnly _resourceAvailabilityCache As New Dictionary(Of String, Dictionary(Of Date, Decimal))(StringComparer.OrdinalIgnoreCase)
+    Private ReadOnly _resourceUtilizationOverrides As New Dictionary(Of String, Decimal)(StringComparer.OrdinalIgnoreCase)
+    Private ReadOnly _resourceUtilizationHighlights As New Dictionary(Of String, Color)(StringComparer.OrdinalIgnoreCase)
+    Private ReadOnly _employeeCapacityEntries As New BindingList(Of EmployeeCapacityEntry)()
+    Private ReadOnly _explicitTaskUsageEdits As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+    Private _isRecalculating As Boolean
+    Private _isRefreshingWorkspace As Boolean
+    Private _isLoadingCatalogControls As Boolean
+    Private _suspendTaskEvents As Boolean
+    Private _isLoadingCapacityGrid As Boolean
+    Private _isLoadingTaskViewGrid As Boolean
+    Private _isLoadingResourceUsageGrid As Boolean
+    Private _isLoadingResourceUtilizationGrid As Boolean
+    Private _workspaceRefreshQueued As Boolean
+    Private _lastSavedSignature As String = ""
+
+    Public Sub New()
+        _taskCatalogService = New TaskCatalogService(_sqlRepository)
+        _employeeCatalogService = New EmployeeCatalogService(_sqlRepository)
+        InitializeComponent()
+        ConfigureDesignerUi()
+        If IsInDesignerHost() Then
+            SeedSchedulerDesignerData()
+        End If
+        AddHandler _tasks.ListChanged, AddressOf TasksChanged
+        RecalculateAndRefresh("Ready")
+        If Not IsInDesignerHost() Then
+            ClearPlanningInputDisplays()
+        End If
+        MarkCurrentStateSaved()
+    End Sub
+
+    Private Shared Function CreateSqlRepository() As SqlProjectRepository
+        Dim connectionString = ""
+        Try
+            Dim settings = ConfigurationManager.ConnectionStrings("SmaSchedulerDb")
+            If settings IsNot Nothing Then
+                connectionString = settings.ConnectionString
+            End If
+        Catch
+        End Try
+
+        If String.IsNullOrWhiteSpace(connectionString) Then
+            connectionString = Environment.GetEnvironmentVariable("SMA_SCHEDULER_SQL_CONNECTION")
+        End If
+
+        If String.IsNullOrWhiteSpace(connectionString) Then
+            Return Nothing
+        End If
+
+        Return New SqlProjectRepository(connectionString.Trim())
+    End Function
+
+    Private Shared Function IsInDesignerHost() As Boolean
+        Return LicenseManager.UsageMode = LicenseUsageMode.Designtime
+    End Function
+
+    Public Sub StartNewProject()
+        ClearProjectForNewSchedule()
+        SetStatus("New project ready")
+    End Sub
+
+    Public Sub LoadLiveProjectTemplate(liveProject As LiveProjectItem)
+        If liveProject Is Nothing Then
+            Return
+        End If
+
+        ' Scheduler handoff from SMA Planning Engine: populate project fields first.
+        ClearProjectForNewSchedule()
+        _projectName.Text = If(String.IsNullOrWhiteSpace(liveProject.ProjectName), "SMA Scheduler", liveProject.ProjectName.Trim())
+        _versionNumber.Text = If(String.IsNullOrWhiteSpace(liveProject.VersionNumber), "1.0", liveProject.VersionNumber.Trim())
+        _projectType = If(String.IsNullOrWhiteSpace(liveProject.ProjectType), ProjectTypeFromTemplate(liveProject.TemplateName, liveProject.ProjectName), liveProject.ProjectType)
+        _projectDetailsText = liveProject.ProjectDetailsText
+        SelectProjectSize(liveProject.ProjectSize)
+        UpdateProjectMetadataDisplay()
+
+        Dim projectSize = CStr(_projectSizeSelector.SelectedItem)
+        Dim taskReportFilter = If(String.IsNullOrWhiteSpace(liveProject.TaskReportFilter), liveProject.ReportType, liveProject.TaskReportFilter)
+        ' Loads SQL Task_Template rows through TaskCatalogService and displays them in the task grid.
+        LoadTemplateTasks(_projectType, projectSize, taskReportFilter)
+        If _tasks.Count = 0 Then
+            ClearPlanningInputDisplays()
+        End If
+        RecalculateAndRefresh(liveProject.TemplateName & " template loaded for " & projectSize & " project")
+    End Sub
+
+    Public Sub LoadProjectSnapshot(snapshot As ProjectSnapshot)
+        If snapshot Is Nothing Then
+            Return
+        End If
+
+        ResetWorkspaceTransientState()
+        _tasks.Clear()
+        _projectName.Text = snapshot.ProjectName
+        _versionNumber.Text = If(String.IsNullOrWhiteSpace(snapshot.VersionNumber), "1.0", snapshot.VersionNumber)
+        _projectType = If(String.IsNullOrWhiteSpace(snapshot.ProjectType), ProjectTypeFromTemplate("", snapshot.ProjectName), snapshot.ProjectType)
+        _projectDetailsText = ""
+        SelectProjectSize(snapshot.ProjectSize)
+        _totalProjectHours.Value = ClampDecimal(snapshot.TotalProjectHours, _totalProjectHours.Minimum, _totalProjectHours.Maximum)
+        UpdateProjectMetadataDisplay()
+        If snapshot.Tasks IsNot Nothing Then
+            For Each task In snapshot.Tasks
+                _tasks.Add(task)
+            Next
+        End If
+        RenumberTasks()
+        RecalculateAndRefresh("Project opened")
+        MarkCurrentStateSaved()
+    End Sub
+
+    Private Sub SelectProjectSize(sizeName As String)
+        If _projectSizeSelector Is Nothing OrElse _projectSizeSelector.Items.Count = 0 Then
+            Return
+        End If
+
+        Dim normalizedSize = If(String.IsNullOrWhiteSpace(sizeName), "Small", sizeName.Trim())
+        For i = 0 To _projectSizeSelector.Items.Count - 1
+            If String.Equals(Convert.ToString(_projectSizeSelector.Items(i), CultureInfo.InvariantCulture), normalizedSize, StringComparison.OrdinalIgnoreCase) Then
+                _projectSizeSelector.SelectedIndex = i
+                Return
+            End If
+        Next
+
+        _projectSizeSelector.SelectedIndex = 0
+    End Sub
+
+    Private Shared Function ProjectTypeFromTemplate(templateName As String, projectName As String) As String
+        Dim classificationText = (If(templateName, "") & " " & If(projectName, "")).Trim()
+        If classificationText.IndexOf("feedback", StringComparison.OrdinalIgnoreCase) >= 0 Then
+            Return "Feedback"
+        End If
+        If classificationText.IndexOf("update", StringComparison.OrdinalIgnoreCase) >= 0 OrElse
+            classificationText.IndexOf("bre", StringComparison.OrdinalIgnoreCase) >= 0 OrElse
+            classificationText.IndexOf("rol", StringComparison.OrdinalIgnoreCase) >= 0 Then
+            Return "Update"
+        End If
+
+        Return "New"
+    End Function
+
+    Private Sub ConfigureDesignerUi()
+        _grid.AutoGenerateColumns = False
+        _grid.Columns.Clear()
+        _gantt.Tasks = _tasks
+        StyleGrid()
+        ConfigureWorkspaceTabs()
+        LoadCatalogControls()
+        AddGridColumns()
+        _grid.DataSource = _tasks
+        ApplySchedulerHeaderLayout()
+        AddHandler headerPanel.SizeChanged, Sub() LayoutSchedulerHeaderActions()
+        ApplyProjectStateTheme()
+        AddHandler _grid.SelectionChanged, AddressOf ScheduleSelectionChanged
+        AddHandler btnSave.Click, AddressOf btnSave_Click
+        AddHandler btnRefreshCapacity.Click, AddressOf btnRefreshCapacity_Click
+        AddHandler btnAddTask.Click, AddressOf btnAddTask_Click
+        AddHandler btnDelete.Click, AddressOf btnDelete_Click
+        AddHandler btnMoveUp.Click, AddressOf btnMoveUp_Click
+        AddHandler btnMoveDown.Click, AddressOf btnMoveDown_Click
+        AddHandler btnLink.Click, AddressOf btnLink_Click
+        AddHandler btnUnlink.Click, AddressOf btnUnlink_Click
+        AddHandler btnMilestone.Click, AddressOf btnMilestone_Click
+        AddHandler _totalProjectHours.ValueChanged, AddressOf ProjectInputsChanged
+        AddHandler _includeSaturdays.CheckedChanged, AddressOf AllocationInputsChanged
+        AddHandler _taskCatalogSelector.SelectedIndexChanged, AddressOf CatalogSelectionChanged
+        AddHandler _projectSizeSelector.SelectedIndexChanged, AddressOf CatalogSelectionChanged
+    End Sub
+
+    Private Sub ApplySchedulerHeaderLayout()
+        If taskCatalogLabel.Parent IsNot Nothing Then
+            taskCatalogLabel.Parent.Controls.Remove(taskCatalogLabel)
+        End If
+        If _taskCatalogSelector.Parent IsNot Nothing Then
+            _taskCatalogSelector.Parent.Controls.Remove(_taskCatalogSelector)
+        End If
+        EnsureSchedulerHeaderActions()
+        LayoutSchedulerHeaderActions()
+        UpdateProjectMetadataDisplay()
+    End Sub
+
+    Private Sub EnsureSchedulerHeaderActions()
+        If _scheduleProjectButton Is Nothing Then
+            _scheduleProjectButton = New Button With {
+                .Name = "_scheduleProjectButton",
+                .Text = "Schedule Project",
+                .FlatStyle = FlatStyle.Flat,
+                .Size = New Size(178, 38),
+                .Anchor = AnchorStyles.Top Or AnchorStyles.Right,
+                .TabStop = True
+            }
+            _scheduleProjectButton.FlatAppearance.BorderSize = 0
+            AddHandler _scheduleProjectButton.Click, AddressOf scheduleProjectButton_Click
+        End If
+
+        If _projectDetailsCaptionLabel Is Nothing Then
+            _projectDetailsCaptionLabel = New Label With {
+                .Name = "_projectDetailsCaptionLabel",
+                .Text = "Project Details",
+                .AutoSize = True,
+                .BackColor = Color.Transparent,
+                .Anchor = AnchorStyles.Top Or AnchorStyles.Right
+            }
+        End If
+
+        If _projectDetailsValueLabel Is Nothing Then
+            _projectDetailsValueLabel = New Label With {
+                .Name = "_projectDetailsValueLabel",
+                .AutoEllipsis = True,
+                .BackColor = Color.Transparent,
+                .TextAlign = ContentAlignment.MiddleLeft,
+                .Anchor = AnchorStyles.Top Or AnchorStyles.Right
+            }
+        End If
+
+        If Not headerPanel.Controls.Contains(_scheduleProjectButton) Then
+            headerPanel.Controls.Add(_scheduleProjectButton)
+        End If
+        If Not headerPanel.Controls.Contains(_projectDetailsCaptionLabel) Then
+            headerPanel.Controls.Add(_projectDetailsCaptionLabel)
+        End If
+        If Not headerPanel.Controls.Contains(_projectDetailsValueLabel) Then
+            headerPanel.Controls.Add(_projectDetailsValueLabel)
+        End If
+
+        _scheduleProjectButton.BringToFront()
+        _projectDetailsCaptionLabel.BringToFront()
+        _projectDetailsValueLabel.BringToFront()
+    End Sub
+
+    Private Sub LayoutSchedulerHeaderActions()
+        If headerPanel Is Nothing OrElse _scheduleProjectButton Is Nothing Then
+            Return
+        End If
+
+        Dim rightMargin = 28
+        Dim buttonWidth = 178
+        Dim buttonLeft = Math.Max(20, headerPanel.ClientSize.Width - buttonWidth - rightMargin)
+
+        _scheduleProjectButton.Location = New Point(buttonLeft, 74)
+        _projectDetailsCaptionLabel.Location = New Point(buttonLeft, 24)
+        _projectDetailsValueLabel.Location = New Point(buttonLeft, 44)
+        _projectDetailsValueLabel.Size = New Size(Math.Max(buttonWidth + 90, 230), 22)
+    End Sub
+
+    Private Sub UpdateProjectMetadataDisplay()
+        If _projectDetailsValueLabel Is Nothing Then
+            Return
+        End If
+
+        Dim projectSize = If(_projectSizeSelector Is Nothing OrElse _projectSizeSelector.SelectedItem Is Nothing,
+            "Small",
+            Convert.ToString(_projectSizeSelector.SelectedItem, CultureInfo.InvariantCulture))
+
+        Dim baseText = "Type: " & If(String.IsNullOrWhiteSpace(_projectType), "New", _projectType) &
+            " | Size: " & projectSize
+        _projectDetailsValueLabel.Text = If(String.IsNullOrWhiteSpace(_projectDetailsText), baseText, baseText & " | " & _projectDetailsText)
+    End Sub
+
+    Private Sub scheduleProjectButton_Click(sender As Object, e As EventArgs)
+        If _tasks.Count = 0 Then
+            MessageBox.Show(Me, "There is no task assigned for the project.", "No Tasks", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return
+        End If
+
+        SaveProjectToSql(showSuccessMessage:=True)
+    End Sub
+
+    Private Sub ApplyProjectStateTheme()
+        _currentTheme = DetermineProjectStateTheme()
+        ApplyTheme()
+    End Sub
+
+    Private Function DetermineProjectStateTheme() As SchedulerThemePalette
+        If HasDailyCapacityOverrun() Then
+            Return SchedulerThemePalette.ThemeByName("Alert")
+        End If
+
+        If String.Equals(_projectType, "Update", StringComparison.OrdinalIgnoreCase) OrElse
+            String.Equals(_projectType, "Feedback", StringComparison.OrdinalIgnoreCase) Then
+            Return SchedulerThemePalette.ThemeByName("Update")
+        End If
+
+        Dim totalProjectHours = If(_totalProjectHours Is Nothing, 0D, _totalProjectHours.Value)
+        Dim assignedHours = _tasks.Sum(Function(task) task.ResourceHours)
+        If totalProjectHours > 0D AndAlso assignedHours >= totalProjectHours AndAlso _tasks.Count > 0 Then
+            Return SchedulerThemePalette.ThemeByName("Complete")
+        End If
+
+        Return SchedulerThemePalette.ThemeByName("Dusk")
+    End Function
+
+    Private Function HasDailyCapacityOverrun() As Boolean
+        For Each task In _tasks
+            If task Is Nothing OrElse String.IsNullOrWhiteSpace(task.AssignedTo) Then
+                Continue For
+            End If
+
+            For Each resourceName In ResourceNamesFromAssignment(task.AssignedTo)
+                If resourceName.Length = 0 Then
+                    Continue For
+                End If
+
+                For Each workDate In WorkingDatesForTask(task.StartDate.Date, task.FinishDate.Date)
+                    If PendingHoursForResource(resourceName, workDate) < 0D Then
+                        Return True
+                    End If
+                Next
+            Next
+        Next
+
+        Return False
+    End Function
+
+    Private Sub ApplyTheme()
+        Dim theme = _currentTheme
+        BackColor = theme.WindowBack
+        commandBar.BackColor = theme.CommandBack
+        For Each item As ToolStripItem In commandBar.Items
+            item.ForeColor = theme.CommandText
+        Next
+
+        headerPanel.BackColor = theme.HeaderBack
+        appTitle.ForeColor = theme.Text
+
+        For Each label In {projectLabel, versionLabel, totalHoursLabel, projectSizeLabel, _projectDetailsCaptionLabel}
+            If label IsNot Nothing Then
+                label.ForeColor = theme.MutedText
+            End If
+        Next
+
+        If _projectDetailsValueLabel IsNot Nothing Then
+            _projectDetailsValueLabel.ForeColor = theme.Text
+        End If
+
+        _summaryTitle.BackColor = theme.TileOne
+        _summaryDates.BackColor = theme.TileTwo
+        _summaryResources.BackColor = theme.TileFour
+        For Each label In {_summaryTitle, _summaryDates, _summaryResources}
+            label.ForeColor = theme.Text
+        Next
+
+        contentSplit.BackColor = theme.Divider
+        mainSplit.BackColor = theme.Divider
+        _detailsPanel.BackColor = theme.PanelBack
+        taskWorkspaceTitle.ForeColor = theme.Text
+        statusBar.BackColor = theme.PanelBack
+        _status.ForeColor = theme.MutedText
+        _gantt.BackColor = theme.PanelBack
+        If _workspaceTabs IsNot Nothing Then
+            _workspaceTabs.BackColor = theme.PanelBack
+            _workspaceTabs.ForeColor = theme.Text
+        End If
+
+        ApplyGridTheme(_grid, theme)
+        If _capacityGrid IsNot Nothing Then
+            ApplyGridTheme(_capacityGrid, theme)
+        End If
+        If _taskUsageGrid IsNot Nothing Then
+            ApplyGridTheme(_taskUsageGrid, theme)
+        End If
+        If _resourceUsageGrid IsNot Nothing Then
+            ApplyGridTheme(_resourceUsageGrid, theme)
+        End If
+        If _resourceUtilizationGrid IsNot Nothing Then
+            ApplyGridTheme(_resourceUtilizationGrid, theme)
+        End If
+        If _employeeCapacityGrid IsNot Nothing Then
+            ApplyGridTheme(_employeeCapacityGrid, theme)
+        End If
+        For Each legend In _plannerLegendGrids
+            If legend IsNot Nothing Then
+                ApplyGridTheme(legend, theme)
+            End If
+        Next
+        If _plannerLegendGrid IsNot Nothing Then
+            ApplyGridTheme(_plannerLegendGrid, theme)
+        End If
+        If _resourceUtilizationRefreshButton IsNot Nothing Then
+            _resourceUtilizationRefreshButton.BackColor = theme.CommandBack
+            _resourceUtilizationRefreshButton.ForeColor = Color.White
+        End If
+        If _resourceUtilizationApplyButton IsNot Nothing Then
+            _resourceUtilizationApplyButton.BackColor = theme.Action
+            _resourceUtilizationApplyButton.ForeColor = Color.White
+        End If
+        If _resourceUtilizationClearButton IsNot Nothing Then
+            _resourceUtilizationClearButton.BackColor = theme.CommandBack
+            _resourceUtilizationClearButton.ForeColor = Color.White
+        End If
+        If _resourceUtilizationMailButton IsNot Nothing Then
+            _resourceUtilizationMailButton.BackColor = theme.Action
+            _resourceUtilizationMailButton.ForeColor = Color.White
+        End If
+        If _employeeCapacityAddButton IsNot Nothing Then
+            _employeeCapacityAddButton.BackColor = theme.Action
+            _employeeCapacityAddButton.ForeColor = Color.White
+        End If
+        If _employeeCapacityDeleteButton IsNot Nothing Then
+            _employeeCapacityDeleteButton.BackColor = theme.CommandBack
+            _employeeCapacityDeleteButton.ForeColor = Color.White
+        End If
+        If _employeeCapacityRefreshButton IsNot Nothing Then
+            _employeeCapacityRefreshButton.BackColor = theme.CommandBack
+            _employeeCapacityRefreshButton.ForeColor = Color.White
+        End If
+        If _scheduleProjectButton IsNot Nothing Then
+            _scheduleProjectButton.BackColor = theme.Action
+            _scheduleProjectButton.ForeColor = Color.White
+        End If
+        If _resourceUtilizationColorSelector IsNot Nothing Then
+            _resourceUtilizationColorSelector.BackColor = theme.PanelBack
+            _resourceUtilizationColorSelector.ForeColor = theme.Text
+        End If
+        For Each label In _plannerTaskCountLabels.Concat(_plannerDurationLabels)
+            If label IsNot Nothing Then
+                label.BackColor = theme.TileThree
+                label.ForeColor = theme.Text
+            End If
+        Next
+        For Each chart In _plannerPieCharts
+            If chart IsNot Nothing Then
+                chart.Invalidate()
+            End If
+        Next
+    End Sub
+
+    Private Sub ApplyGridTheme(grid As DataGridView, theme As SchedulerThemePalette)
+        If grid Is Nothing Then
+            Return
+        End If
+
+        grid.BackgroundColor = theme.PanelBack
+        grid.GridColor = theme.GridLine
+        grid.ColumnHeadersDefaultCellStyle.BackColor = theme.GridHeader
+        grid.ColumnHeadersDefaultCellStyle.ForeColor = Color.White
+        grid.ColumnHeadersDefaultCellStyle.Font = New Font("Segoe UI Semibold", 9.0F)
+        grid.DefaultCellStyle.BackColor = theme.PanelBack
+        grid.DefaultCellStyle.ForeColor = theme.Text
+        grid.DefaultCellStyle.SelectionBackColor = theme.Selection
+        grid.DefaultCellStyle.SelectionForeColor = theme.Text
+        grid.AlternatingRowsDefaultCellStyle.BackColor = theme.AlternatingRow
+        grid.EnableHeadersVisualStyles = False
+    End Sub
+
+    Private Sub LoadCatalogControls()
+        _isLoadingCatalogControls = True
+        _taskCatalog.Clear()
+        _employees.Clear()
+        If IsInDesignerHost() Then
+            For Each item In DesignerTaskCatalog()
+                _taskCatalog.Add(item)
+            Next
+
+            For Each employeeName In {"Devarajan", "Mahaboob Basha", "Aashiq Aliuddin", "Mohammed Bilal"}
+                _employees.Add(employeeName)
+            Next
+        Else
+            For Each item In _taskCatalogService.LoadAvailableTasks()
+                _taskCatalog.Add(item)
+            Next
+
+            For Each employeeName In _employeeCatalogService.LoadEmployees()
+                If Not _employees.Contains(employeeName) Then
+                    _employees.Add(employeeName)
+                End If
+            Next
+        End If
+
+        _taskCatalogSelector.DataSource = _taskCatalog
+        _taskCatalogSelector.DisplayMember = NameOf(TaskCatalogItem.Title)
+        _projectSizeSelector.Items.AddRange({"Small", "Medium", "Large", "Very Large"})
+        _projectSizeSelector.SelectedIndex = 0
+
+        _isLoadingCatalogControls = False
+        UpdateAllocationHoursFromSelectedCatalog()
+        RecalculateAndRefresh("Working days updated")
+    End Sub
+
+    Private Shared Function DesignerTaskCatalog() As IEnumerable(Of TaskCatalogItem)
+        Return New List(Of TaskCatalogItem) From {
+            New TaskCatalogItem With {.DatabaseTaskId = 1, .Title = "Scope", .DependencyType = "FS", .SmallHours = 4D, .Assignee = "Devarajan", .ModuleId = 1},
+            New TaskCatalogItem With {.DatabaseTaskId = 2, .Title = "Gathering of Inputs", .DependencyType = "FS", .SmallHours = 8D, .Assignee = "Mahaboob Basha", .ModuleId = 1},
+            New TaskCatalogItem With {.DatabaseTaskId = 3, .Title = "3D Modelling", .DependencyType = "FS", .SmallHours = 12D, .Assignee = "Aashiq Aliuddin", .ModuleId = 4}
+        }
+    End Function
+
+    Private Sub ProjectInputsChanged(sender As Object, e As EventArgs)
+        UpdateSummary()
+        UpdateProjectMetadataDisplay()
+        ApplyProjectStateTheme()
+        SetStatus("Project planning values updated")
+    End Sub
+
+    Private Sub ClearPlanningInputDisplays()
+        Dim totalHoursInput = TryCast(_totalProjectHours, BlankNumericUpDown)
+        If totalHoursInput IsNot Nothing Then
+            totalHoursInput.ClearDisplayedValue()
+        ElseIf _totalProjectHours IsNot Nothing Then
+            _totalProjectHours.Text = ""
+        End If
+
+    End Sub
+
+    Private Sub CatalogSelectionChanged(sender As Object, e As EventArgs)
+        If _isLoadingCatalogControls Then
+            Return
+        End If
+        UpdateProjectMetadataDisplay()
+        UpdateAllocationHoursFromSelectedCatalog()
+    End Sub
+
+    Private Sub AllocationInputsChanged(sender As Object, e As EventArgs)
+        If _isLoadingCatalogControls OrElse _isRecalculating Then
+            Return
+        End If
+        RecalculateAndRefresh("Working days updated")
+    End Sub
+
+    Private Sub UpdateAllocationHoursFromSelectedCatalog()
+        Dim selectedCatalogTask = TryCast(_taskCatalogSelector.SelectedItem, TaskCatalogItem)
+        If selectedCatalogTask Is Nothing OrElse _projectSizeSelector.SelectedItem Is Nothing Then
+            Return
+        End If
+    End Sub
+
+    Private Sub StyleGrid()
+        _grid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(35, 46, 66)
+        _grid.ColumnHeadersDefaultCellStyle.ForeColor = Color.White
+        _grid.ColumnHeadersDefaultCellStyle.Font = New Font("Segoe UI Semibold", 9.0F)
+        _grid.DefaultCellStyle.SelectionBackColor = Color.FromArgb(219, 235, 255)
+        _grid.DefaultCellStyle.SelectionForeColor = Color.FromArgb(24, 31, 42)
+        _grid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(250, 252, 255)
+        _grid.DefaultCellStyle.BackColor = Color.White
+        _grid.DefaultCellStyle.ForeColor = Color.FromArgb(37, 47, 63)
+    End Sub
+
+    Private Sub ConfigureWorkspaceTabs()
+        If contentSplit Is Nothing OrElse _workspaceTabs Is Nothing OrElse mainSplit Is Nothing Then
+            Return
+        End If
+
+        contentSplit.Panel2Collapsed = True
+        contentSplit.Panel1.Padding = New Padding(0)
+        _plannerPieCharts.Clear()
+        _plannerLegendGrids.Clear()
+        _plannerTaskCountLabels.Clear()
+        _plannerDurationLabels.Clear()
+
+        _grid.ScrollBars = ScrollBars.Both
+        _grid.BorderStyle = BorderStyle.FixedSingle
+        ConfigureStaticWorkspaceGrid(_taskUsageGrid, DataGridViewSelectionMode.CellSelect, False, False)
+        ConfigureStaticWorkspaceGrid(_resourceUsageGrid, DataGridViewSelectionMode.CellSelect, False, False)
+        ConfigureStaticWorkspaceGrid(_capacityGrid, DataGridViewSelectionMode.FullRowSelect, True, False)
+        ConfigureStaticWorkspaceGrid(_resourceUtilizationGrid, DataGridViewSelectionMode.CellSelect, False, True)
+        ConfigureEmployeeCapacityGrid()
+        _resourceUtilizationGrid.ReadOnly = False
+
+        ConfigureDesignerPreview(PlannerPreviewMode.ResourcesUsed, allocationPreviewChart, allocationLegendGrid, allocationPrimaryLabel, allocationSecondaryLabel)
+        ConfigureDesignerPreview(PlannerPreviewMode.TaskDuration, taskUsagePreviewChart, taskUsageLegendGrid, taskUsagePrimaryLabel, taskUsageSecondaryLabel)
+        ConfigureDesignerPreview(PlannerPreviewMode.ResourceContribution, resourceUsagePreviewChart, resourceUsageLegendGrid, resourceUsagePrimaryLabel, resourceUsageSecondaryLabel)
+        _plannerLegendGrid = Nothing
+
+        If _resourceUtilizationColorSelector.Items.Count > 0 AndAlso _resourceUtilizationColorSelector.SelectedIndex < 0 Then
+            _resourceUtilizationColorSelector.SelectedIndex = 0
+        End If
+        AddHandler _resourceUtilizationRefreshButton.Click, AddressOf RefreshResourceUtilizationTab
+        AddHandler _resourceUtilizationApplyButton.Click, AddressOf ApplyResourceUtilizationHighlight
+        AddHandler _resourceUtilizationClearButton.Click, AddressOf ClearResourceUtilizationHighlight
+        AddHandler _resourceUtilizationMailButton.Click, AddressOf SendResourceUtilizationSnip
+
+        AddHandler _taskUsageGrid.CellParsing, AddressOf CalendarGridCellParsing
+        AddHandler _taskUsageGrid.CellEndEdit, AddressOf TaskViewGridCellEndEdit
+        AddHandler _taskUsageGrid.DataError, AddressOf CalendarGridDataError
+
+        AddHandler _resourceUsageGrid.CellParsing, AddressOf CalendarGridCellParsing
+        AddHandler _resourceUsageGrid.CellEndEdit, AddressOf ResourceUsageGridCellEndEdit
+        AddHandler _resourceUsageGrid.DataError, AddressOf CalendarGridDataError
+
+        AddHandler _resourceUtilizationGrid.CellParsing, AddressOf ResourceUtilizationGridCellParsing
+        AddHandler _resourceUtilizationGrid.CellEndEdit, AddressOf ResourceUtilizationGridCellEndEdit
+        AddHandler _resourceUtilizationGrid.DataError, AddressOf CalendarGridDataError
+
+        AddHandler _employeeCapacityAddButton.Click, AddressOf AddEmployeeCapacityEntry
+        AddHandler _employeeCapacityDeleteButton.Click, AddressOf DeleteEmployeeCapacityEntry
+        AddHandler _employeeCapacityRefreshButton.Click, AddressOf RefreshEmployeeCapacityView
+        AddHandler _employeeCapacityGrid.CellParsing, AddressOf EmployeeCapacityGridCellParsing
+        AddHandler _employeeCapacityGrid.CellEndEdit, AddressOf EmployeeCapacityGridCellEndEdit
+        AddHandler _employeeCapacityGrid.CellFormatting, AddressOf EmployeeCapacityGridCellFormatting
+        AddHandler _employeeCapacityGrid.DataError, AddressOf CalendarGridDataError
+
+        AddHandler mainSplit.SizeChanged, Sub() ApplyResponsiveSplitter(mainSplit, 620, 380, 0.62R)
+        AddHandler taskUsageSplit.SizeChanged, Sub() ApplyResponsiveSplitter(taskUsageSplit, 700, 360, 0.68R)
+        AddHandler resourceUsageSplit.SizeChanged, Sub() ApplyResponsiveSplitter(resourceUsageSplit, 700, 360, 0.68R)
+
+        RefreshWorkspaceTabs()
+        ApplyResponsiveSplitter(mainSplit, 620, 380, 0.62R)
+        ApplyResponsiveSplitter(taskUsageSplit, 700, 360, 0.68R)
+        ApplyResponsiveSplitter(resourceUsageSplit, 700, 360, 0.68R)
+    End Sub
+
+    Private Sub ConfigureStaticWorkspaceGrid(grid As DataGridView, selectionMode As DataGridViewSelectionMode, readOnlyValue As Boolean, multiSelectValue As Boolean)
+        If grid Is Nothing Then
+            Return
+        End If
+
+        grid.AllowUserToAddRows = False
+        grid.AllowUserToDeleteRows = False
+        grid.AutoGenerateColumns = False
+        grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None
+        grid.BackgroundColor = Color.White
+        grid.BorderStyle = BorderStyle.None
+        grid.ColumnHeadersHeight = 32
+        grid.Dock = DockStyle.Fill
+        grid.EnableHeadersVisualStyles = False
+        grid.GridColor = Color.FromArgb(232, 236, 242)
+        grid.MultiSelect = multiSelectValue
+        grid.ReadOnly = readOnlyValue
+        grid.RowHeadersVisible = False
+        grid.ScrollBars = ScrollBars.Both
+        grid.SelectionMode = selectionMode
+        grid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(35, 46, 66)
+        grid.ColumnHeadersDefaultCellStyle.ForeColor = Color.White
+        grid.ColumnHeadersDefaultCellStyle.Font = New Font("Segoe UI Semibold", 9.0F)
+        grid.DefaultCellStyle.SelectionBackColor = Color.FromArgb(219, 235, 255)
+        grid.DefaultCellStyle.SelectionForeColor = Color.FromArgb(24, 31, 42)
+    End Sub
+
+    Private Sub ConfigureEmployeeCapacityGrid()
+        If _employeeCapacityGrid Is Nothing Then
+            Return
+        End If
+
+        ConfigureStaticWorkspaceGrid(_employeeCapacityGrid, DataGridViewSelectionMode.FullRowSelect, False, False)
+        _employeeCapacityGrid.AutoGenerateColumns = False
+        _employeeCapacityGrid.Columns.Clear()
+
+        _employeeCapacityGrid.Columns.Add(New DataGridViewComboBoxColumn With {
+            .DataPropertyName = NameOf(EmployeeCapacityEntry.EmployeeName),
+            .HeaderText = "Employee",
+            .DataSource = _employees,
+            .Width = 220,
+            .FlatStyle = FlatStyle.Flat
+        })
+        Dim capacityTypeColumn As New DataGridViewComboBoxColumn With {
+            .DataPropertyName = NameOf(EmployeeCapacityEntry.CapacityType),
+            .HeaderText = "Capacity Type",
+            .Width = 150,
+            .FlatStyle = FlatStyle.Flat
+        }
+        capacityTypeColumn.Items.AddRange("Leave", "Training", "Meeting")
+        _employeeCapacityGrid.Columns.Add(capacityTypeColumn)
+        _employeeCapacityGrid.Columns.Add(New DataGridViewTextBoxColumn With {
+            .DataPropertyName = NameOf(EmployeeCapacityEntry.StartDate),
+            .HeaderText = "Start Date",
+            .Width = 120,
+            .DefaultCellStyle = New DataGridViewCellStyle With {.Format = "dd-MM-yyyy"}
+        })
+        _employeeCapacityGrid.Columns.Add(New DataGridViewTextBoxColumn With {
+            .DataPropertyName = NameOf(EmployeeCapacityEntry.EndDate),
+            .HeaderText = "End Date",
+            .Width = 120,
+            .DefaultCellStyle = New DataGridViewCellStyle With {.Format = "dd-MM-yyyy"}
+        })
+        _employeeCapacityGrid.Columns.Add(New DataGridViewTextBoxColumn With {
+            .DataPropertyName = NameOf(EmployeeCapacityEntry.Hours),
+            .HeaderText = "Hours",
+            .Width = 90,
+            .DefaultCellStyle = New DataGridViewCellStyle With {.Format = "0.##"}
+        })
+        _employeeCapacityGrid.Columns.Add(New DataGridViewTextBoxColumn With {
+            .DataPropertyName = NameOf(EmployeeCapacityEntry.Remarks),
+            .HeaderText = "Remarks",
+            .AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
+            .MinimumWidth = 220
+        })
+
+        _employeeCapacityGrid.DataSource = _employeeCapacityEntries
+    End Sub
+
+    Private Sub ConfigureDesignerPreview(mode As PlannerPreviewMode, chart As PlannerPieChartPanel, legend As DataGridView, primaryLabel As Label, secondaryLabel As Label)
+        If chart Is Nothing OrElse legend Is Nothing OrElse primaryLabel Is Nothing OrElse secondaryLabel Is Nothing Then
+            Return
+        End If
+
+        chart.PreviewMode = mode
+        primaryLabel.Tag = mode
+        secondaryLabel.Tag = mode
+        PlannerLegendGrid(mode, legend)
+        _plannerPieCharts.Add(chart)
+        _plannerLegendGrids.Add(legend)
+        _plannerTaskCountLabels.Add(primaryLabel)
+        _plannerDurationLabels.Add(secondaryLabel)
+    End Sub
+
+    Private Sub LayoutTaskAllocationSurface(canvas As Panel, surface As Panel)
+        If canvas Is Nothing OrElse surface Is Nothing OrElse canvas.IsDisposed OrElse surface.IsDisposed Then
+            Return
+        End If
+
+        Dim availableHeight = canvas.ClientSize.Height - canvas.Padding.Vertical
+        If availableHeight <= 0 Then
+            Return
+        End If
+
+        Dim reservedBottomSpace As Integer
+        If availableHeight >= 700 Then
+            reservedBottomSpace = 22
+        ElseIf availableHeight >= 560 Then
+            reservedBottomSpace = 18
+        Else
+            reservedBottomSpace = 14
+        End If
+
+        Dim desiredHeight = availableHeight - reservedBottomSpace
+        desiredHeight = Math.Max(300, Math.Min(desiredHeight, availableHeight))
+        surface.Height = desiredHeight
+    End Sub
+
+    Private Sub ApplyResponsiveSplitter(split As SplitContainer, preferredPanel1Min As Integer, preferredPanel2Min As Integer, panel1Ratio As Double)
+        If split Is Nothing OrElse split.IsDisposed Then
+            Return
+        End If
+
+        Dim available = If(split.Orientation = Orientation.Vertical, split.Width, split.Height) - split.SplitterWidth
+        If available < 20 Then
+            Return
+        End If
+
+        Dim panel1Min = preferredPanel1Min
+        Dim panel2Min = preferredPanel2Min
+        Dim preferredTotal = Math.Max(1, panel1Min + panel2Min)
+        If preferredTotal > available Then
+            Dim scale = available / CDbl(preferredTotal)
+            panel1Min = Math.Max(1, CInt(Math.Floor(panel1Min * scale)))
+            panel2Min = Math.Max(1, available - panel1Min)
+        End If
+
+        If panel1Min + panel2Min > available Then
+            panel2Min = Math.Max(1, available - panel1Min)
+        End If
+
+        Dim minDistance = Math.Max(1, panel1Min)
+        Dim maxDistance = Math.Max(minDistance, available - Math.Max(1, panel2Min))
+        Dim desired = CInt(Math.Round(available * Math.Max(0.1R, Math.Min(0.9R, panel1Ratio))))
+        desired = Math.Max(minDistance, Math.Min(maxDistance, desired))
+
+        Try
+            split.Panel1MinSize = 1
+            split.Panel2MinSize = 1
+            split.SplitterDistance = desired
+            split.Panel1MinSize = panel1Min
+            split.Panel2MinSize = panel2Min
+        Catch ex As InvalidOperationException
+            ' WinForms can report temporary invalid sizes while the designer/runtime is still laying out.
+        End Try
+    End Sub
+
+    Private Sub ApplyFixedPanel2Width(split As SplitContainer, preferredPanel1Min As Integer, preferredPanel2Width As Integer)
+        If split Is Nothing OrElse split.IsDisposed Then
+            Return
+        End If
+
+        Dim available = If(split.Orientation = Orientation.Vertical, split.Width, split.Height) - split.SplitterWidth
+        If available < 20 Then
+            Return
+        End If
+
+        Dim panel1Min = Math.Max(1, Math.Min(preferredPanel1Min, Math.Max(1, available - 1)))
+        Dim panel2Width = Math.Max(1, Math.Min(preferredPanel2Width, Math.Max(1, available - panel1Min)))
+        Dim splitterDistance = Math.Max(panel1Min, available - panel2Width)
+        splitterDistance = Math.Min(splitterDistance, available - Math.Max(1, panel2Width))
+
+        Try
+            split.Panel1MinSize = 1
+            split.Panel2MinSize = 1
+            split.SplitterDistance = splitterDistance
+            split.Panel1MinSize = panel1Min
+            split.Panel2MinSize = panel2Width
+        Catch ex As InvalidOperationException
+            ' Ignore transient layout calculations while WinForms is resizing.
+        End Try
+    End Sub
+
+    Private Function PlannerPreviewBadge(text As String) As Label
+        Return New Label With {
+            .AutoSize = False,
+            .Text = text,
+            .Width = 210,
+            .Height = 28,
+            .Margin = New Padding(0, 2, 0, 4),
+            .BackColor = Color.FromArgb(225, 239, 255),
+            .ForeColor = Color.FromArgb(24, 31, 42),
+            .Font = New Font("Segoe UI Semibold", 9.0F),
+            .TextAlign = ContentAlignment.MiddleCenter
+        }
+    End Function
+
+    Private Function BuildWorkspaceTabPage(title As String) As TabPage
+        Return New TabPage(title) With {
+            .BackColor = Color.White,
+            .Padding = New Padding(0)
+        }
+    End Function
+
+    Private Function BuildWorkspaceSurfaceHost() As Panel
+        Return New Panel With {
+            .Dock = DockStyle.Fill,
+            .Padding = New Padding(0, 0, 10, 16),
+            .BackColor = Color.White
+        }
+    End Function
+
+    Private Function BuildPlannerPreviewHost(mode As PlannerPreviewMode, ByRef chart As PlannerPieChartPanel, ByRef taskCountLabel As Label, ByRef durationLabel As Label) As Panel
+        Dim host As New Panel With {
+            .Dock = DockStyle.Top,
+            .Height = 310,
+            .Padding = New Padding(10, 10, 10, 12),
+            .BackColor = Color.White
+        }
+
+        Dim card As New Panel With {
+            .Dock = DockStyle.Fill,
+            .BackColor = Color.White,
+            .BorderStyle = BorderStyle.FixedSingle,
+            .Padding = New Padding(12)
+        }
+
+        Dim title As New Label With {
+            .Dock = DockStyle.Top,
+            .Height = 28,
+            .Text = "Planner Preview",
+            .Font = New Font("Segoe UI Semibold", 12.0F),
+            .ForeColor = Color.FromArgb(24, 31, 42),
+            .TextAlign = ContentAlignment.MiddleLeft
+        }
+
+        taskCountLabel = PlannerPreviewBadge(PreviewPrimaryBadgeText(mode, 0, 0D, 0))
+        taskCountLabel.Dock = DockStyle.Top
+        taskCountLabel.Tag = mode
+
+        durationLabel = PlannerPreviewBadge(PreviewSecondaryBadgeText(mode, 0D, 0D))
+        durationLabel.Dock = DockStyle.Top
+        durationLabel.Tag = mode
+
+        chart = New PlannerPieChartPanel() With {
+            .Dock = DockStyle.Fill,
+            .Margin = New Padding(0),
+            .MinimumSize = New Size(180, 180),
+            .PreviewMode = mode
+        }
+
+        Dim legend = PlannerLegendGrid(mode)
+        legend.Dock = DockStyle.Right
+        legend.Width = 220
+
+        Dim bodyPanel As New Panel With {
+            .Dock = DockStyle.Fill,
+            .BackColor = Color.White
+        }
+        bodyPanel.Controls.Add(chart)
+        bodyPanel.Controls.Add(legend)
+
+        card.Controls.Add(bodyPanel)
+        card.Controls.Add(durationLabel)
+        card.Controls.Add(taskCountLabel)
+        card.Controls.Add(title)
+        host.Controls.Add(card)
+
+        _plannerPieCharts.Add(chart)
+        _plannerLegendGrids.Add(legend)
+        If _plannerLegendGrid Is Nothing Then
+            _plannerLegendGrid = legend
+        End If
+        _plannerTaskCountLabels.Add(taskCountLabel)
+        _plannerDurationLabels.Add(durationLabel)
+
+        Return host
+    End Function
+
+    Private Function BuildWorkspacePreviewSplit(mainControl As Control, previewHost As Control) As SplitContainer
+        Dim split As New SplitContainer With {
+            .Dock = DockStyle.Fill,
+            .Orientation = Orientation.Vertical,
+            .BackColor = Color.FromArgb(232, 236, 242),
+            .SplitterWidth = 6,
+            .FixedPanel = FixedPanel.Panel2
+        }
+
+        split.Panel1.Padding = New Padding(0, 0, 10, 0)
+        split.Panel2.Padding = New Padding(0)
+        split.Panel1.Controls.Add(mainControl)
+
+        Dim previewCanvas As New Panel With {
+            .Dock = DockStyle.Fill,
+            .BackColor = Color.White
+        }
+        previewCanvas.Controls.Add(previewHost)
+        split.Panel2.Controls.Add(previewCanvas)
+
+        AddHandler split.SizeChanged,
+            Sub()
+                ApplyFixedPanel2Width(split, 620, 310)
+            End Sub
+
+        ApplyFixedPanel2Width(split, 620, 310)
+        Return split
+    End Function
+
+    Private Shared Function PreviewPrimaryBadgeText(mode As PlannerPreviewMode, taskCount As Integer, assignedHours As Decimal, resourceCount As Integer) As String
+        Select Case mode
+            Case PlannerPreviewMode.ResourcesUsed
+                Return "Resources Selected: " & resourceCount.ToString(CultureInfo.InvariantCulture)
+            Case PlannerPreviewMode.ResourceContribution
+                Return "Contributors: " & resourceCount.ToString(CultureInfo.InvariantCulture)
+            Case Else
+                Return "Scheduled Tasks: " & taskCount.ToString(CultureInfo.InvariantCulture)
+        End Select
+    End Function
+
+    Private Shared Function PreviewSecondaryBadgeText(mode As PlannerPreviewMode, totalDuration As Decimal, assignedHours As Decimal) As String
+        Select Case mode
+            Case PlannerPreviewMode.ResourcesUsed, PlannerPreviewMode.ResourceContribution
+                Return "Assigned Hours: " & assignedHours.ToString("0.##", CultureInfo.InvariantCulture) & " hrs"
+            Case Else
+                Return "Project Duration: " & totalDuration.ToString("0.##", CultureInfo.InvariantCulture) & " days"
+        End Select
+    End Function
+
+    Private Function BuildPreviewModel(taskList As List(Of ScheduleTask), mode As PlannerPreviewMode, totalDuration As Decimal, assignedHours As Decimal) As PlannerPreviewModel
+        Select Case mode
+            Case PlannerPreviewMode.ResourcesUsed
+                Dim slices = BuildResourceContributionSlices(taskList, includeZeroValues:=True)
+                Return New PlannerPreviewModel With {
+                    .HeaderText = "Resources used",
+                    .CenterTitle = slices.Count.ToString(CultureInfo.InvariantCulture),
+                    .CenterSubtitle = "resources",
+                    .EmptyText = If(slices.Count > 0, "Assign resource hours to calculate contribution", "No resources selected"),
+                    .Slices = slices
+                }
+            Case PlannerPreviewMode.ResourceContribution
+                Dim slices = BuildResourceContributionSlices(taskList, includeZeroValues:=True)
+                Return New PlannerPreviewModel With {
+                    .HeaderText = "Resource contribution",
+                    .CenterTitle = slices.Count.ToString(CultureInfo.InvariantCulture),
+                    .CenterSubtitle = assignedHours.ToString("0.##", CultureInfo.InvariantCulture) & " hrs",
+                    .EmptyText = If(slices.Count > 0, "Assign resource hours to calculate contribution", "No resource contribution"),
+                    .Slices = slices
+                }
+            Case Else
+                Return New PlannerPreviewModel With {
+                    .HeaderText = "Task count split",
+                    .CenterTitle = taskList.Count.ToString(CultureInfo.InvariantCulture),
+                    .CenterSubtitle = "tasks",
+                    .EmptyText = "No scheduled tasks",
+                    .Slices = taskList.
+                        Where(Function(task) task IsNot Nothing).
+                        Select(Function(task) New PlannerPreviewSlice With {
+                            .Label = task.TaskName,
+                            .Value = 1D
+                        }).
+                        ToList()
+                }
+        End Select
+    End Function
+
+    Private Function BuildResourceContributionSlices(taskList As IEnumerable(Of ScheduleTask), Optional includeZeroValues As Boolean = False) As List(Of PlannerPreviewSlice)
+        Dim totals As New Dictionary(Of String, Decimal)(StringComparer.OrdinalIgnoreCase)
+
+        For Each task In taskList
+            For Each item In ResourceAllocationsForPreview(task)
+                If totals.ContainsKey(item.Key) Then
+                    totals(item.Key) += item.Value
+                Else
+                    totals(item.Key) = item.Value
+                End If
+            Next
+        Next
+
+        Dim items = totals.AsEnumerable()
+        If Not includeZeroValues Then
+            items = items.Where(Function(item) item.Value > 0D)
+        End If
+
+        Return items.
+            OrderByDescending(Function(item) item.Value).
+            ThenBy(Function(item) item.Key, StringComparer.OrdinalIgnoreCase).
+            Select(Function(item) New PlannerPreviewSlice With {
+                .Label = item.Key,
+                .Value = item.Value
+            }).
+            ToList()
+    End Function
+
+    Private Function ResourceAllocationsForPreview(task As ScheduleTask) As Dictionary(Of String, Decimal)
+        Dim allocations = ParseResourceAllocations(task.ResourceAllocations)
+        If allocations.Count > 0 Then
+            Return allocations
+        End If
+
+        Dim resourceNames = ResourceNamesFromAssignment(task.AssignedTo)
+        If resourceNames.Count = 0 Then
+            Return New Dictionary(Of String, Decimal)(StringComparer.OrdinalIgnoreCase)
+        End If
+
+        Return BuildEvenResourceAllocations(resourceNames, task.ResourceHours)
+    End Function
+
+    Private Function BuildResourceUtilizationHost() As Control
+        Dim host As New Panel With {
+            .Dock = DockStyle.Fill,
+            .BackColor = Color.White,
+            .Padding = New Padding(0)
+        }
+
+        Dim toolbar As New FlowLayoutPanel With {
+            .Dock = DockStyle.Top,
+            .Height = 44,
+            .Padding = New Padding(10, 8, 10, 6),
+            .BackColor = Color.White,
+            .WrapContents = False,
+            .AutoScroll = True
+        }
+
+        _resourceUtilizationRefreshButton = New Button With {
+            .Text = "Refresh SQL Hours",
+            .Width = 130,
+            .Height = 28,
+            .FlatStyle = FlatStyle.Flat,
+            .BackColor = Color.FromArgb(42, 95, 160),
+            .ForeColor = Color.White
+        }
+        _resourceUtilizationColorSelector = New ComboBox With {
+            .Width = 180,
+            .DropDownStyle = ComboBoxStyle.DropDownList
+        }
+        _resourceUtilizationColorSelector.Items.AddRange({
+            "Blue - Planned Leave",
+            "Dark Blue - Unplanned Leave",
+            "Yellow - Training",
+            "Green - Weekend Work",
+            "Orange - Pending Work",
+            "Red - Unassigned Hours"
+        })
+        If _resourceUtilizationColorSelector.Items.Count > 0 Then
+            _resourceUtilizationColorSelector.SelectedIndex = 0
+        End If
+
+        _resourceUtilizationApplyButton = New Button With {
+            .Text = "Apply Highlight",
+            .Width = 120,
+            .Height = 28,
+            .FlatStyle = FlatStyle.Flat
+        }
+        _resourceUtilizationClearButton = New Button With {
+            .Text = "Clear Highlight",
+            .Width = 120,
+            .Height = 28,
+            .FlatStyle = FlatStyle.Flat
+        }
+        _resourceUtilizationMailButton = New Button With {
+            .Text = "Send Availability Snip",
+            .Width = 160,
+            .Height = 28,
+            .FlatStyle = FlatStyle.Flat,
+            .BackColor = Color.FromArgb(34, 169, 105),
+            .ForeColor = Color.White
+        }
+
+        AddHandler _resourceUtilizationRefreshButton.Click, AddressOf RefreshResourceUtilizationTab
+        AddHandler _resourceUtilizationApplyButton.Click, AddressOf ApplyResourceUtilizationHighlight
+        AddHandler _resourceUtilizationClearButton.Click, AddressOf ClearResourceUtilizationHighlight
+        AddHandler _resourceUtilizationMailButton.Click, AddressOf SendResourceUtilizationSnip
+
+        toolbar.Controls.Add(_resourceUtilizationRefreshButton)
+        toolbar.Controls.Add(_resourceUtilizationColorSelector)
+        toolbar.Controls.Add(_resourceUtilizationApplyButton)
+        toolbar.Controls.Add(_resourceUtilizationClearButton)
+        toolbar.Controls.Add(_resourceUtilizationMailButton)
+
+        host.Controls.Add(_resourceUtilizationGrid)
+        host.Controls.Add(toolbar)
+        Return host
+    End Function
+
+    Private Function BuildTaskViewGrid() As DataGridView
+        Dim usageGrid As New DataGridView With {
+            .AllowUserToAddRows = False,
+            .AllowUserToDeleteRows = False,
+            .AutoGenerateColumns = False,
+            .AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None,
+            .BackgroundColor = Color.White,
+            .BorderStyle = BorderStyle.None,
+            .ColumnHeadersHeight = 32,
+            .Dock = DockStyle.Fill,
+            .EnableHeadersVisualStyles = False,
+            .GridColor = Color.FromArgb(232, 236, 242),
+            .MultiSelect = False,
+            .Name = "_taskUsageGrid",
+            .RowHeadersVisible = False,
+            .ScrollBars = ScrollBars.Both,
+            .SelectionMode = DataGridViewSelectionMode.CellSelect
+        }
+        usageGrid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(35, 46, 66)
+        usageGrid.ColumnHeadersDefaultCellStyle.ForeColor = Color.White
+        usageGrid.ColumnHeadersDefaultCellStyle.Font = New Font("Segoe UI Semibold", 9.0F)
+        usageGrid.DefaultCellStyle.SelectionBackColor = Color.FromArgb(219, 235, 255)
+        usageGrid.DefaultCellStyle.SelectionForeColor = Color.FromArgb(24, 31, 42)
+        Return usageGrid
+    End Function
+
+    Private Function BuildResourceUsageGrid() As DataGridView
+        Dim usageGrid As New DataGridView With {
+            .AllowUserToAddRows = False,
+            .AllowUserToDeleteRows = False,
+            .AutoGenerateColumns = False,
+            .AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None,
+            .BackgroundColor = Color.White,
+            .BorderStyle = BorderStyle.None,
+            .ColumnHeadersHeight = 32,
+            .Dock = DockStyle.Fill,
+            .EnableHeadersVisualStyles = False,
+            .GridColor = Color.FromArgb(232, 236, 242),
+            .MultiSelect = False,
+            .Name = "_resourceUsageGrid",
+            .RowHeadersVisible = False,
+            .ScrollBars = ScrollBars.Both,
+            .SelectionMode = DataGridViewSelectionMode.CellSelect
+        }
+        usageGrid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(35, 46, 66)
+        usageGrid.ColumnHeadersDefaultCellStyle.ForeColor = Color.White
+        usageGrid.ColumnHeadersDefaultCellStyle.Font = New Font("Segoe UI Semibold", 9.0F)
+        usageGrid.DefaultCellStyle.SelectionBackColor = Color.FromArgb(219, 235, 255)
+        usageGrid.DefaultCellStyle.SelectionForeColor = Color.FromArgb(24, 31, 42)
+        Return usageGrid
+    End Function
+
+    Private Function BuildCapacityPlanningSummaryGrid() As DataGridView
+        Dim grid As New DataGridView With {
+            .AllowUserToAddRows = False,
+            .AllowUserToDeleteRows = False,
+            .AutoGenerateColumns = False,
+            .AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None,
+            .BackgroundColor = Color.White,
+            .BorderStyle = BorderStyle.None,
+            .ColumnHeadersHeight = 32,
+            .Dock = DockStyle.Fill,
+            .EnableHeadersVisualStyles = False,
+            .GridColor = Color.FromArgb(232, 236, 242),
+            .MultiSelect = False,
+            .Name = "_capacityGrid",
+            .ReadOnly = True,
+            .RowHeadersVisible = False,
+            .ScrollBars = ScrollBars.Both,
+            .SelectionMode = DataGridViewSelectionMode.FullRowSelect
+        }
+        grid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(35, 46, 66)
+        grid.ColumnHeadersDefaultCellStyle.ForeColor = Color.White
+        grid.ColumnHeadersDefaultCellStyle.Font = New Font("Segoe UI Semibold", 9.0F)
+        grid.DefaultCellStyle.SelectionBackColor = Color.FromArgb(219, 235, 255)
+        grid.DefaultCellStyle.SelectionForeColor = Color.FromArgb(24, 31, 42)
+        Return grid
+    End Function
+
+    Private Sub UpdateTaskUsageGrid()
+        If _taskUsageGrid Is Nothing Then
+            Return
+        End If
+
+        _isLoadingTaskViewGrid = True
+        Try
+            _taskViewDateColumns.Clear()
+            _taskUsageGrid.Columns.Clear()
+            _taskUsageGrid.Rows.Clear()
+
+            _taskUsageGrid.Columns.Add(New DataGridViewTextBoxColumn With {.HeaderText = "Task / Resource", .Width = 340, .ReadOnly = True, .Frozen = True})
+            _taskUsageGrid.Columns.Add(New CalendarColumn With {.HeaderText = "Start", .Width = 96, .Frozen = True})
+            _taskUsageGrid.Columns.Add(New CalendarColumn With {.HeaderText = "Finish", .Width = 96, .Frozen = True})
+            _taskUsageGrid.Columns.Add(New DataGridViewTextBoxColumn With {.HeaderText = "Assigned To", .Width = 220, .ReadOnly = True, .Frozen = True})
+
+            Dim projectStart As Date
+            Dim projectFinish As Date
+            If Not TryGetProjectDateRange(projectStart, projectFinish) Then
+                _taskUsageGrid.Rows.Add("No tasks loaded", "", "", "")
+                Return
+            End If
+
+            AddDateColumns(_taskUsageGrid, _taskViewDateColumns, projectStart, projectFinish)
+
+            For Each task In _tasks.OrderBy(Function(item) item.TaskId)
+                Dim taskRowIndex = _taskUsageGrid.Rows.Add()
+                Dim taskRow = _taskUsageGrid.Rows(taskRowIndex)
+                taskRow.Tag = New TaskRowTag(task.TaskId)
+                taskRow.DefaultCellStyle.BackColor = Color.FromArgb(235, 243, 252)
+                taskRow.DefaultCellStyle.Font = New Font("Segoe UI Semibold", 9.0F)
+                taskRow.Cells(0).Value = task.TaskId.ToString(CultureInfo.InvariantCulture) & ". " & task.TaskName
+                taskRow.Cells(0).ReadOnly = True
+                taskRow.Cells(1).Value = task.StartDate.Date
+                taskRow.Cells(2).Value = task.FinishDate.Date
+                taskRow.Cells(3).Value = task.AssignedTo
+                taskRow.Cells(3).ReadOnly = True
+
+                For Each dateColumn In _taskViewDateColumns
+                    Dim workDate = dateColumn.Value
+                    Dim cell = taskRow.Cells(dateColumn.Key)
+                    If IsBlockedScheduleDate(workDate) Then
+                        StyleBlockedCell(cell)
+                    Else
+                        Dim totalHours = TaskTotalHoursOnDate(task, workDate)
+                        cell.Value = totalHours
+                        cell.ReadOnly = True
+                        Dim taskDailyCapacity = Math.Max(1, ResourceNamesFromAssignment(task.AssignedTo).Count) * 8D
+                        StyleUsageSummaryCell(cell, totalHours, taskDailyCapacity)
+                    End If
+                Next
+
+                For Each resourceName In ResourceNamesFromAssignment(task.AssignedTo)
+                    Dim rowIndex = _taskUsageGrid.Rows.Add()
+                    Dim row = _taskUsageGrid.Rows(rowIndex)
+                    row.Tag = New ResourceTaskRowTag(resourceName, task.TaskId)
+                    row.Cells(0).Value = "   " & resourceName
+                    row.Cells(0).ReadOnly = True
+                    row.Cells(1).Value = task.StartDate.Date
+                    row.Cells(2).Value = task.FinishDate.Date
+                    row.Cells(3).Value = ""
+                    row.Cells(3).ReadOnly = True
+
+                    For Each dateColumn In _taskViewDateColumns
+                        Dim workDate = dateColumn.Value
+                        Dim cell = row.Cells(dateColumn.Key)
+                        If IsBlockedScheduleDate(workDate) Then
+                            StyleBlockedCell(cell)
+                        Else
+                            Dim hours = TaskHoursOnDate(task, resourceName, workDate)
+                            cell.Value = hours
+                            cell.ReadOnly = False
+                            Dim explicitEntry = _explicitTaskUsageEdits.Contains(TaskUsageEditKey(task.TaskId, resourceName, workDate))
+                            Dim availableHours = AvailableHoursForResource(resourceName, workDate, task.TaskId)
+                            StyleResourceTaskCell(cell, resourceName, workDate, explicitEntry, availableHours)
+                        End If
+                    Next
+                Next
+            Next
+        Finally
+            _isLoadingTaskViewGrid = False
+        End Try
+    End Sub
+
+    Private Function PlannerLegendGrid(mode As PlannerPreviewMode, Optional existingLegend As DataGridView = Nothing) As DataGridView
+        Dim legend = existingLegend
+        If legend Is Nothing Then
+            legend = New DataGridView()
+        End If
+
+        legend.AllowUserToAddRows = False
+        legend.AllowUserToDeleteRows = False
+        legend.AutoGenerateColumns = False
+        legend.BackgroundColor = Color.White
+        legend.BorderStyle = BorderStyle.None
+        legend.ColumnHeadersHeight = 30
+        legend.Dock = DockStyle.Fill
+        legend.EnableHeadersVisualStyles = False
+        legend.GridColor = Color.FromArgb(232, 236, 242)
+        legend.ReadOnly = True
+        legend.RowHeadersVisible = False
+        legend.RowTemplate.Height = 24
+        legend.AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.AllCells
+        legend.SelectionMode = DataGridViewSelectionMode.FullRowSelect
+        legend.Columns.Clear()
+        legend.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(35, 46, 66)
+        legend.ColumnHeadersDefaultCellStyle.ForeColor = Color.White
+        legend.ColumnHeadersDefaultCellStyle.Font = New Font("Segoe UI Semibold", 9.0F)
+        legend.DefaultCellStyle.SelectionBackColor = Color.FromArgb(219, 235, 255)
+        legend.DefaultCellStyle.SelectionForeColor = Color.FromArgb(24, 31, 42)
+        legend.Tag = mode
+        legend.Columns.Add(New DataGridViewTextBoxColumn With {.DataPropertyName = NameOf(PlannerPreviewRow.ColorName), .HeaderText = "", .Width = 34, .Resizable = DataGridViewTriState.False})
+        legend.Columns.Add(New DataGridViewTextBoxColumn With {
+            .DataPropertyName = NameOf(PlannerPreviewRow.ItemName),
+            .HeaderText = If(mode = PlannerPreviewMode.TaskDuration, "Task", "Resource"),
+            .AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
+            .MinimumWidth = 120,
+            .DefaultCellStyle = New DataGridViewCellStyle With {.WrapMode = DataGridViewTriState.True}
+        })
+        legend.Columns.Add(New DataGridViewTextBoxColumn With {.DataPropertyName = NameOf(PlannerPreviewRow.ShareText), .HeaderText = "%", .Width = 62, .Resizable = DataGridViewTriState.False})
+        RemoveHandler legend.CellFormatting, AddressOf PlannerLegendCellFormatting
+        RemoveHandler legend.CellToolTipTextNeeded, AddressOf PlannerLegendToolTipTextNeeded
+        AddHandler legend.CellFormatting, AddressOf PlannerLegendCellFormatting
+        AddHandler legend.CellToolTipTextNeeded, AddressOf PlannerLegendToolTipTextNeeded
+        Return legend
+    End Function
+
+    Private Sub AddGridColumns()
+        _grid.Columns.Add(New DataGridViewTextBoxColumn With {.DataPropertyName = NameOf(ScheduleTask.TaskId), .HeaderText = "ID", .Width = 46, .ReadOnly = True})
+        _grid.Columns.Add(New DataGridViewTextBoxColumn With {.DataPropertyName = NameOf(ScheduleTask.TaskName), .HeaderText = "Task Name", .Width = 303})
+        _grid.Columns.Add(New DataGridViewTextBoxColumn With {.DataPropertyName = NameOf(ScheduleTask.DurationDays), .HeaderText = "Duration (Days)", .Width = 104, .ValueType = GetType(Decimal), .DefaultCellStyle = New DataGridViewCellStyle With {.Format = "0.###"}})
+        _grid.Columns.Add(New CalendarColumn With {.DataPropertyName = NameOf(ScheduleTask.StartDate), .HeaderText = "Start", .Width = 104})
+        _grid.Columns.Add(New CalendarColumn With {.DataPropertyName = NameOf(ScheduleTask.FinishDate), .HeaderText = "Finish", .Width = 104})
+        Dim predecessorColumn As New DataGridViewComboBoxColumn With {
+            .DataPropertyName = NameOf(ScheduleTask.PredecessorLink),
+            .HeaderText = "Predecessors",
+            .Width = 108,
+            .FlatStyle = FlatStyle.Flat,
+            .DisplayStyle = DataGridViewComboBoxDisplayStyle.ComboBox,
+            .ValueType = GetType(String)
+        }
+        predecessorColumn.Items.AddRange("", "FS", "SS", "FF", "SF")
+        _grid.Columns.Add(predecessorColumn)
+        _grid.Columns.Add(New ResourceChecklistColumn(_employees) With {.DataPropertyName = NameOf(ScheduleTask.AssignedTo), .HeaderText = "Assigned To", .Width = 210})
+        _grid.Columns.Add(New CalendarColumn With {.DataPropertyName = NameOf(ScheduleTask.AssignmentDate), .HeaderText = "Assign Date", .Width = 104})
+        _grid.Columns.Add(New DataGridViewTextBoxColumn With {.DataPropertyName = NameOf(ScheduleTask.ResourceHours), .HeaderText = "Resource Hours", .Width = 108, .ValueType = GetType(Decimal), .DefaultCellStyle = New DataGridViewCellStyle With {.Format = "0.##"}})
+    End Sub
+
+    Private Sub SeedSchedulerDesignerData()
+        If _tasks.Count > 0 Then
+            Return
+        End If
+
+        ResetWorkspaceTransientState()
+        _projectName.Text = "SMA Scheduler"
+        _versionNumber.Text = "1.0"
+        _projectType = "New"
+        SelectProjectSize("Small")
+        ClearPlanningInputDisplays()
+    End Sub
+
+    Private Sub NewProject(sender As Object, e As EventArgs)
+        Dim decision = PromptForUnsavedChanges()
+        If decision = DialogResult.Cancel Then
+            Return
+        End If
+        If decision = DialogResult.Yes AndAlso Not SaveProjectToSql(showSuccessMessage:=False) Then
+            Return
+        End If
+
+        ClearProjectForNewSchedule()
+    End Sub
+
+    Private Sub ClearProjectForNewSchedule()
+        ResetWorkspaceTransientState()
+        _tasks.Clear()
+        _projectType = "New"
+        _projectName.Text = "SMA Scheduler"
+        _versionNumber.Text = "1.0"
+        _totalProjectHours.Value = 0
+        UpdateProjectMetadataDisplay()
+        RecalculateAndRefresh("New project created")
+        ClearPlanningInputDisplays()
+        MarkCurrentStateSaved()
+    End Sub
+
+    Private Sub ResetWorkspaceTransientState()
+        _explicitTaskUsageEdits.Clear()
+        _resourceUtilizationOverrides.Clear()
+        _resourceUtilizationHighlights.Clear()
+        _resourceAvailabilityCache.Clear()
+    End Sub
+
+    Private Sub btnAddTask_Click(sender As Object, e As EventArgs)
+        Dim nextId = If(_tasks.Count = 0, 1, _tasks.Max(Function(t) t.TaskId) + 1)
+        Dim startDate = NextWorkingDate(If(_tasks.Count = 0, Date.Today, _tasks.Max(Function(t) t.FinishDate).AddDays(1)))
+        _tasks.Add(New ScheduleTask With {
+                   .TaskId = nextId,
+                   .TaskName = "New task " & nextId,
+                   .StartDate = startDate,
+                   .AssignmentDate = NextWorkingDate(Date.Today),
+                   .DurationDays = 1,
+                   .PercentComplete = 0,
+                   .AssignedTo = "",
+                   .ResourceNames = "",
+                   .ResourceAllocations = "",
+                   .DailyResourceAllocations = "",
+                   .ResourceHours = 0D})
+        SelectTask(nextId)
+        RecalculateAndRefresh("Task added")
+    End Sub
+
+    Private Sub AddTaskFromCatalog(selectedCatalogTask As TaskCatalogItem)
+        Dim nextId = If(_tasks.Count = 0, 1, _tasks.Max(Function(t) t.TaskId) + 1)
+        Dim requestedHours = DefaultTaskHours(selectedCatalogTask)
+        Dim startDate = PreferredTaskStartDate()
+
+        _tasks.Add(New ScheduleTask With {
+                   .TaskId = nextId,
+                   .DatabaseTaskId = selectedCatalogTask.DatabaseTaskId,
+                   .TaskName = selectedCatalogTask.Title,
+                   .StartDate = startDate,
+                   .AssignmentDate = startDate,
+                   .DurationDays = DurationFromHours(requestedHours),
+                   .PercentComplete = 0,
+                   .Predecessors = If(_tasks.Count = 0, "", (_tasks.Count).ToString()),
+                   .AssignedTo = "",
+                   .ResourceNames = "",
+                   .ResourceAllocations = "",
+                   .DailyResourceAllocations = "",
+                   .ResourceHours = 0D,
+                   .ModuleId = selectedCatalogTask.ModuleId})
+
+        SelectTask(nextId)
+        RecalculateAndRefresh("Task added from allocation panel")
+    End Sub
+
+    Private Sub LoadTemplateTasks(templateName As String, projectSize As String, Optional reportType As String = "")
+        Dim templateTasks = _taskCatalogService.LoadTemplateTasks(templateName, projectSize, reportType)
+        Dim startDate = NextWorkingDate(Date.Today)
+        Dim totalTemplateHours = 0D
+
+        _tasks.Clear()
+        For Each catalogTask In templateTasks
+            Dim requestedHours = catalogTask.HoursForSize(projectSize)
+            If requestedHours <= 0D Then
+                Continue For
+            End If
+
+            totalTemplateHours += requestedHours
+            _tasks.Add(CreateTemplateScheduleTask(catalogTask, _tasks.Count + 1, requestedHours, startDate))
+        Next
+
+        _totalProjectHours.Value = ClampDecimal(totalTemplateHours, _totalProjectHours.Minimum, _totalProjectHours.Maximum)
+        If _tasks.Count > 0 Then
+            SelectTask(1)
+        End If
+    End Sub
+
+    Private Function CreateTemplateScheduleTask(catalogTask As TaskCatalogItem, taskId As Integer, requestedHours As Decimal, startDate As Date) As ScheduleTask
+        Dim predecessorText = catalogTask.Predecessor.Trim()
+        If predecessorText.Equals("Beginning", StringComparison.OrdinalIgnoreCase) OrElse
+            predecessorText.Equals("Updates Begin", StringComparison.OrdinalIgnoreCase) Then
+            predecessorText = ""
+        ElseIf predecessorText.Equals("Previous Task", StringComparison.OrdinalIgnoreCase) Then
+            predecessorText = If(taskId <= 1, "", (taskId - 1).ToString(CultureInfo.InvariantCulture))
+        ElseIf predecessorText.Equals("Create Site Plan", StringComparison.OrdinalIgnoreCase) Then
+            predecessorText = ""
+        End If
+
+        Return New ScheduleTask With {
+            .TaskId = taskId,
+            .DatabaseTaskId = catalogTask.DatabaseTaskId,
+            .TaskName = catalogTask.Title,
+            .StartDate = startDate,
+            .AssignmentDate = startDate,
+            .DurationDays = DurationFromHours(requestedHours),
+            .PercentComplete = 0,
+            .Predecessors = predecessorText,
+            .DependencyType = If(String.IsNullOrWhiteSpace(catalogTask.DependencyType), "FS", catalogTask.DependencyType),
+            .AssignedTo = "",
+            .ResourceNames = "",
+            .ResourceAllocations = "",
+            .DailyResourceAllocations = "",
+            .ResourceHours = 0D,
+            .ModuleId = catalogTask.ModuleId
+        }
+    End Function
+
+    Private Sub btnDelete_Click(sender As Object, e As EventArgs)
+        Dim selected = SelectedTask()
+        If selected Is Nothing Then
+            Return
+        End If
+
+        Dim removedTaskId = selected.TaskId
+        _tasks.Remove(selected)
+        For Each task In _tasks
+            Dim updatedPredecessors = _engine.ParsePredecessors(task.Predecessors).
+                Where(Function(id) id <> removedTaskId).
+                Select(Function(id) If(id > removedTaskId, id - 1, id)).
+                ToList()
+            task.Predecessors = String.Join(",", updatedPredecessors)
+        Next
+        RenumberTasks()
+        RecalculateAndRefresh("Task deleted")
+    End Sub
+
+    Private Sub btnMoveUp_Click(sender As Object, e As EventArgs)
+        MoveSelectedTask(-1)
+    End Sub
+
+    Private Sub btnMoveDown_Click(sender As Object, e As EventArgs)
+        MoveSelectedTask(1)
+    End Sub
+
+    Private Sub MoveSelectedTask(direction As Integer)
+        If _grid.CurrentRow Is Nothing Then
+            Return
+        End If
+
+        Dim index = _grid.CurrentRow.Index
+        Dim target = index + direction
+        If target < 0 OrElse target >= _tasks.Count Then
+            Return
+        End If
+
+        Dim task = _tasks(index)
+        _suspendTaskEvents = True
+        Try
+            _tasks.RemoveAt(index)
+            _tasks.Insert(target, task)
+            RemapPredecessorsForCurrentOrder()
+            RenumberTasks()
+        Finally
+            _suspendTaskEvents = False
+        End Try
+
+        _grid.ClearSelection()
+        _grid.Rows(target).Selected = True
+        _grid.CurrentCell = _grid.Rows(target).Cells(1)
+        RecalculateAndRefresh("Task moved")
+    End Sub
+
+    Private Sub btnLink_Click(sender As Object, e As EventArgs)
+        If _grid.CurrentRow Is Nothing OrElse _grid.CurrentRow.Index <= 0 Then
+            Return
+        End If
+
+        Dim task = DirectCast(_grid.CurrentRow.DataBoundItem, ScheduleTask)
+        Dim predecessor = _tasks(_grid.CurrentRow.Index - 1)
+        task.Predecessors = predecessor.TaskId.ToString()
+        task.DependencyType = "FS"
+        RecalculateAndRefresh("Linked to previous task")
+    End Sub
+
+    Private Sub btnUnlink_Click(sender As Object, e As EventArgs)
+        Dim task = SelectedTask()
+        If task IsNot Nothing Then
+            task.Predecessors = ""
+            RecalculateAndRefresh("Dependencies cleared")
+        End If
+    End Sub
+
+    Private Sub btnMilestone_Click(sender As Object, e As EventArgs)
+        Dim task = SelectedTask()
+        If task Is Nothing Then
+            Return
+        End If
+
+        task.DurationDays = 1
+        task.TaskName = If(task.TaskName.StartsWith("Milestone: "), task.TaskName.Replace("Milestone: ", ""), "Milestone: " & task.TaskName)
+        RecalculateAndRefresh("Milestone updated")
+    End Sub
+
+    Private Sub btnSave_Click(sender As Object, e As EventArgs)
+        If _tasks.Count = 0 Then
+            MessageBox.Show(Me, "There is no task assigned for the project.", "No Tasks", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return
+        End If
+
+        SaveProjectToSql(showSuccessMessage:=True)
+    End Sub
+
+    Private Sub btnRefreshCapacity_Click(sender As Object, e As EventArgs)
+        CommitWorkspaceGridEdits()
+        RecalculateAndRefresh("Capacity planning refreshed")
+        Dim sqlSaved = SaveProjectToSql(showSuccessMessage:=False)
+        RefreshWorkspaceTabs()
+        Dim message = If(sqlSaved,
+            "Capacity Planning has been refreshed and SQL has been updated.",
+            "Capacity Planning has been refreshed. SQL was not updated.")
+        MessageBox.Show(Me, message, "Capacity Planning", MessageBoxButtons.OK, MessageBoxIcon.Information)
+    End Sub
+
+    Private Function SaveProjectToSql(showSuccessMessage As Boolean) As Boolean
+        If _tasks.Count = 0 Then
+            Return False
+        End If
+
+        CommitWorkspaceGridEdits()
+        RecalculateAndRefresh("Saving project")
+
+        If _sqlRepository Is Nothing Then
+            MessageBox.Show(Me, "SQL connection is not configured. Update App.config with the SmaSchedulerDb connection string before saving.", "SQL Not Configured", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            SetStatus("SQL save skipped because no connection string is configured.")
+            Return False
+        End If
+
+        Try
+            Dim projectName = If(String.IsNullOrWhiteSpace(_projectName.Text), "SMA Scheduler", _projectName.Text.Trim())
+            Dim version = If(String.IsNullOrWhiteSpace(_versionNumber.Text), "1.0", _versionNumber.Text.Trim())
+            Dim projectSize = If(_projectSizeSelector.SelectedItem Is Nothing, "Small", Convert.ToString(_projectSizeSelector.SelectedItem, CultureInfo.InvariantCulture))
+            Dim totalAssignedHours = _tasks.Sum(Function(task) task.ResourceHours)
+
+            _sqlRepository.SaveProject(projectName, _tasks, version, projectSize, _projectType, _totalProjectHours.Value, AssignedResourceCount(), totalAssignedHours)
+
+            SaveEmployeeWorkspaceWorkbook()
+            SaveProjectSnapshotToLibrary()
+            MarkCurrentStateSaved()
+
+            If showSuccessMessage Then
+                MessageBox.Show(Me, "Project has been saved to SQL and Capacity Planning has been updated.", "Project Saved", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            End If
+
+            SetStatus("SQL updated for " & projectName)
+            Return True
+        Catch ex As Exception
+            MessageBox.Show(Me, "SQL update failed." & Environment.NewLine & ex.Message, "SQL Save Failed", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            SetStatus("SQL save failed")
+            Return False
+        End Try
+    End Function
+
+    Private Function PromptForUnsavedChanges() As DialogResult
+        If String.Equals(CurrentProjectSignature(), _lastSavedSignature, StringComparison.Ordinal) Then
+            Return DialogResult.No
+        End If
+
+        Return MessageBox.Show(Me, "Do you want to save changes before creating a new project?", "Unsaved Changes", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question)
+    End Function
+
+    Private Sub MarkCurrentStateSaved()
+        _lastSavedSignature = CurrentProjectSignature()
+    End Sub
+
+    Private Function CurrentProjectSignature() As String
+        Dim taskSignature = String.Join("|", _tasks.
+            OrderBy(Function(task) task.TaskId).
+            Select(Function(task) String.Join("~", {
+                task.TaskId.ToString(CultureInfo.InvariantCulture),
+                task.DatabaseTaskId.ToString(CultureInfo.InvariantCulture),
+                task.TaskName,
+                task.StartDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                task.FinishDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                task.DurationDays.ToString("0.###", CultureInfo.InvariantCulture),
+                task.PercentComplete.ToString(CultureInfo.InvariantCulture),
+                task.Predecessors,
+                task.DependencyType,
+                task.AssignedTo,
+                task.AssignmentDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                task.ResourceAllocations,
+                task.DailyResourceAllocations,
+                task.ResourceHours.ToString("0.##", CultureInfo.InvariantCulture)
+            })))
+
+        Return String.Join("||", {
+            _projectName.Text.Trim(),
+            _versionNumber.Text.Trim(),
+            Convert.ToString(If(_projectSizeSelector.SelectedItem, "Small"), CultureInfo.InvariantCulture),
+            _projectType,
+            _totalProjectHours.Value.ToString("0.##", CultureInfo.InvariantCulture),
+            AssignedResourceCount().ToString(CultureInfo.InvariantCulture),
+            _includeSaturdays.Checked.ToString(),
+            taskSignature
+        })
+    End Function
+
+    Private Sub OpenProjectFile(sender As Object, e As EventArgs)
+        Using dialog As New OpenFileDialog()
+            dialog.Title = "Open SMA schedule"
+            dialog.Filter = "SMA schedule (*.smaschedule;*.json)|*.smaschedule;*.json"
+
+            If dialog.ShowDialog(Me) <> DialogResult.OK Then
+                Return
+            End If
+
+            Dim snapshot = _projectLibrary.LoadSnapshot(dialog.FileName)
+            If snapshot Is Nothing Then
+                Return
+            End If
+
+            LoadProjectSnapshot(snapshot)
+        End Using
+    End Sub
+
+    Private Sub GridCellValueChanged(sender As Object, e As DataGridViewCellEventArgs) Handles _grid.CellValueChanged
+        If e.RowIndex < 0 OrElse e.ColumnIndex < 0 OrElse _isRecalculating Then
+            Return
+        End If
+
+        Dim task = TryCast(_grid.Rows(e.RowIndex).DataBoundItem, ScheduleTask)
+        If task Is Nothing Then
+            Return
+        End If
+
+        NormalizeGridEdit(task, _grid.Columns(e.ColumnIndex).DataPropertyName)
+        If Not _suspendTaskEvents Then
+            RecalculateAndRefresh("Schedule recalculated")
+        End If
+    End Sub
+
+    Private Sub GridCellBeginEdit(sender As Object, e As DataGridViewCellCancelEventArgs) Handles _grid.CellBeginEdit
+        If e.RowIndex >= 0 AndAlso e.ColumnIndex >= 0 AndAlso IsScheduleEditColumn(_grid.Columns(e.ColumnIndex).DataPropertyName) Then
+            _suspendTaskEvents = True
+        End If
+    End Sub
+
+    Private Sub GridCellEndEdit(sender As Object, e As DataGridViewCellEventArgs) Handles _grid.CellEndEdit
+        If _suspendTaskEvents Then
+            _suspendTaskEvents = False
+            RecalculateAndRefresh("Schedule recalculated")
+        End If
+    End Sub
+
+    Private Sub GridCellParsing(sender As Object, e As DataGridViewCellParsingEventArgs) Handles _grid.CellParsing
+        If e.RowIndex < 0 OrElse e.ColumnIndex < 0 Then
+            Return
+        End If
+
+        Dim propertyName = _grid.Columns(e.ColumnIndex).DataPropertyName
+        If propertyName = NameOf(ScheduleTask.ResourceHours) OrElse propertyName = NameOf(ScheduleTask.DurationDays) Then
+            Dim parsedDecimal As Decimal
+            If Decimal.TryParse(Convert.ToString(e.Value, CultureInfo.CurrentCulture), NumberStyles.Number, CultureInfo.CurrentCulture, parsedDecimal) OrElse
+                Decimal.TryParse(Convert.ToString(e.Value, CultureInfo.InvariantCulture), NumberStyles.Number, CultureInfo.InvariantCulture, parsedDecimal) Then
+                e.Value = Math.Max(0D, parsedDecimal)
+                e.ParsingApplied = True
+            End If
+            Return
+        End If
+
+        If propertyName <> NameOf(ScheduleTask.StartDate) AndAlso propertyName <> NameOf(ScheduleTask.FinishDate) AndAlso propertyName <> NameOf(ScheduleTask.AssignmentDate) Then
+            Return
+        End If
+
+        Dim parsedDate As Date
+        If TryParseGridDate(Convert.ToString(e.Value, CultureInfo.CurrentCulture), parsedDate) Then
+            e.Value = parsedDate.Date
+            e.ParsingApplied = True
+        End If
+    End Sub
+
+    Private Sub GridCurrentCellDirtyStateChanged(sender As Object, e As EventArgs) Handles _grid.CurrentCellDirtyStateChanged
+        If _grid.IsCurrentCellDirty AndAlso (TypeOf _grid.EditingControl Is DataGridViewComboBoxEditingControl OrElse TypeOf _grid.EditingControl Is CalendarEditingControl) Then
+            _grid.CommitEdit(DataGridViewDataErrorContexts.Commit)
+        End If
+    End Sub
+
+    Private Sub GridDataError(sender As Object, e As DataGridViewDataErrorEventArgs) Handles _grid.DataError
+        e.ThrowException = False
+        SetStatus("Please enter a valid value")
+    End Sub
+
+    Private Sub TasksChanged(sender As Object, e As ListChangedEventArgs)
+        If _suspendTaskEvents Then
+            Return
+        End If
+
+        RecalculateAndRefresh("Schedule updated")
+    End Sub
+
+    Private Sub NormalizeGridEdit(task As ScheduleTask, propertyName As String)
+        Select Case propertyName
+            Case NameOf(ScheduleTask.StartDate)
+                task.StartDate = NormalizePickedWorkingDate(task.StartDate)
+                If task.FinishDate < task.StartDate Then
+                    task.FinishDate = task.StartDate
+                End If
+                task.FinishDate = NormalizePickedWorkingDate(task.FinishDate)
+                ApplyDurationFromDateRange(task)
+                CapHoursToDuration(task)
+                task.DailyResourceAllocations = BuildDefaultDailyAllocations(task, ParseResourceAllocations(task.ResourceAllocations))
+
+            Case NameOf(ScheduleTask.FinishDate)
+                task.FinishDate = NormalizePickedWorkingDate(task.FinishDate)
+                If task.FinishDate < task.StartDate Then
+                    task.FinishDate = task.StartDate
+                End If
+                ApplyDurationFromDateRange(task)
+                CapHoursToDuration(task)
+                task.DailyResourceAllocations = BuildDefaultDailyAllocations(task, ParseResourceAllocations(task.ResourceAllocations))
+
+            Case NameOf(ScheduleTask.DurationDays)
+                task.DurationDays = Math.Max(0D, task.DurationDays)
+                task.StartDate = NextWorkingDate(task.StartDate)
+                task.FinishDate = FinishFromWorkingDuration(task.StartDate, task.DurationDays)
+                CapHoursToDuration(task)
+                task.DailyResourceAllocations = BuildDefaultDailyAllocations(task, ParseResourceAllocations(task.ResourceAllocations))
+
+            Case NameOf(ScheduleTask.AssignedTo)
+                task.AssignedTo = NormalizeResourceList(task.AssignedTo)
+                task.ResourceNames = task.AssignedTo
+                KeepOnlySelectedResources(task)
+                SyncTaskResourceDistribution(task)
+                RefreshWorkspaceTabs()
+                SetStatus("Resources selected. Edit planned hours in Task Usage View or Resource Usage View.")
+
+            Case NameOf(ScheduleTask.AssignmentDate)
+                task.AssignmentDate = NormalizePickedWorkingDate(task.AssignmentDate)
+
+            Case NameOf(ScheduleTask.DependencyType), NameOf(ScheduleTask.PredecessorLink)
+                task.DependencyType = NormalizeDependencyType(task.DependencyType)
+
+            Case NameOf(ScheduleTask.ResourceHours)
+                task.ResourceHours = Math.Max(0D, task.ResourceHours)
+                task.DurationDays = DurationFromHours(task.ResourceHours)
+                task.StartDate = NextWorkingDate(task.StartDate)
+                task.FinishDate = FinishFromWorkingDuration(task.StartDate, task.DurationDays)
+                SyncTaskResourceDistribution(task)
+                SaveEmployeeWorkspaceWorkbook()
+        End Select
+    End Sub
+
+    Private Sub ApplyDurationFromDateRange(task As ScheduleTask)
+        task.DurationDays = WorkingDaysBetween(task.StartDate, task.FinishDate)
+    End Sub
+
+    Private Sub CapHoursToDuration(task As ScheduleTask)
+        task.ResourceHours = Math.Max(0D, task.ResourceHours)
+    End Sub
+
+    Private Function DurationFromHours(hours As Decimal) As Decimal
+        If hours <= 0D Then
+            Return 0D
+        End If
+
+        Return hours / 8D
+    End Function
+
+    Private Function NormalizePickedWorkingDate(value As Date) As Date
+        Dim adjustedDate = NextWorkingDate(value)
+        If adjustedDate <> value.Date Then
+            MessageBox.Show(value.ToString("dd-MM-yyyy") & " is a non-working day. Date moved to " & adjustedDate.ToString("dd-MM-yyyy") & ".", "Non-working day", MessageBoxButtons.OK, MessageBoxIcon.Information)
+        End If
+        Return adjustedDate
+    End Function
+
+    Private Function NextWorkingDate(value As Date) As Date
+        Dim currentDate = value.Date
+        While IsBlockedScheduleDate(currentDate)
+            currentDate = currentDate.AddDays(1)
+        End While
+        Return currentDate
+    End Function
+
+    Private Function FinishFromWorkingDuration(startDate As Date, durationDays As Decimal) As Date
+        Dim currentDate = NextWorkingDate(startDate)
+        Dim remainingDays = Math.Max(1, CInt(Math.Ceiling(durationDays)))
+
+        While remainingDays > 1
+            currentDate = currentDate.AddDays(1)
+            If Not IsBlockedScheduleDate(currentDate) Then
+                remainingDays -= 1
+            End If
+        End While
+
+        Return currentDate
+    End Function
+
+    Private Function WorkingDaysBetween(startDate As Date, finishDate As Date) As Decimal
+        Dim currentDate = NextWorkingDate(startDate)
+        Dim endDate = NextWorkingDate(finishDate)
+        If endDate < currentDate Then
+            Return 1
+        End If
+
+        Dim dayCount = 0
+        While currentDate <= endDate
+            If Not IsBlockedScheduleDate(currentDate) Then
+                dayCount += 1
+            End If
+            currentDate = currentDate.AddDays(1)
+        End While
+
+        Return Math.Max(1, dayCount)
+    End Function
+
+    Private Function WorkingDatesForTask(startDate As Date, finishDate As Date) As List(Of Date)
+        Dim dates As New List(Of Date)()
+        Dim currentDate = startDate.Date
+        Dim endDate = If(finishDate.Date < currentDate, currentDate, finishDate.Date)
+
+        While currentDate <= endDate
+            If Not IsBlockedScheduleDate(currentDate) Then
+                dates.Add(currentDate)
+            End If
+            currentDate = currentDate.AddDays(1)
+        End While
+
+        If dates.Count = 0 Then
+            dates.Add(startDate.Date)
+        End If
+
+        Return dates
+    End Function
+
+    Private Function IsBlockedScheduleDate(value As Date) As Boolean
+        Return Not _includeSaturdays.Checked AndAlso
+            (value.DayOfWeek = DayOfWeek.Saturday OrElse value.DayOfWeek = DayOfWeek.Sunday)
+    End Function
+
+    Private Function NormalizeResourceList(value As String) As String
+        If String.IsNullOrWhiteSpace(value) Then
+            Return ""
+        End If
+
+        Dim names = value.Split({","c, ";"c}, StringSplitOptions.RemoveEmptyEntries).
+            Select(Function(name) name.Trim()).
+            Where(Function(name) name.Length > 0).
+            Distinct(StringComparer.OrdinalIgnoreCase)
+
+        Return String.Join("; ", names)
+    End Function
+
+    Private Shared Function NormalizeDependencyType(value As String) As String
+        Dim safeValue = If(value, "").Trim().ToUpperInvariant()
+        Select Case safeValue
+            Case "SS", "FF", "SF"
+                Return safeValue
+            Case Else
+                Return "FS"
+        End Select
+    End Function
+
+    Private Sub KeepOnlySelectedResources(task As ScheduleTask)
+        Dim selectedNames = ResourceNamesFromAssignment(task.AssignedTo)
+        If selectedNames.Count = 0 Then
+            task.ResourceAllocations = ""
+            task.DailyResourceAllocations = ""
+            task.ResourceHours = 0D
+            Return
+        End If
+
+        Dim selectedSet = New HashSet(Of String)(selectedNames, StringComparer.OrdinalIgnoreCase)
+        Dim daily = ParseDailyAllocations(task.DailyResourceAllocations).
+            Where(Function(item)
+                      Dim resourceName = item.Key.Split({"|"c}, 2, StringSplitOptions.None)(0)
+                      Return selectedSet.Contains(resourceName)
+                  End Function).
+            ToDictionary(Function(item) item.Key, Function(item) item.Value, StringComparer.OrdinalIgnoreCase)
+
+        Dim totals = selectedNames.ToDictionary(Function(name) name, Function(name) 0D, StringComparer.OrdinalIgnoreCase)
+        If daily.Count > 0 Then
+            For Each item In daily
+                Dim resourceName = item.Key.Split({"|"c}, 2, StringSplitOptions.None)(0)
+                totals(resourceName) += item.Value
+            Next
+        Else
+            For Each item In ParseResourceAllocations(task.ResourceAllocations)
+                If selectedSet.Contains(item.Key) Then
+                    totals(item.Key) = item.Value
+                End If
+            Next
+        End If
+
+        task.ResourceAllocations = BuildResourceAllocationsString(totals)
+        task.ResourceHours = totals.Values.Sum()
+        task.DailyResourceAllocations = BuildDailyAllocationsString(daily)
+        If task.ResourceHours > 0D Then
+            task.DurationDays = DurationFromHours(task.ResourceHours)
+        End If
+    End Sub
+
+    Private Function ResourceNamesFromAssignment(value As String) As List(Of String)
+        If String.IsNullOrWhiteSpace(value) Then
+            Return New List(Of String)()
+        End If
+
+        Return value.Split({","c, ";"c}, StringSplitOptions.RemoveEmptyEntries).
+            Select(Function(name) name.Trim()).
+            Where(Function(name) name.Length > 0).
+            Distinct(StringComparer.OrdinalIgnoreCase).
+            ToList()
+    End Function
+
+    Private Sub SyncTaskResourceDistribution(task As ScheduleTask)
+        Dim selectedNames = ResourceNamesFromAssignment(task.AssignedTo)
+        If selectedNames.Count = 0 Then
+            task.ResourceAllocations = ""
+            task.DailyResourceAllocations = ""
+            Return
+        End If
+
+        Dim totals = BuildEvenResourceAllocations(selectedNames, task.ResourceHours)
+        task.ResourceAllocations = BuildResourceAllocationsString(totals)
+        task.DailyResourceAllocations = BuildDefaultDailyAllocations(task, totals)
+    End Sub
+
+    Private Function BuildEvenResourceAllocations(resourceNames As List(Of String), totalHours As Decimal) As Dictionary(Of String, Decimal)
+        Dim result As New Dictionary(Of String, Decimal)(StringComparer.OrdinalIgnoreCase)
+        If resourceNames Is Nothing OrElse resourceNames.Count = 0 Then
+            Return result
+        End If
+
+        totalHours = Math.Max(0D, totalHours)
+        If totalHours <= 0D Then
+            For Each resourceName In resourceNames
+                result(resourceName) = 0D
+            Next
+            Return result
+        End If
+
+        Dim remaining = totalHours
+        Dim baseShare = Math.Round(totalHours / resourceNames.Count, 2, MidpointRounding.AwayFromZero)
+        For index = 0 To resourceNames.Count - 1
+            Dim resourceName = resourceNames(index)
+            Dim share = If(index = resourceNames.Count - 1, remaining, Math.Min(remaining, baseShare))
+            share = Math.Max(0D, Math.Round(share, 2, MidpointRounding.AwayFromZero))
+            result(resourceName) = share
+            remaining -= share
+        Next
+
+        Return result
+    End Function
+
+    Private Function ParseResourceAllocations(value As String) As Dictionary(Of String, Decimal)
+        Dim result As New Dictionary(Of String, Decimal)(StringComparer.OrdinalIgnoreCase)
+        If String.IsNullOrWhiteSpace(value) Then
+            Return result
+        End If
+
+        For Each part In value.Split({";"c}, StringSplitOptions.RemoveEmptyEntries)
+            Dim pieces = part.Split({"="c}, 2, StringSplitOptions.None)
+            If pieces.Length <> 2 Then
+                Continue For
+            End If
+
+            Dim hours As Decimal
+            If Decimal.TryParse(pieces(1).Trim(), NumberStyles.Number, CultureInfo.InvariantCulture, hours) OrElse
+                Decimal.TryParse(pieces(1).Trim(), NumberStyles.Number, CultureInfo.CurrentCulture, hours) Then
+                Dim name = pieces(0).Trim()
+                If name.Length > 0 Then
+                    result(name) = Math.Max(0D, hours)
+                End If
+            End If
+        Next
+
+        Return result
+    End Function
+
+    Private Function BuildResourceAllocationsString(resourceHours As Dictionary(Of String, Decimal)) As String
+        Return String.Join("; ", resourceHours.
+            Where(Function(item) Not String.IsNullOrWhiteSpace(item.Key) AndAlso item.Value > 0D).
+            Select(Function(item) item.Key.Trim() & "=" & item.Value.ToString("0.##", CultureInfo.InvariantCulture)))
+    End Function
+
+    Private Sub ScheduleSelectionChanged(sender As Object, e As EventArgs)
+        RefreshWorkspaceTabs()
+    End Sub
+
+    Private Sub RefreshWorkspaceTabs()
+        If _isRefreshingWorkspace Then
+            Return
+        End If
+
+        If Not IsHandleCreated OrElse Disposing Then
+            RefreshWorkspaceTabsCore()
+            Return
+        End If
+
+        If _workspaceRefreshQueued Then
+            Return
+        End If
+
+        _workspaceRefreshQueued = True
+        BeginInvoke(New Action(
+            Sub()
+                _workspaceRefreshQueued = False
+                RefreshWorkspaceTabsCore()
+            End Sub))
+    End Sub
+
+    Private Sub RefreshWorkspaceTabsCore()
+        If _isRefreshingWorkspace Then
+            Return
+        End If
+
+        _isRefreshingWorkspace = True
+        Try
+            Dim rangeStart As Date
+            Dim rangeFinish As Date
+            If Not TryGetProjectDateRange(rangeStart, rangeFinish) Then
+                rangeStart = Date.Today
+                rangeFinish = Date.Today
+            End If
+            RefreshResourceAvailabilityCache(rangeStart.AddDays(-5), rangeFinish)
+
+            PrepareGridForRebuild(_taskUsageGrid)
+            PrepareGridForRebuild(_resourceUsageGrid)
+            PrepareGridForRebuild(_capacityGrid)
+            PrepareGridForRebuild(_resourceUtilizationGrid)
+            PrepareGridForRebuild(_employeeCapacityGrid)
+
+            UpdateTaskUsageGrid()
+            UpdateResourceUsageGrid()
+            UpdateCapacityPlanningGrid()
+            UpdateResourceUtilizationGrid()
+            If _employeeCapacityGrid IsNot Nothing Then
+                _employeeCapacityGrid.Refresh()
+            End If
+            UpdateEmbeddedPlannerPreview()
+        Finally
+            _isRefreshingWorkspace = False
+        End Try
+    End Sub
+
+    Private Sub PrepareGridForRebuild(grid As DataGridView)
+        If grid Is Nothing OrElse grid.IsDisposed Then
+            Return
+        End If
+
+        Try
+            If grid.IsCurrentCellInEditMode Then
+                grid.EndEdit()
+            End If
+        Catch
+        End Try
+
+        Try
+            grid.CancelEdit()
+        Catch
+        End Try
+
+        Try
+            If grid.CurrentCell IsNot Nothing Then
+                grid.CurrentCell = Nothing
+            End If
+        Catch
+        End Try
+
+        Try
+            grid.ClearSelection()
+        Catch
+        End Try
+    End Sub
+
+    Private Sub UpdateEmbeddedPlannerPreview()
+        If _plannerPieCharts.Count = 0 Then
+            Return
+        End If
+
+        Dim taskList = _tasks.ToList()
+        Dim duration = taskList.Sum(Function(task) Math.Max(0D, task.DurationDays))
+        Dim assignedHours = taskList.Sum(Function(task) Math.Max(0D, task.ResourceHours))
+        Dim resourceCount = taskList.
+            SelectMany(Function(task) ResourceAllocationsForPreview(task).Keys).
+            Distinct(StringComparer.OrdinalIgnoreCase).
+            Count()
+
+        For index = 0 To _plannerPieCharts.Count - 1
+            Dim chart = _plannerPieCharts(index)
+            If chart Is Nothing Then
+                Continue For
+            End If
+
+            Dim model = BuildPreviewModel(taskList, chart.PreviewMode, duration, assignedHours)
+            chart.UpdateModel(model)
+
+            If index < _plannerLegendGrids.Count AndAlso _plannerLegendGrids(index) IsNot Nothing Then
+                _plannerLegendGrids(index).DataSource = BuildPlannerLegendRows(model)
+            End If
+        Next
+
+        For Each label In _plannerTaskCountLabels
+            If label IsNot Nothing Then
+                Dim mode = If(label.Tag Is Nothing, PlannerPreviewMode.TaskDuration, CType(label.Tag, PlannerPreviewMode))
+                label.Text = PreviewPrimaryBadgeText(mode, taskList.Count, assignedHours, resourceCount)
+            End If
+        Next
+
+        For Each label In _plannerDurationLabels
+            If label IsNot Nothing Then
+                Dim mode = If(label.Tag Is Nothing, PlannerPreviewMode.TaskDuration, CType(label.Tag, PlannerPreviewMode))
+                label.Text = PreviewSecondaryBadgeText(mode, duration, assignedHours)
+            End If
+        Next
+    End Sub
+
+    Private Sub PlannerLegendCellFormatting(sender As Object, e As DataGridViewCellFormattingEventArgs)
+        If e.RowIndex < 0 OrElse e.ColumnIndex <> 0 Then
+            Return
+        End If
+
+        Dim color = PlannerPieChartPanel.SliceColor(e.RowIndex)
+        e.CellStyle.BackColor = color
+        e.CellStyle.ForeColor = color
+        e.Value = ""
+        e.FormattingApplied = True
+    End Sub
+
+    Private Sub PlannerLegendToolTipTextNeeded(sender As Object, e As DataGridViewCellToolTipTextNeededEventArgs)
+        Dim legend = TryCast(sender, DataGridView)
+        If e.RowIndex < 0 OrElse legend Is Nothing Then
+            Return
+        End If
+
+        Dim row = TryCast(legend.Rows(e.RowIndex).DataBoundItem, PlannerPreviewRow)
+        If row Is Nothing Then
+            Return
+        End If
+
+        e.ToolTipText = row.ToolTipText
+    End Sub
+
+    Private Function BuildPlannerLegendRows(model As PlannerPreviewModel) As List(Of PlannerPreviewRow)
+        Dim slices = If(model?.Slices, New List(Of PlannerPreviewSlice)())
+        Dim total = slices.Sum(Function(slice) Math.Max(0D, slice.Value))
+
+        Return slices.
+            Select(Function(slice, index)
+                       Dim percentage = If(total > 0D, Math.Round((slice.Value / total) * 100D, 1, MidpointRounding.AwayFromZero), 0D)
+                       Dim valueText = slice.Value.ToString("0.##", CultureInfo.InvariantCulture)
+                       Return New PlannerPreviewRow With {
+                           .ColorName = "",
+                           .ItemName = slice.Label,
+                           .ShareText = percentage.ToString("0.#", CultureInfo.InvariantCulture) & "%",
+                           .ValueText = valueText,
+                           .ToolTipText = slice.Label & " - " & percentage.ToString("0.#", CultureInfo.InvariantCulture) & "% (" & valueText & ")"
+                       }
+                   End Function).
+            ToList()
+    End Function
+
+    Private Sub UpdateResourceUsageGrid()
+        If _resourceUsageGrid Is Nothing Then
+            Return
+        End If
+
+        _isLoadingResourceUsageGrid = True
+        Try
+            _resourceUsageDateColumns.Clear()
+            _resourceUsageGrid.Columns.Clear()
+            _resourceUsageGrid.Rows.Clear()
+
+            _resourceUsageGrid.Columns.Add(New DataGridViewTextBoxColumn With {.HeaderText = "Resource / Task", .Width = 300, .ReadOnly = True, .Frozen = True})
+            _resourceUsageGrid.Columns.Add(New CalendarColumn With {.HeaderText = "Start", .Width = 96, .Frozen = True})
+            _resourceUsageGrid.Columns.Add(New CalendarColumn With {.HeaderText = "Finish", .Width = 96, .Frozen = True})
+
+            Dim projectStart As Date
+            Dim projectFinish As Date
+            If Not TryGetProjectDateRange(projectStart, projectFinish) Then
+                Return
+            End If
+
+            AddDateColumns(_resourceUsageGrid, _resourceUsageDateColumns, projectStart, projectFinish)
+
+            Dim resources = AllAssignedResources()
+            If resources.Count = 0 Then
+                _resourceUsageGrid.Rows.Add("No resources assigned", "", "")
+                Return
+            End If
+
+            For Each resourceName In resources
+                Dim headerRowIndex = _resourceUsageGrid.Rows.Add()
+                Dim headerRow = _resourceUsageGrid.Rows(headerRowIndex)
+                headerRow.Tag = New ResourceHeaderRowTag(resourceName)
+                headerRow.ReadOnly = True
+                headerRow.DefaultCellStyle.BackColor = Color.FromArgb(235, 243, 252)
+                headerRow.DefaultCellStyle.Font = New Font("Segoe UI Semibold", 9.0F)
+                headerRow.Cells(0).Value = resourceName
+                headerRow.Cells(1).Value = ""
+                headerRow.Cells(2).Value = ""
+                For Each dateColumn In _resourceUsageDateColumns
+                    Dim workDate = dateColumn.Value
+                    Dim pendingHours = PendingHoursForResource(resourceName, workDate)
+                    Dim cell = headerRow.Cells(dateColumn.Key)
+                    If IsBlockedScheduleDate(workDate) Then
+                        StyleBlockedCell(cell)
+                    Else
+                        cell.Value = pendingHours
+                        StylePendingHoursCell(cell, pendingHours)
+                    End If
+                Next
+
+                For Each task In _tasks.Where(Function(item) ResourceNamesFromAssignment(item.AssignedTo).Contains(resourceName, StringComparer.OrdinalIgnoreCase)).
+                    OrderBy(Function(item) item.StartDate).
+                    ThenBy(Function(item) item.TaskId)
+                    Dim rowIndex = _resourceUsageGrid.Rows.Add()
+                    Dim row = _resourceUsageGrid.Rows(rowIndex)
+                    row.Tag = New ResourceTaskRowTag(resourceName, task.TaskId)
+                    row.Cells(0).Value = "   " & task.TaskId.ToString(CultureInfo.InvariantCulture) & ". " & task.TaskName
+                    row.Cells(0).ReadOnly = True
+                    row.Cells(1).Value = task.StartDate.Date
+                    row.Cells(2).Value = task.FinishDate.Date
+
+                    For Each dateColumn In _resourceUsageDateColumns
+                        Dim workDate = dateColumn.Value
+                        Dim cell = row.Cells(dateColumn.Key)
+                        If IsBlockedScheduleDate(workDate) Then
+                            StyleBlockedCell(cell)
+                        Else
+                            Dim hours = TaskHoursOnDate(task, resourceName, workDate)
+                            cell.Value = hours
+                            cell.ReadOnly = False
+                            Dim explicitEntry = _explicitTaskUsageEdits.Contains(TaskUsageEditKey(task.TaskId, resourceName, workDate))
+                            Dim availableHours = AvailableHoursForResource(resourceName, workDate, task.TaskId)
+                            StyleResourceTaskCell(cell, resourceName, workDate, explicitEntry, availableHours)
+                        End If
+                    Next
+                Next
+            Next
+        Finally
+            _isLoadingResourceUsageGrid = False
+        End Try
+    End Sub
+
+    Private Sub UpdateCapacityPlanningGrid()
+        If _capacityGrid Is Nothing Then
+            Return
+        End If
+
+        _isLoadingCapacityGrid = True
+        Try
+            _capacityDateColumns.Clear()
+            _capacityGrid.Columns.Clear()
+            _capacityGrid.Rows.Clear()
+
+            _capacityGrid.Columns.Add(New DataGridViewTextBoxColumn With {.HeaderText = "Resource / Task", .Width = 320, .ReadOnly = True, .Frozen = True})
+
+            Dim projectStart As Date
+            Dim projectFinish As Date
+            If Not TryGetProjectDateRange(projectStart, projectFinish) Then
+                projectStart = Date.Today
+                projectFinish = Date.Today
+            End If
+
+            AddDateColumns(_capacityGrid, _capacityDateColumns, projectStart.AddDays(-5), projectFinish)
+
+            Dim resources = AllKnownEmployees()
+            If resources.Count = 0 Then
+                _capacityGrid.Rows.Add("No employees loaded")
+                Return
+            End If
+
+            For Each resourceName In resources
+                Dim availableRowIndex = _capacityGrid.Rows.Add()
+                Dim availableRow = _capacityGrid.Rows(availableRowIndex)
+                availableRow.Tag = New CapacityAvailableRowTag(resourceName)
+                availableRow.ReadOnly = True
+                availableRow.Cells(0).Value = resourceName & " - Available"
+                availableRow.DefaultCellStyle.BackColor = Color.FromArgb(245, 248, 252)
+                availableRow.DefaultCellStyle.ForeColor = Color.FromArgb(37, 47, 63)
+                availableRow.DefaultCellStyle.Font = New Font("Segoe UI", 9.0F, FontStyle.Italic)
+                For Each dateColumn In _capacityDateColumns
+                    Dim workDate = dateColumn.Value
+                    Dim cell = availableRow.Cells(dateColumn.Key)
+                    If IsBlockedScheduleDate(workDate) Then
+                        StyleBlockedCell(cell)
+                    Else
+                        Dim availableHours = AvailableHoursForResource(resourceName, workDate)
+                        cell.Value = availableHours
+                        cell.Style.BackColor = If(availableHours <= 0D, Color.FromArgb(255, 238, 200), Color.FromArgb(209, 242, 224))
+                        cell.Style.ForeColor = If(availableHours <= 0D, Color.FromArgb(120, 70, 0), Color.FromArgb(22, 101, 52))
+                    End If
+                    cell.ToolTipText = "Available hours for " & resourceName & " on " & workDate.ToString("dd-MMM-yyyy")
+                Next
+
+                Dim plannedRowIndex = _capacityGrid.Rows.Add()
+                Dim plannedRow = _capacityGrid.Rows(plannedRowIndex)
+                plannedRow.Tag = New CapacityPlannedRowTag(resourceName)
+                plannedRow.ReadOnly = True
+                plannedRow.Cells(0).Value = resourceName & " - Planned"
+                For Each dateColumn In _capacityDateColumns
+                    Dim workDate = dateColumn.Value
+                    Dim cell = plannedRow.Cells(dateColumn.Key)
+                    If IsBlockedScheduleDate(workDate) Then
+                        StyleBlockedCell(cell)
+                    Else
+                        Dim plannedHours = _tasks.Sum(Function(task) TaskHoursOnDate(task, resourceName, workDate))
+                        cell.Value = plannedHours
+                        StyleUsageSummaryCell(cell, plannedHours)
+                    End If
+                Next
+
+                For Each task In _tasks.Where(Function(item) ResourceNamesFromAssignment(item.AssignedTo).Contains(resourceName, StringComparer.OrdinalIgnoreCase)).
+                    OrderBy(Function(item) item.StartDate).
+                    ThenBy(Function(item) item.TaskId)
+                    Dim rowIndex = _capacityGrid.Rows.Add()
+                    Dim row = _capacityGrid.Rows(rowIndex)
+                    row.Tag = New ResourceTaskRowTag(resourceName, task.TaskId)
+                    row.ReadOnly = True
+                    row.Cells(0).Value = "   " & task.TaskId.ToString(CultureInfo.InvariantCulture) & ". " & task.TaskName
+
+                    For Each dateColumn In _capacityDateColumns
+                        Dim workDate = dateColumn.Value
+                        Dim cell = row.Cells(dateColumn.Key)
+                        If IsBlockedScheduleDate(workDate) Then
+                            StyleBlockedCell(cell)
+                        Else
+                            cell.Value = TaskHoursOnDate(task, resourceName, workDate)
+                            StyleCapacityTaskCell(cell, resourceName, workDate)
+                        End If
+                    Next
+                Next
+            Next
+        Finally
+            _isLoadingCapacityGrid = False
+        End Try
+    End Sub
+
+    Private Sub UpdateResourceUtilizationGrid()
+        If _resourceUtilizationGrid Is Nothing Then
+            Return
+        End If
+
+        _isLoadingResourceUtilizationGrid = True
+        Try
+            _resourceUtilizationDateColumns.Clear()
+            _resourceUtilizationGrid.Columns.Clear()
+            _resourceUtilizationGrid.Rows.Clear()
+
+            _resourceUtilizationGrid.Columns.Add(New DataGridViewTextBoxColumn With {.HeaderText = "Resource", .Width = 240, .ReadOnly = True, .Frozen = True})
+
+            Dim projectStart As Date
+            Dim projectFinish As Date
+            If Not TryGetProjectDateRange(projectStart, projectFinish) Then
+                projectStart = Date.Today
+                projectFinish = Date.Today
+            End If
+
+            AddDateColumns(_resourceUtilizationGrid, _resourceUtilizationDateColumns, projectStart.AddDays(-5), projectFinish)
+
+            For Each resourceName In AllKnownEmployees()
+                Dim rowIndex = _resourceUtilizationGrid.Rows.Add()
+                Dim row = _resourceUtilizationGrid.Rows(rowIndex)
+                row.Cells(0).Value = resourceName
+                row.Cells(0).ReadOnly = True
+
+                For Each dateColumn In _resourceUtilizationDateColumns
+                    Dim workDate = dateColumn.Value
+                    Dim cell = row.Cells(dateColumn.Key)
+                    If IsBlockedScheduleDate(workDate) Then
+                        StyleBlockedCell(cell)
+                    Else
+                        Dim cellKey = ResourceUtilizationCellKey(resourceName, workDate)
+                        Dim value = ResourceBaselineHours(resourceName, workDate)
+                        If _resourceUtilizationOverrides.ContainsKey(cellKey) Then
+                            value = _resourceUtilizationOverrides(cellKey)
+                        End If
+
+                        cell.Value = value
+                        cell.ReadOnly = False
+                        StyleResourceUtilizationCell(cell, value)
+
+                        If _resourceUtilizationHighlights.ContainsKey(cellKey) Then
+                            ApplyResourceUtilizationColor(cell, _resourceUtilizationHighlights(cellKey))
+                        End If
+                    End If
+                Next
+            Next
+        Finally
+            _isLoadingResourceUtilizationGrid = False
+        End Try
+    End Sub
+
+    Private Sub AddDateColumns(grid As DataGridView, dateColumns As Dictionary(Of Integer, Date), startDate As Date, finishDate As Date)
+        Dim currentDate = startDate.Date
+        While currentDate <= finishDate.Date
+            Dim column As New DataGridViewTextBoxColumn With {
+                .HeaderText = currentDate.ToString("dd-MMM"),
+                .Width = 88,
+                .DefaultCellStyle = New DataGridViewCellStyle With {.Format = "0.##"}
+            }
+            Dim columnIndex = grid.Columns.Add(column)
+            dateColumns(columnIndex) = currentDate
+            currentDate = currentDate.AddDays(1)
+        End While
+    End Sub
+
+    Private Sub StyleTaskViewCell(cell As DataGridViewCell, workDate As Date, task As ScheduleTask)
+        If IsBlockedScheduleDate(workDate) Then
+            StyleBlockedCell(cell)
+            Return
+        End If
+
+        Dim hours = DecimalCellValue(cell.Value)
+        If workDate >= task.StartDate.Date AndAlso workDate <= task.FinishDate.Date Then
+            cell.Style.BackColor = If(hours > 0D, Color.FromArgb(224, 245, 232), Color.FromArgb(244, 248, 252))
+        Else
+            cell.Style.BackColor = If(hours > 0D, Color.FromArgb(255, 244, 214), Color.White)
+        End If
+        cell.Style.ForeColor = Color.FromArgb(34, 94, 74)
+        cell.ToolTipText = "Task hours on " & workDate.ToString("dd-MMM-yyyy")
+    End Sub
+
+    Private Sub StyleUsageSummaryCell(cell As DataGridViewCell, hours As Decimal, Optional maximumHours As Decimal = 8D)
+        maximumHours = Math.Max(0D, maximumHours)
+        If hours > maximumHours Then
+            cell.Style.BackColor = Color.FromArgb(255, 210, 210)
+            cell.Style.ForeColor = Color.Firebrick
+            cell.Style.Font = New Font("Segoe UI", 9.0F, FontStyle.Regular)
+        ElseIf hours > 0D Then
+            cell.Style.BackColor = Color.FromArgb(209, 242, 224)
+            cell.Style.ForeColor = Color.FromArgb(22, 101, 52)
+            cell.Style.Font = New Font("Segoe UI", 9.0F, FontStyle.Regular)
+        Else
+            cell.Style.BackColor = Color.FromArgb(245, 248, 252)
+            cell.Style.ForeColor = Color.FromArgb(75, 85, 99)
+            cell.Style.Font = New Font("Segoe UI", 9.0F, FontStyle.Regular)
+        End If
+        cell.ToolTipText = "Daily task capacity: " & maximumHours.ToString("0.##", CultureInfo.InvariantCulture) & " hrs"
+    End Sub
+
+    Private Sub StylePendingHoursCell(cell As DataGridViewCell, pendingHours As Decimal)
+        If pendingHours < 0D Then
+            cell.Style.BackColor = Color.FromArgb(255, 210, 210)
+            cell.Style.ForeColor = Color.Firebrick
+        ElseIf pendingHours = 0D Then
+            cell.Style.BackColor = Color.FromArgb(255, 238, 200)
+            cell.Style.ForeColor = Color.FromArgb(120, 70, 0)
+        Else
+            cell.Style.BackColor = Color.FromArgb(209, 242, 224)
+            cell.Style.ForeColor = Color.FromArgb(22, 101, 52)
+        End If
+        cell.Style.Font = New Font("Segoe UI", 9.0F, FontStyle.Regular)
+    End Sub
+
+    Private Sub StyleBlockedCell(cell As DataGridViewCell)
+        cell.Value = ""
+        cell.ReadOnly = True
+        cell.Style.BackColor = Color.FromArgb(238, 240, 244)
+        cell.Style.ForeColor = Color.DimGray
+        cell.Style.Font = New Font("Segoe UI", 9.0F, FontStyle.Italic)
+        cell.ToolTipText = "Weekend Plan is disabled for this date."
+    End Sub
+
+    Private Sub StylePlaceholderCell(cell As DataGridViewCell, availableHours As Decimal, resourceName As String, workDate As Date)
+        cell.Value = ""
+        cell.Style.BackColor = Color.FromArgb(247, 250, 252)
+        cell.Style.ForeColor = Color.FromArgb(156, 163, 175)
+        cell.Style.Font = New Font("Segoe UI", 9.0F, FontStyle.Italic)
+        cell.ToolTipText = resourceName & " available hours on " & workDate.ToString("dd-MMM-yyyy") & ": " & availableHours.ToString("0.##", CultureInfo.InvariantCulture)
+    End Sub
+
+    Private Sub StyleResourceTaskCell(cell As DataGridViewCell, resourceName As String, workDate As Date, explicitEntry As Boolean, availableHours As Decimal)
+        If IsBlockedScheduleDate(workDate) Then
+            StyleBlockedCell(cell)
+            Return
+        End If
+
+        Dim hours = DecimalCellValue(cell.Value)
+        If hours > 8D Then
+            cell.Style.BackColor = Color.FromArgb(255, 210, 210)
+            cell.Style.ForeColor = Color.Firebrick
+            cell.Style.Font = New Font("Segoe UI", 9.0F, FontStyle.Regular)
+        ElseIf explicitEntry Then
+            cell.Style.BackColor = Color.FromArgb(224, 245, 232)
+            cell.Style.ForeColor = Color.FromArgb(34, 94, 74)
+            cell.Style.Font = New Font("Segoe UI", 9.0F, FontStyle.Regular)
+        ElseIf hours > 0D Then
+            cell.Style.BackColor = Color.FromArgb(224, 245, 232)
+            cell.Style.ForeColor = Color.FromArgb(34, 94, 74)
+            cell.Style.Font = New Font("Segoe UI", 9.0F, FontStyle.Regular)
+        Else
+            StylePlaceholderCell(cell, availableHours, resourceName, workDate)
+            Return
+        End If
+        cell.ToolTipText = resourceName & " on " & workDate.ToString("dd-MMM-yyyy")
+    End Sub
+
+    Private Sub StyleCapacityTaskCell(cell As DataGridViewCell, resourceName As String, workDate As Date)
+        If IsBlockedScheduleDate(workDate) Then
+            StyleBlockedCell(cell)
+            Return
+        End If
+
+        Dim hours = DecimalCellValue(cell.Value)
+        Dim remaining = AvailableHoursForResource(resourceName, workDate)
+        If hours > 8D Then
+            cell.Style.BackColor = Color.FromArgb(255, 210, 210)
+            cell.Style.ForeColor = Color.Firebrick
+        ElseIf hours > 0D Then
+            cell.Style.BackColor = Color.FromArgb(224, 245, 232)
+            cell.Style.ForeColor = Color.FromArgb(34, 94, 74)
+        Else
+            cell.Style.BackColor = Color.White
+            cell.Style.ForeColor = Color.FromArgb(75, 85, 99)
+        End If
+        cell.ToolTipText = resourceName & " planned hours; remaining " & remaining.ToString("0.##", CultureInfo.InvariantCulture) & " hrs"
+    End Sub
+
+    Private Sub StyleResourceUtilizationCell(cell As DataGridViewCell, hours As Decimal)
+        If hours > 8D Then
+            cell.Style.BackColor = Color.FromArgb(255, 210, 210)
+            cell.Style.ForeColor = Color.Firebrick
+        ElseIf hours >= 0D Then
+            cell.Style.BackColor = Color.FromArgb(209, 242, 224)
+            cell.Style.ForeColor = Color.FromArgb(22, 101, 52)
+        Else
+            cell.Style.BackColor = Color.White
+            cell.Style.ForeColor = Color.FromArgb(75, 85, 99)
+        End If
+        cell.Style.Font = New Font("Segoe UI", 9.0F, FontStyle.Regular)
+    End Sub
+
+    Private Sub ApplyResourceUtilizationColor(cell As DataGridViewCell, fillColor As Color)
+        cell.Style.BackColor = fillColor
+        cell.Style.ForeColor = If(fillColor.GetBrightness() < 0.55F, Color.White, Color.FromArgb(24, 31, 42))
+        cell.Style.SelectionBackColor = fillColor
+        cell.Style.SelectionForeColor = cell.Style.ForeColor
+    End Sub
+
+    Private Function TryGetProjectDateRange(ByRef startDate As Date, ByRef finishDate As Date) As Boolean
+        If _tasks.Count = 0 Then
+            startDate = Date.Today
+            finishDate = Date.Today
+            Return False
+        End If
+
+        startDate = _tasks.Min(Function(task) task.StartDate).Date
+        finishDate = _tasks.Max(Function(task) If(task.FinishDate < task.StartDate, task.StartDate, task.FinishDate)).Date
+        If finishDate < startDate Then
+            finishDate = startDate
+        End If
+        Return True
+    End Function
+
+    Private Sub CalendarGridCellParsing(sender As Object, e As DataGridViewCellParsingEventArgs)
+        If e.RowIndex < 0 OrElse e.ColumnIndex < 0 Then
+            Return
+        End If
+
+        Dim grid = TryCast(sender, DataGridView)
+        If grid Is _taskUsageGrid OrElse grid Is _resourceUsageGrid Then
+            If e.ColumnIndex = 1 OrElse e.ColumnIndex = 2 Then
+                Dim parsedDate As Date
+                If TryParseGridDate(Convert.ToString(e.Value, CultureInfo.CurrentCulture), parsedDate) Then
+                    e.Value = parsedDate.Date
+                    e.ParsingApplied = True
+                End If
+                Return
+            End If
+        End If
+
+        Dim parsedDecimal As Decimal
+        If Decimal.TryParse(Convert.ToString(e.Value, CultureInfo.CurrentCulture), NumberStyles.Number, CultureInfo.CurrentCulture, parsedDecimal) OrElse
+            Decimal.TryParse(Convert.ToString(e.Value, CultureInfo.InvariantCulture), NumberStyles.Number, CultureInfo.InvariantCulture, parsedDecimal) Then
+            e.Value = Math.Max(0D, parsedDecimal)
+            e.ParsingApplied = True
+        End If
+    End Sub
+
+    Private Sub TaskViewGridCellEndEdit(sender As Object, e As DataGridViewCellEventArgs)
+        If _isLoadingTaskViewGrid OrElse e.RowIndex < 0 OrElse e.ColumnIndex < 0 Then
+            Return
+        End If
+
+        Dim row = _taskUsageGrid.Rows(e.RowIndex)
+        Dim task = TaskFromWorkspaceRowTag(row.Tag)
+        If task Is Nothing Then
+            Return
+        End If
+
+        If e.ColumnIndex = 1 OrElse e.ColumnIndex = 2 Then
+            Dim editedDate As Date
+            If Not TryGetEditedDate(row.Cells(e.ColumnIndex).Value, editedDate) Then
+                RefreshWorkspaceTabs()
+                SetStatus("Please pick a valid date")
+                Return
+            End If
+
+            If e.ColumnIndex = 1 Then
+                task.StartDate = editedDate
+                NormalizeGridEdit(task, NameOf(ScheduleTask.StartDate))
+            Else
+                task.FinishDate = editedDate
+                NormalizeGridEdit(task, NameOf(ScheduleTask.FinishDate))
+            End If
+
+            RecalculateAndRefresh("Task dates updated")
+            Return
+        End If
+
+        If Not _taskViewDateColumns.ContainsKey(e.ColumnIndex) Then
+            Return
+        End If
+
+        Dim workDate = _taskViewDateColumns(e.ColumnIndex)
+        Dim requestedHours = Math.Max(0D, DecimalCellValue(row.Cells(e.ColumnIndex).Value))
+
+        Dim resourceTag = TryCast(row.Tag, ResourceTaskRowTag)
+        If resourceTag IsNot Nothing Then
+            _explicitTaskUsageEdits.Add(TaskUsageEditKey(task.TaskId, resourceTag.ResourceName, workDate))
+            SetTaskResourceHoursOnDate(task, resourceTag.ResourceName, workDate, requestedHours)
+            WarnIfResourcesExceedDailyCapacity(workDate, {resourceTag.ResourceName})
+            RecalculateAndRefresh("Task usage updated")
+            Return
+        End If
+
+        SetTaskTotalHoursOnDate(task, workDate, requestedHours)
+        WarnIfResourcesExceedDailyCapacity(workDate, ResourceNamesFromAssignment(task.AssignedTo))
+        RecalculateAndRefresh("Task usage updated")
+    End Sub
+
+    Private Sub ResourceUsageGridCellEndEdit(sender As Object, e As DataGridViewCellEventArgs)
+        If _isLoadingResourceUsageGrid OrElse e.RowIndex < 0 OrElse e.ColumnIndex < 0 Then
+            Return
+        End If
+
+        Dim row = _resourceUsageGrid.Rows(e.RowIndex)
+        Dim tag = TryCast(row.Tag, ResourceTaskRowTag)
+        If tag Is Nothing Then
+            Return
+        End If
+
+        Dim task = _tasks.FirstOrDefault(Function(item) item.TaskId = tag.TaskId)
+        If task Is Nothing Then
+            Return
+        End If
+
+        If e.ColumnIndex = 1 OrElse e.ColumnIndex = 2 Then
+            Dim editedDate As Date
+            If Not TryGetEditedDate(row.Cells(e.ColumnIndex).Value, editedDate) Then
+                RefreshWorkspaceTabs()
+                SetStatus("Please pick a valid date")
+                Return
+            End If
+
+            If e.ColumnIndex = 1 Then
+                task.StartDate = editedDate
+                NormalizeGridEdit(task, NameOf(ScheduleTask.StartDate))
+            Else
+                task.FinishDate = editedDate
+                NormalizeGridEdit(task, NameOf(ScheduleTask.FinishDate))
+            End If
+
+            RecalculateAndRefresh("Resource usage dates updated")
+            Return
+        End If
+
+        If Not _resourceUsageDateColumns.ContainsKey(e.ColumnIndex) Then
+            Return
+        End If
+
+        Dim workDate = _resourceUsageDateColumns(e.ColumnIndex)
+        Dim requestedHours = Math.Max(0D, DecimalCellValue(row.Cells(e.ColumnIndex).Value))
+        _explicitTaskUsageEdits.Add(TaskUsageEditKey(task.TaskId, tag.ResourceName, workDate))
+        SetTaskResourceHoursOnDate(task, tag.ResourceName, workDate, requestedHours)
+        WarnIfResourcesExceedDailyCapacity(workDate, {tag.ResourceName})
+        RecalculateAndRefresh("Resource usage updated")
+    End Sub
+
+    Private Sub WarnIfResourcesExceedDailyCapacity(workDate As Date, resourceNames As IEnumerable(Of String))
+        If resourceNames Is Nothing Then
+            Return
+        End If
+
+        Dim warnings As New List(Of String)()
+        For Each resourceName In resourceNames.
+            Where(Function(name) Not String.IsNullOrWhiteSpace(name)).
+            Select(Function(name) name.Trim()).
+            Distinct(StringComparer.OrdinalIgnoreCase)
+
+            Dim baseline = ResourceBaselineHours(resourceName, workDate)
+            Dim planned = PlannedHoursForResource(resourceName, workDate)
+            Dim pending = baseline - planned
+
+            If planned > baseline Then
+                warnings.Add(resourceName & ": planned " &
+                    planned.ToString("0.##", CultureInfo.InvariantCulture) & " hrs, available " &
+                    baseline.ToString("0.##", CultureInfo.InvariantCulture) & " hrs, pending " &
+                    pending.ToString("0.##", CultureInfo.InvariantCulture) & " hrs")
+            End If
+        Next
+
+        If warnings.Count = 0 Then
+            Return
+        End If
+
+        Dim message = "This user is exceeding 8 hours or the available daily capacity." &
+            Environment.NewLine & Environment.NewLine &
+            String.Join(Environment.NewLine, warnings)
+
+        MessageBox.Show(Me, message, "Hours Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+    End Sub
+
+    Private Sub ResourceUtilizationGridCellParsing(sender As Object, e As DataGridViewCellParsingEventArgs)
+        If _isLoadingResourceUtilizationGrid OrElse e.RowIndex < 0 OrElse e.ColumnIndex <= 0 Then
+            Return
+        End If
+
+        Dim parsedDecimal As Decimal
+        If Decimal.TryParse(Convert.ToString(e.Value, CultureInfo.CurrentCulture), NumberStyles.Number, CultureInfo.CurrentCulture, parsedDecimal) OrElse
+            Decimal.TryParse(Convert.ToString(e.Value, CultureInfo.InvariantCulture), NumberStyles.Number, CultureInfo.InvariantCulture, parsedDecimal) Then
+            e.Value = Math.Max(0D, parsedDecimal)
+            e.ParsingApplied = True
+        End If
+    End Sub
+
+    Private Sub ResourceUtilizationGridCellEndEdit(sender As Object, e As DataGridViewCellEventArgs)
+        If _isLoadingResourceUtilizationGrid OrElse e.RowIndex < 0 OrElse e.ColumnIndex <= 0 Then
+            Return
+        End If
+
+        If Not _resourceUtilizationDateColumns.ContainsKey(e.ColumnIndex) Then
+            Return
+        End If
+
+        Dim resourceName = Convert.ToString(_resourceUtilizationGrid.Rows(e.RowIndex).Cells(0).Value, CultureInfo.InvariantCulture)
+        If String.IsNullOrWhiteSpace(resourceName) Then
+            Return
+        End If
+
+        Dim workDate = _resourceUtilizationDateColumns(e.ColumnIndex)
+        Dim key = ResourceUtilizationCellKey(resourceName, workDate)
+        _resourceUtilizationOverrides(key) = Math.Max(0D, DecimalCellValue(_resourceUtilizationGrid.Rows(e.RowIndex).Cells(e.ColumnIndex).Value))
+        UpdateResourceUtilizationGrid()
+    End Sub
+
+    Private Sub AddEmployeeCapacityEntry(sender As Object, e As EventArgs)
+        Dim entry As New EmployeeCapacityEntry With {
+            .EmployeeName = DefaultEmployeeForTask(Nothing),
+            .CapacityType = "Leave",
+            .StartDate = Date.Today,
+            .EndDate = Date.Today,
+            .Hours = 8D,
+            .Remarks = ""
+        }
+
+        _employeeCapacityEntries.Add(entry)
+        If _employeeCapacityGrid IsNot Nothing AndAlso _employeeCapacityGrid.Rows.Count > 0 Then
+            _employeeCapacityGrid.CurrentCell = _employeeCapacityGrid.Rows(_employeeCapacityGrid.Rows.Count - 1).Cells(0)
+        End If
+
+        RefreshWorkspaceTabs()
+        SetStatus("Employee capacity entry added")
+    End Sub
+
+    Private Sub DeleteEmployeeCapacityEntry(sender As Object, e As EventArgs)
+        If _employeeCapacityGrid Is Nothing OrElse _employeeCapacityGrid.CurrentRow Is Nothing Then
+            Return
+        End If
+
+        Dim entry = TryCast(_employeeCapacityGrid.CurrentRow.DataBoundItem, EmployeeCapacityEntry)
+        If entry Is Nothing Then
+            Return
+        End If
+
+        _employeeCapacityEntries.Remove(entry)
+        RefreshWorkspaceTabs()
+        SetStatus("Employee capacity entry deleted")
+    End Sub
+
+    Private Sub RefreshEmployeeCapacityView(sender As Object, e As EventArgs)
+        RefreshWorkspaceTabs()
+        SetStatus("Employee capacity has been refreshed")
+    End Sub
+
+    Private Sub EmployeeCapacityGridCellParsing(sender As Object, e As DataGridViewCellParsingEventArgs)
+        If e.RowIndex < 0 OrElse e.ColumnIndex < 0 Then
+            Return
+        End If
+
+        If e.ColumnIndex = 2 OrElse e.ColumnIndex = 3 Then
+            Dim parsedDate As Date
+            If TryParseGridDate(Convert.ToString(e.Value, CultureInfo.CurrentCulture), parsedDate) Then
+                e.Value = parsedDate.Date
+                e.ParsingApplied = True
+            End If
+            Return
+        End If
+
+        If e.ColumnIndex = 4 Then
+            Dim parsedDecimal As Decimal
+            If Decimal.TryParse(Convert.ToString(e.Value, CultureInfo.CurrentCulture), NumberStyles.Number, CultureInfo.CurrentCulture, parsedDecimal) OrElse
+                Decimal.TryParse(Convert.ToString(e.Value, CultureInfo.InvariantCulture), NumberStyles.Number, CultureInfo.InvariantCulture, parsedDecimal) Then
+                e.Value = Math.Max(0D, parsedDecimal)
+                e.ParsingApplied = True
+            End If
+        End If
+    End Sub
+
+    Private Sub EmployeeCapacityGridCellEndEdit(sender As Object, e As DataGridViewCellEventArgs)
+        If e.RowIndex < 0 OrElse _employeeCapacityGrid Is Nothing Then
+            Return
+        End If
+
+        Dim entry = TryCast(_employeeCapacityGrid.Rows(e.RowIndex).DataBoundItem, EmployeeCapacityEntry)
+        If entry Is Nothing Then
+            Return
+        End If
+
+        If entry.EndDate < entry.StartDate Then
+            entry.EndDate = entry.StartDate
+        End If
+        entry.Hours = Math.Max(0D, entry.Hours)
+
+        RefreshWorkspaceTabs()
+        SetStatus("Employee capacity updated")
+    End Sub
+
+    Private Sub EmployeeCapacityGridCellFormatting(sender As Object, e As DataGridViewCellFormattingEventArgs)
+        If e.RowIndex < 0 OrElse e.ColumnIndex < 0 Then
+            Return
+        End If
+
+        If e.ColumnIndex = 1 Then
+            Dim typeText = Convert.ToString(e.Value, CultureInfo.InvariantCulture)
+            If typeText.Equals("Leave", StringComparison.OrdinalIgnoreCase) Then
+                e.CellStyle.BackColor = Color.FromArgb(220, 235, 255)
+                e.CellStyle.ForeColor = Color.FromArgb(31, 78, 121)
+            ElseIf typeText.Equals("Training", StringComparison.OrdinalIgnoreCase) Then
+                e.CellStyle.BackColor = Color.FromArgb(255, 246, 196)
+                e.CellStyle.ForeColor = Color.FromArgb(120, 70, 0)
+            ElseIf typeText.Equals("Meeting", StringComparison.OrdinalIgnoreCase) Then
+                e.CellStyle.BackColor = Color.FromArgb(224, 245, 232)
+                e.CellStyle.ForeColor = Color.FromArgb(22, 101, 52)
+            End If
+        ElseIf e.ColumnIndex = 4 Then
+            Dim hours = DecimalCellValue(e.Value)
+            If hours > 8D Then
+                e.CellStyle.BackColor = Color.FromArgb(255, 210, 210)
+                e.CellStyle.ForeColor = Color.Firebrick
+            ElseIf hours > 0D Then
+                e.CellStyle.BackColor = Color.FromArgb(224, 245, 232)
+                e.CellStyle.ForeColor = Color.FromArgb(22, 101, 52)
+            End If
+        End If
+    End Sub
+
+    Private Sub RefreshResourceUtilizationTab(sender As Object, e As EventArgs)
+        _resourceUtilizationOverrides.Clear()
+        _resourceUtilizationHighlights.Clear()
+
+        Dim projectStart As Date
+        Dim projectFinish As Date
+        If Not TryGetProjectDateRange(projectStart, projectFinish) Then
+            projectStart = Date.Today
+            projectFinish = Date.Today
+        End If
+
+        RefreshResourceAvailabilityCache(projectStart.AddDays(-5), projectFinish)
+        UpdateResourceUtilizationGrid()
+        SetStatus("Resource utilization has been refreshed from SQL.")
+    End Sub
+
+    Private Sub ApplyResourceUtilizationHighlight(sender As Object, e As EventArgs)
+        If _resourceUtilizationGrid Is Nothing OrElse _resourceUtilizationGrid.SelectedCells.Count = 0 OrElse _resourceUtilizationColorSelector Is Nothing Then
+            Return
+        End If
+
+        Dim fillColor = SelectedResourceUtilizationColor()
+        For Each cell As DataGridViewCell In _resourceUtilizationGrid.SelectedCells
+            If cell.RowIndex < 0 OrElse cell.ColumnIndex <= 0 OrElse Not _resourceUtilizationDateColumns.ContainsKey(cell.ColumnIndex) Then
+                Continue For
+            End If
+
+            Dim resourceName = Convert.ToString(_resourceUtilizationGrid.Rows(cell.RowIndex).Cells(0).Value, CultureInfo.InvariantCulture)
+            If String.IsNullOrWhiteSpace(resourceName) Then
+                Continue For
+            End If
+
+            _resourceUtilizationHighlights(ResourceUtilizationCellKey(resourceName, _resourceUtilizationDateColumns(cell.ColumnIndex))) = fillColor
+        Next
+
+        UpdateResourceUtilizationGrid()
+    End Sub
+
+    Private Sub ClearResourceUtilizationHighlight(sender As Object, e As EventArgs)
+        If _resourceUtilizationGrid Is Nothing OrElse _resourceUtilizationGrid.SelectedCells.Count = 0 Then
+            Return
+        End If
+
+        For Each cell As DataGridViewCell In _resourceUtilizationGrid.SelectedCells
+            If cell.RowIndex < 0 OrElse cell.ColumnIndex <= 0 OrElse Not _resourceUtilizationDateColumns.ContainsKey(cell.ColumnIndex) Then
+                Continue For
+            End If
+
+            Dim resourceName = Convert.ToString(_resourceUtilizationGrid.Rows(cell.RowIndex).Cells(0).Value, CultureInfo.InvariantCulture)
+            If String.IsNullOrWhiteSpace(resourceName) Then
+                Continue For
+            End If
+
+            _resourceUtilizationHighlights.Remove(ResourceUtilizationCellKey(resourceName, _resourceUtilizationDateColumns(cell.ColumnIndex)))
+        Next
+
+        UpdateResourceUtilizationGrid()
+    End Sub
+
+    Private Function SelectedResourceUtilizationColor() As Color
+        Dim label = Convert.ToString(If(_resourceUtilizationColorSelector.SelectedItem, ""), CultureInfo.InvariantCulture)
+        If label.StartsWith("Dark Blue", StringComparison.OrdinalIgnoreCase) Then
+            Return Color.FromArgb(31, 78, 121)
+        End If
+        If label.StartsWith("Yellow", StringComparison.OrdinalIgnoreCase) Then
+            Return Color.FromArgb(255, 235, 59)
+        End If
+        If label.StartsWith("Green", StringComparison.OrdinalIgnoreCase) Then
+            Return Color.FromArgb(76, 175, 80)
+        End If
+        If label.StartsWith("Orange", StringComparison.OrdinalIgnoreCase) Then
+            Return Color.FromArgb(255, 152, 0)
+        End If
+        If label.StartsWith("Red", StringComparison.OrdinalIgnoreCase) Then
+            Return Color.FromArgb(244, 67, 54)
+        End If
+
+        Return Color.FromArgb(33, 150, 243)
+    End Function
+
+    Private Sub SendResourceUtilizationSnip(sender As Object, e As EventArgs)
+        If _resourceUtilizationGrid Is Nothing Then
+            Return
+        End If
+
+        Dim recipient = InputBox("Enter the mail ID for the resource availability snip.", "Send Availability Snip")
+        If String.IsNullOrWhiteSpace(recipient) Then
+            Return
+        End If
+
+        Dim snipPath = CaptureResourceUtilizationSnip()
+        If String.IsNullOrWhiteSpace(snipPath) Then
+            MessageBox.Show(Me, "The resource availability snip could not be created.", "Snip Failed", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            Return
+        End If
+
+        Try
+            Dim outlook = CreateObject("Outlook.Application")
+            Dim mail = outlook.CreateItem(0)
+            mail.To = recipient.Trim()
+            mail.Subject = "SMA Scheduler - Resource Availability"
+            mail.Body = "Please find the attached resource utilization snip."
+            mail.Attachments.Add(snipPath)
+            mail.Display()
+            SetStatus("Availability snip prepared for email.")
+        Catch ex As Exception
+            Clipboard.Clear()
+            Dim bitmap As New Bitmap(_resourceUtilizationGrid.Width, _resourceUtilizationGrid.Height)
+            _resourceUtilizationGrid.DrawToBitmap(bitmap, New Rectangle(0, 0, bitmap.Width, bitmap.Height))
+            Clipboard.SetImage(bitmap)
+            MessageBox.Show(Me, "Outlook could not be opened. The visible snip has been copied to the clipboard instead." & Environment.NewLine & snipPath, "Snip Ready", MessageBoxButtons.OK, MessageBoxIcon.Information)
+        End Try
+    End Sub
+
+    Private Function CaptureResourceUtilizationSnip() As String
+        Dim safeProject = MakeSafeFileName(_projectName.Text)
+        Dim filePath = Path.Combine(Path.GetTempPath(), safeProject & "-resource-utilization.png")
+        Using bitmap As New Bitmap(_resourceUtilizationGrid.Width, _resourceUtilizationGrid.Height)
+            _resourceUtilizationGrid.DrawToBitmap(bitmap, New Rectangle(0, 0, bitmap.Width, bitmap.Height))
+            bitmap.Save(filePath, System.Drawing.Imaging.ImageFormat.Png)
+        End Using
+        Return filePath
+    End Function
+
+    Private Sub CalendarGridDataError(sender As Object, e As DataGridViewDataErrorEventArgs)
+        e.ThrowException = False
+        SetStatus("Please enter a valid hour value")
+    End Sub
+
+    Private Function TaskFromWorkspaceRowTag(tag As Object) As ScheduleTask
+        Dim taskTag = TryCast(tag, TaskRowTag)
+        If taskTag IsNot Nothing Then
+            Return _tasks.FirstOrDefault(Function(item) item.TaskId = taskTag.TaskId)
+        End If
+
+        Dim resourceTag = TryCast(tag, ResourceTaskRowTag)
+        If resourceTag IsNot Nothing Then
+            Return _tasks.FirstOrDefault(Function(item) item.TaskId = resourceTag.TaskId)
+        End If
+
+        Return Nothing
+    End Function
+
+    Private Function TryGetEditedDate(value As Object, ByRef parsedDate As Date) As Boolean
+        If TypeOf value Is Date Then
+            parsedDate = CType(value, Date).Date
+            Return True
+        End If
+
+        Return TryParseGridDate(Convert.ToString(value, CultureInfo.CurrentCulture), parsedDate)
+    End Function
+
+    Private Function TaskHoursOnDate(task As ScheduleTask, resourceName As String, workDate As Date) As Decimal
+        Dim daily = ParseDailyAllocations(task.DailyResourceAllocations)
+        Dim value As Decimal
+        If daily.TryGetValue(DailyAllocationKey(resourceName, workDate), value) Then
+            Return value
+        End If
+
+        Return DistributedTaskHoursOnDate(task, resourceName, workDate)
+    End Function
+
+    Private Function DistributedTaskHoursOnDate(task As ScheduleTask, resourceName As String, workDate As Date) As Decimal
+        If task Is Nothing OrElse task.ResourceHours <= 0D OrElse workDate < task.StartDate.Date OrElse workDate > task.FinishDate.Date OrElse IsBlockedScheduleDate(workDate) Then
+            Return 0D
+        End If
+
+        Dim assigned = ParseResourceAllocations(task.ResourceAllocations)
+        If assigned.Count = 0 OrElse Not assigned.ContainsKey(resourceName) Then
+            Return 0D
+        End If
+
+        Dim workingDates = WorkingDatesForTask(task.StartDate.Date, task.FinishDate.Date)
+        If workingDates.Count = 0 OrElse Not workingDates.Contains(workDate.Date) Then
+            Return 0D
+        End If
+
+        Dim remaining = Math.Max(0D, assigned(resourceName))
+        For Each allocationDate In workingDates
+            Dim hours = Math.Min(8D, remaining)
+            If allocationDate = workDate.Date Then
+                Return Math.Max(0D, Math.Round(hours, 2, MidpointRounding.AwayFromZero))
+            End If
+            remaining -= hours
+            If remaining <= 0D Then
+                Exit For
+            End If
+        Next
+
+        Return 0D
+    End Function
+
+    Private Function TaskTotalHoursOnDate(task As ScheduleTask, workDate As Date) As Decimal
+        If task Is Nothing Then
+            Return 0D
+        End If
+
+        Return ResourceNamesFromAssignment(task.AssignedTo).
+            Sum(Function(resourceName) TaskHoursOnDate(task, resourceName, workDate))
+    End Function
+
+    Private Function AllAssignedResources() As List(Of String)
+        Return _tasks.
+            SelectMany(Function(task) ResourceNamesFromAssignment(task.AssignedTo)).
+            Distinct(StringComparer.OrdinalIgnoreCase).
+            OrderBy(Function(name) name, StringComparer.OrdinalIgnoreCase).
+            ToList()
+    End Function
+
+    Private Function AllKnownEmployees() As List(Of String)
+        Dim employees = _employees.
+            Select(Function(name) If(name, "").Trim()).
+            Where(Function(name) name.Length > 0).
+            Distinct(StringComparer.OrdinalIgnoreCase).
+            OrderBy(Function(name) name, StringComparer.OrdinalIgnoreCase).
+            ToList()
+
+        If employees.Count = 0 Then
+            employees = AllAssignedResources()
+        End If
+
+        Return employees
+    End Function
+
+    Private Sub RefreshResourceAvailabilityCache(startDate As Date, finishDate As Date)
+        _resourceAvailabilityCache.Clear()
+
+        If _sqlRepository Is Nothing Then
+            Return
+        End If
+
+        Try
+            Dim availability = _sqlRepository.LoadResourceAvailability(startDate, finishDate)
+            For Each resourceEntry In availability
+                _resourceAvailabilityCache(resourceEntry.Key) = resourceEntry.Value
+            Next
+        Catch ex As Exception
+            SetStatus("Resource availability SQL data could not be loaded. Default daily hours are being shown.")
+        End Try
+    End Sub
+
+    Private Function ResourceBaselineHours(resourceName As String, workDate As Date) As Decimal
+        If String.IsNullOrWhiteSpace(resourceName) OrElse IsBlockedScheduleDate(workDate) Then
+            Return 0D
+        End If
+
+        Dim byDate As Dictionary(Of Date, Decimal) = Nothing
+        Dim baseline As Decimal
+        If _resourceAvailabilityCache.TryGetValue(resourceName.Trim(), byDate) AndAlso byDate IsNot Nothing AndAlso byDate.TryGetValue(workDate.Date, baseline) Then
+            Return Math.Max(0D, baseline - EmployeeCapacityHours(resourceName, workDate))
+        End If
+
+        If workDate.DayOfWeek = DayOfWeek.Saturday OrElse workDate.DayOfWeek = DayOfWeek.Sunday Then
+            Return 0D
+        End If
+
+        Return Math.Max(0D, 8D - EmployeeCapacityHours(resourceName, workDate))
+    End Function
+
+    Private Function EmployeeCapacityHours(resourceName As String, workDate As Date) As Decimal
+        If String.IsNullOrWhiteSpace(resourceName) Then
+            Return 0D
+        End If
+
+        Return _employeeCapacityEntries.
+            Where(Function(entry) entry IsNot Nothing AndAlso
+                String.Equals(entry.EmployeeName, resourceName.Trim(), StringComparison.OrdinalIgnoreCase) AndAlso
+                entry.StartDate.Date <= workDate.Date AndAlso
+                entry.EndDate.Date >= workDate.Date).
+            Sum(Function(entry) Math.Max(0D, entry.Hours))
+    End Function
+
+    Private Function PlannedHoursForResource(resourceName As String, workDate As Date, Optional ignoredTaskId As Integer = -1) As Decimal
+        If String.IsNullOrWhiteSpace(resourceName) Then
+            Return 0D
+        End If
+
+        Return _tasks.
+            Where(Function(task) task.TaskId <> ignoredTaskId AndAlso ResourceNamesFromAssignment(task.AssignedTo).Contains(resourceName, StringComparer.OrdinalIgnoreCase)).
+            Sum(Function(task) TaskHoursOnDate(task, resourceName, workDate))
+    End Function
+
+    Private Function AvailableHoursForResource(resourceName As String, workDate As Date, Optional ignoredTaskId As Integer = -1) As Decimal
+        Dim baseline = ResourceBaselineHours(resourceName, workDate)
+        Dim planned = PlannedHoursForResource(resourceName, workDate, ignoredTaskId)
+        Return Math.Max(0D, baseline - planned)
+    End Function
+
+    Private Function PendingHoursForResource(resourceName As String, workDate As Date) As Decimal
+        Return ResourceBaselineHours(resourceName, workDate) - PlannedHoursForResource(resourceName, workDate)
+    End Function
+
+    Private Shared Function TaskUsageEditKey(taskId As Integer, resourceName As String, workDate As Date) As String
+        Return taskId.ToString(CultureInfo.InvariantCulture) & "|" & resourceName.Trim().ToUpperInvariant() & "|" & workDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+    End Function
+
+    Private Shared Function ResourceUtilizationCellKey(resourceName As String, workDate As Date) As String
+        Return resourceName.Trim().ToUpperInvariant() & "|" & workDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+    End Function
+
+    Private Sub SetTaskTotalHoursOnDate(task As ScheduleTask, workDate As Date, totalHours As Decimal)
+        If task Is Nothing OrElse IsBlockedScheduleDate(workDate) Then
+            Return
+        End If
+
+        Dim resourceNames = ResourceNamesFromAssignment(task.AssignedTo)
+        If resourceNames.Count = 0 Then
+            Return
+        End If
+
+        Dim daily = ParseDailyAllocations(task.DailyResourceAllocations)
+        Dim existing = resourceNames.ToDictionary(
+            Function(name) name,
+            Function(name)
+                Dim value As Decimal = 0D
+                daily.TryGetValue(DailyAllocationKey(name, workDate), value)
+                Return value
+            End Function,
+            StringComparer.OrdinalIgnoreCase)
+
+        For Each resourceName In resourceNames
+            daily.Remove(DailyAllocationKey(resourceName, workDate))
+        Next
+
+        totalHours = Math.Max(0D, totalHours)
+        If totalHours > 0D Then
+            Dim existingTotal = existing.Values.Sum()
+            Dim remaining = totalHours
+            For index = 0 To resourceNames.Count - 1
+                Dim resourceName = resourceNames(index)
+                Dim ratio = If(existingTotal > 0D, existing(resourceName) / existingTotal, 1D / resourceNames.Count)
+                Dim share = If(index = resourceNames.Count - 1, remaining, Math.Round(totalHours * CDec(ratio), 2, MidpointRounding.AwayFromZero))
+                share = Math.Max(0D, share)
+                remaining -= share
+                If share > 0D Then
+                    daily(DailyAllocationKey(resourceName, workDate)) = share
+                End If
+            Next
+        End If
+
+        ApplyDailyAllocationsToTask(task, daily)
+    End Sub
+
+    Private Sub SetTaskResourceHoursOnDate(task As ScheduleTask, resourceName As String, workDate As Date, hours As Decimal)
+        If task Is Nothing OrElse String.IsNullOrWhiteSpace(resourceName) OrElse IsBlockedScheduleDate(workDate) Then
+            Return
+        End If
+
+        Dim daily = ParseDailyAllocations(task.DailyResourceAllocations)
+        Dim key = DailyAllocationKey(resourceName, workDate)
+        hours = Math.Max(0D, hours)
+        If hours > 0D Then
+            daily(key) = hours
+        Else
+            daily.Remove(key)
+        End If
+
+        ApplyDailyAllocationsToTask(task, daily)
+    End Sub
+
+    Private Sub ApplyDailyAllocationsToTask(task As ScheduleTask, daily As Dictionary(Of String, Decimal))
+        Dim selectedNames = ResourceNamesFromAssignment(task.AssignedTo)
+        If selectedNames.Count = 0 Then
+            _suspendTaskEvents = True
+            Try
+                task.DailyResourceAllocations = ""
+                task.ResourceAllocations = ""
+                task.ResourceHours = 0D
+                task.DurationDays = 0D
+            Finally
+                _suspendTaskEvents = False
+            End Try
+            Return
+        End If
+
+        Dim selectedSet = New HashSet(Of String)(selectedNames, StringComparer.OrdinalIgnoreCase)
+        Dim filteredDaily = daily.
+            Where(Function(item)
+                      Dim resourceName = item.Key.Split({"|"c}, 2, StringSplitOptions.None)(0)
+                      Return selectedSet.Contains(resourceName) AndAlso item.Value > 0D
+                  End Function).
+            ToDictionary(Function(item) item.Key, Function(item) item.Value, StringComparer.OrdinalIgnoreCase)
+
+        Dim totals = selectedNames.ToDictionary(Function(name) name, Function(name) 0D, StringComparer.OrdinalIgnoreCase)
+        For Each item In filteredDaily
+            Dim resourceName = item.Key.Split({"|"c}, 2, StringSplitOptions.None)(0)
+            totals(resourceName) += item.Value
+        Next
+
+        _suspendTaskEvents = True
+        Try
+            task.ResourceAllocations = BuildResourceAllocationsString(totals)
+            task.ResourceHours = totals.Values.Sum()
+            task.DailyResourceAllocations = BuildDailyAllocationsString(filteredDaily)
+            task.DurationDays = DurationFromHours(task.ResourceHours)
+
+            Dim activeDates = filteredDaily.Keys.
+                Select(Function(key) key.Substring(key.LastIndexOf("|"c) + 1)).
+                Select(Function(value) Date.ParseExact(value, "yyyy-MM-dd", CultureInfo.InvariantCulture)).
+                ToList()
+            If activeDates.Count > 0 Then
+                task.StartDate = activeDates.Min()
+                task.FinishDate = activeDates.Max()
+            End If
+        Finally
+            _suspendTaskEvents = False
+        End Try
+    End Sub
+
+    Private Sub CommitWorkspaceGridEdits()
+        Validate()
+        _grid.EndEdit()
+        If _taskUsageGrid IsNot Nothing Then
+            _taskUsageGrid.EndEdit()
+        End If
+        If _resourceUsageGrid IsNot Nothing Then
+            _resourceUsageGrid.EndEdit()
+        End If
+        If _resourceUtilizationGrid IsNot Nothing Then
+            _resourceUtilizationGrid.EndEdit()
+        End If
+        If _employeeCapacityGrid IsNot Nothing Then
+            _employeeCapacityGrid.EndEdit()
+        End If
+    End Sub
+
+    Private Function BuildDefaultDailyAllocations(task As ScheduleTask, totals As Dictionary(Of String, Decimal)) As String
+        Dim daily = New Dictionary(Of String, Decimal)(StringComparer.OrdinalIgnoreCase)
+        If task Is Nothing OrElse totals Is Nothing OrElse totals.Count = 0 Then
+            Return ""
+        End If
+
+        Dim resourceOrder = ResourceNamesFromAssignment(task.AssignedTo).
+            Where(Function(name) totals.ContainsKey(name)).
+            ToList()
+        For Each resourceName In totals.Keys
+            If Not resourceOrder.Contains(resourceName, StringComparer.OrdinalIgnoreCase) Then
+                resourceOrder.Add(resourceName)
+            End If
+        Next
+
+        Dim remainingByResource = resourceOrder.ToDictionary(
+            Function(name) name,
+            Function(name) Math.Max(0D, totals(name)),
+            StringComparer.OrdinalIgnoreCase)
+        If remainingByResource.Values.All(Function(hours) hours <= 0D) Then
+            Return ""
+        End If
+
+        Dim startDate = NextWorkingDate(task.StartDate.Date)
+        Dim totalHours = remainingByResource.Values.Sum()
+        Dim dailyTeamCapacity = Math.Max(8D, resourceOrder.Count * 8D)
+        Dim expectedWorkingDays = Math.Max(1, CInt(Math.Ceiling(totalHours / dailyTeamCapacity)))
+        Dim availabilityHorizon = Math.Max(60, (expectedWorkingDays * 4) + 30)
+        RefreshResourceAvailabilityCache(startDate.AddDays(-5), startDate.AddDays(availabilityHorizon))
+
+        Dim currentDate = startDate
+        Dim lastAllocatedDate As Date? = Nothing
+        Dim guard = 0
+        While remainingByResource.Values.Any(Function(hours) hours > 0D) AndAlso guard < 730
+            If Not IsBlockedScheduleDate(currentDate) Then
+                For Each resourceName In resourceOrder
+                    Dim remaining = remainingByResource(resourceName)
+                    If remaining <= 0D Then
+                        Continue For
+                    End If
+
+                    Dim available = Math.Min(8D, AvailableHoursForResource(resourceName, currentDate, task.TaskId))
+                    Dim hours = Math.Min(remaining, available)
+                    hours = Math.Max(0D, Math.Round(hours, 2, MidpointRounding.AwayFromZero))
+                    If hours > 0D Then
+                        daily(DailyAllocationKey(resourceName, currentDate)) = hours
+                        remainingByResource(resourceName) = remaining - hours
+                        lastAllocatedDate = currentDate
+                    End If
+                Next
+            End If
+
+            currentDate = currentDate.AddDays(1)
+            guard += 1
+        End While
+
+        If lastAllocatedDate.HasValue Then
+            Dim previousSuspendState = _suspendTaskEvents
+            _suspendTaskEvents = True
+            Try
+                task.StartDate = startDate
+                task.FinishDate = lastAllocatedDate.Value
+            Finally
+                _suspendTaskEvents = previousSuspendState
+            End Try
+        End If
+
+        If remainingByResource.Values.Any(Function(hours) hours > 0D) Then
+            SetStatus("Some task hours could not be allocated because no SQL capacity was available.")
+        End If
+
+        Return BuildDailyAllocationsString(daily)
+    End Function
+
+    Private Function ParseDailyAllocations(value As String) As Dictionary(Of String, Decimal)
+        Dim result As New Dictionary(Of String, Decimal)(StringComparer.OrdinalIgnoreCase)
+        If String.IsNullOrWhiteSpace(value) Then
+            Return result
+        End If
+
+        For Each part In value.Split({";"c}, StringSplitOptions.RemoveEmptyEntries)
+            Dim pieces = part.Split({"="c}, 2, StringSplitOptions.None)
+            If pieces.Length <> 2 Then
+                Continue For
+            End If
+
+            Dim hours As Decimal
+            If Decimal.TryParse(pieces(1).Trim(), NumberStyles.Number, CultureInfo.InvariantCulture, hours) OrElse
+                Decimal.TryParse(pieces(1).Trim(), NumberStyles.Number, CultureInfo.CurrentCulture, hours) Then
+                Dim key = pieces(0).Trim()
+                If key.Length > 0 Then
+                    result(key) = Math.Max(0D, hours)
+                End If
+            End If
+        Next
+
+        Return result
+    End Function
+
+    Private Function BuildDailyAllocationsString(daily As Dictionary(Of String, Decimal)) As String
+        Return String.Join("; ", daily.
+            Where(Function(item) item.Value > 0D).
+            OrderBy(Function(item) item.Key).
+            Select(Function(item) item.Key & "=" & item.Value.ToString("0.##", CultureInfo.InvariantCulture)))
+    End Function
+
+    Private Function DailyAllocationKey(resourceName As String, workDate As Date) As String
+        Return resourceName.Trim() & "|" & workDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+    End Function
+
+    Private Function DecimalCellValue(value As Object) As Decimal
+        If value Is Nothing Then
+            Return 0D
+        End If
+
+        If TypeOf value Is Decimal OrElse TypeOf value Is Integer OrElse TypeOf value Is Double Then
+            Return Convert.ToDecimal(value, CultureInfo.InvariantCulture)
+        End If
+
+        Dim parsed As Decimal
+        If Decimal.TryParse(Convert.ToString(value, CultureInfo.CurrentCulture), NumberStyles.Number, CultureInfo.CurrentCulture, parsed) OrElse
+            Decimal.TryParse(Convert.ToString(value, CultureInfo.InvariantCulture), NumberStyles.Number, CultureInfo.InvariantCulture, parsed) Then
+            Return parsed
+        End If
+
+        Return 0D
+    End Function
+
+    Private Function SaveEmployeeWorkspaceWorkbook() As Boolean
+        Try
+            Dim resourceMonth = ResourceWorkbookMonth()
+            Dim filePath = CapacityPlanningWorkbookPath(resourceMonth)
+            Directory.CreateDirectory(Path.GetDirectoryName(filePath))
+            Dim fileName = Path.GetFileName(filePath)
+            _xlsxExportService.ExportResourceMonth(filePath, _projectName.Text, _versionNumber.Text, _employees, _tasks, resourceMonth, _includeSaturdays.Checked)
+            SetStatus("Capacity Planning updated: " & fileName)
+            Return True
+        Catch ex As IOException
+            SetStatus("Capacity Planning workbook is open or locked. Close the Excel file and save again.")
+        Catch ex As UnauthorizedAccessException
+            SetStatus("Capacity Planning workbook could not be saved. Check folder permission.")
+        End Try
+        Return False
+    End Function
+
+    Private Function BuildProjectSnapshot() As ProjectSnapshot
+        Return New ProjectSnapshot With {
+            .ProjectName = _projectName.Text,
+            .VersionNumber = _versionNumber.Text,
+            .ProjectSize = If(_projectSizeSelector.SelectedItem Is Nothing, "Small", CStr(_projectSizeSelector.SelectedItem)),
+            .ProjectType = _projectType,
+            .TotalProjectHours = _totalProjectHours.Value,
+            .ResourcesNeeded = AssignedResourceCount(),
+            .Tasks = _tasks.ToList(),
+            .UpdatedOn = Date.Now
+        }
+    End Function
+
+    Private Sub SaveProjectSnapshotToLibrary()
+        Try
+            _projectLibrary.SaveSnapshot(BuildProjectSnapshot())
+        Catch ex As IOException
+            SetStatus("Project schedule could not be stored in the planner library.")
+        Catch ex As UnauthorizedAccessException
+            SetStatus("Project schedule could not be stored. Check folder permission.")
+        End Try
+    End Sub
+
+    Private Function CapacityPlanningWorkbookPath(monthDate As Date) As String
+        Dim folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "SMA Scheduler", "Capacity Planning")
+        Return Path.Combine(folder, "Capacity Planning_" & monthDate.ToString("yyyyMM") & ".xlsx")
+    End Function
+
+    Private Function IsScheduleEditColumn(propertyName As String) As Boolean
+        Return propertyName = NameOf(ScheduleTask.StartDate) OrElse
+            propertyName = NameOf(ScheduleTask.FinishDate) OrElse
+            propertyName = NameOf(ScheduleTask.DurationDays) OrElse
+            propertyName = NameOf(ScheduleTask.DependencyType) OrElse
+            propertyName = NameOf(ScheduleTask.PredecessorLink) OrElse
+            propertyName = NameOf(ScheduleTask.AssignedTo) OrElse
+            propertyName = NameOf(ScheduleTask.AssignmentDate) OrElse
+            propertyName = NameOf(ScheduleTask.ResourceHours)
+    End Function
+
+    Private Function SelectedTask() As ScheduleTask
+        If _grid.CurrentRow Is Nothing Then
+            Return Nothing
+        End If
+        Return TryCast(_grid.CurrentRow.DataBoundItem, ScheduleTask)
+    End Function
+
+    Private Sub SelectTask(taskId As Integer)
+        For Each row As DataGridViewRow In _grid.Rows
+            Dim task = TryCast(row.DataBoundItem, ScheduleTask)
+            If task IsNot Nothing AndAlso task.TaskId = taskId Then
+                row.Selected = True
+                _grid.CurrentCell = row.Cells(1)
+                Exit For
+            End If
+        Next
+    End Sub
+
+    Private Sub RenumberTasks()
+        For i = 0 To _tasks.Count - 1
+            _tasks(i).TaskId = i + 1
+        Next
+    End Sub
+
+    Private Sub RemapPredecessorsForCurrentOrder()
+        Dim idMap As New Dictionary(Of Integer, Integer)
+        For i = 0 To _tasks.Count - 1
+            If Not idMap.ContainsKey(_tasks(i).TaskId) Then
+                idMap.Add(_tasks(i).TaskId, i + 1)
+            End If
+        Next
+
+        For Each task In _tasks
+            Dim currentNewId = If(idMap.ContainsKey(task.TaskId), idMap(task.TaskId), task.TaskId)
+            Dim updatedPredecessors = _engine.ParsePredecessors(task.Predecessors).
+                Where(Function(id) idMap.ContainsKey(id)).
+                Select(Function(id) idMap(id)).
+                Where(Function(id) id <> currentNewId).
+                Distinct().
+                ToList()
+            task.Predecessors = String.Join(",", updatedPredecessors)
+        Next
+    End Sub
+
+    Private Sub RecalculateAndRefresh(message As String)
+        If _isRecalculating Then
+            Return
+        End If
+
+        Try
+            _isRecalculating = True
+            _engine.IncludeSaturdays = _includeSaturdays.Checked
+            _engine.Recalculate(_tasks)
+            _grid.Refresh()
+            _gantt.Invalidate()
+            UpdateSummary()
+            RefreshWorkspaceTabs()
+            UpdateEmbeddedPlannerPreview()
+            ApplyProjectStateTheme()
+            SetStatus(message)
+        Finally
+            _isRecalculating = False
+        End Try
+    End Sub
+
+    Private Sub UpdateSummary()
+        If _tasks.Count = 0 Then
+            _summaryTitle.Text = "0 tasks"
+            _summaryDates.Text = "No dates"
+            _summaryResources.Text = "No resources"
+            Return
+        End If
+
+        Dim startDate = _tasks.Min(Function(t) t.StartDate)
+        Dim finishDate = _tasks.Max(Function(t) t.FinishDate)
+        Dim assignedHours = _tasks.Sum(Function(t) t.ResourceHours)
+        Dim resourceCount = AssignedResourceCount()
+
+        _summaryTitle.Text = _tasks.Count & " tasks"
+        _summaryDates.Text = startDate.ToString("dd MMM") & " - " & finishDate.ToString("dd MMM yyyy")
+        _summaryResources.Text = resourceCount & " resources / " & assignedHours.ToString("0.##") & " hrs"
+    End Sub
+
+    Private Sub SetStatus(message As String)
+        If _status IsNot Nothing Then
+            _status.Text = message & "  |  Tasks: " & _tasks.Count & "  |  Updated: " & Date.Now.ToString("HH:mm:ss")
+        End If
+    End Sub
+
+    Private Function MakeSafeFileName(value As String) As String
+        Dim safeValue = If(String.IsNullOrWhiteSpace(value), "SMA Scheduler", value)
+        For Each character In Path.GetInvalidFileNameChars()
+            safeValue = safeValue.Replace(character, "_"c)
+        Next
+        Return safeValue
+    End Function
+
+    Private Function ClampDecimal(value As Decimal, minimum As Decimal, maximum As Decimal) As Decimal
+        Return Math.Min(maximum, Math.Max(minimum, value))
+    End Function
+
+    Private Function AssignedResourceCount() As Integer
+        Return _tasks.SelectMany(Function(t) ResourceNamesFromAssignment(If(String.IsNullOrWhiteSpace(t.ResourceNames), t.AssignedTo, t.ResourceNames))).
+            Where(Function(r) r.Length > 0).
+            Distinct(StringComparer.OrdinalIgnoreCase).
+            Count()
+    End Function
+
+    Private Function AvailableHoursForSelection(employeeName As String, currentDate As Date, ignoredTaskId As Integer) As Decimal
+        If String.IsNullOrWhiteSpace(employeeName) OrElse IsBlockedScheduleDate(currentDate) Then
+            Return 0D
+        End If
+
+        Return AvailableHoursForResource(employeeName, currentDate.Date, ignoredTaskId)
+    End Function
+    Private Function NextTaskStartDate() As Date
+        If _tasks.Count = 0 Then
+            Return NextWorkingDate(Date.Today)
+        End If
+
+        Return NextWorkingDate(_tasks.Max(Function(t) t.FinishDate).AddDays(1))
+    End Function
+
+    Private Function PreferredTaskStartDate() As Date
+        Return NextTaskStartDate()
+    End Function
+
+    Private Function FindAvailableAllocationDate(employeeName As String, proposedDate As Date) As Date
+        For offset = 0 To 365
+            Dim candidate = proposedDate.Date.AddDays(offset)
+            If IsBlockedScheduleDate(candidate) Then
+                Continue For
+            End If
+            If AvailableHoursForSelection(employeeName, candidate, 0) > 0D Then
+                Return candidate
+            End If
+        Next
+
+        Return NextWorkingDate(proposedDate)
+    End Function
+
+    Private Function DefaultTaskHours(selectedCatalogTask As TaskCatalogItem) As Decimal
+        Dim requestedHours = selectedCatalogTask.HoursForSize(CStr(_projectSizeSelector.SelectedItem))
+        If requestedHours > 0D Then
+            Return requestedHours
+        End If
+
+        Return 8D
+    End Function
+
+    Private Function DefaultEmployeeForTask(selectedCatalogTask As TaskCatalogItem) As String
+        If selectedCatalogTask IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(selectedCatalogTask.Assignee) AndAlso _employees.Contains(selectedCatalogTask.Assignee) Then
+            Return selectedCatalogTask.Assignee
+        End If
+
+        If _employees.Count > 0 Then
+            Return _employees(0)
+        End If
+
+        Return "Unassigned"
+    End Function
+
+    Private Function ResourceWorkbookMonth() As Date
+        If _tasks.Count > 0 Then
+            Dim startDate = _tasks.Min(Function(task) task.StartDate)
+            Return New Date(startDate.Year, startDate.Month, 1)
+        End If
+
+        Return New Date(Date.Today.Year, Date.Today.Month, 1)
+    End Function
+
+    Private Function TryParseGridDate(value As String, ByRef parsedDate As Date) As Boolean
+        Dim formats = {"dd-MM-yyyy", "d-M-yyyy", "yyyy-MM-dd", "dd/MM/yyyy", "d/M/yyyy", "MM/dd/yyyy", "M/d/yyyy"}
+        Return Date.TryParseExact(value, formats, CultureInfo.InvariantCulture, DateTimeStyles.None, parsedDate) OrElse
+            Date.TryParse(value, CultureInfo.CurrentCulture, DateTimeStyles.None, parsedDate)
+    End Function
+
+
+    Private Sub _grid_CellContentClick(sender As Object, e As DataGridViewCellEventArgs) Handles _grid.CellContentClick
+
+    End Sub
+
+    Private Class EmployeeCapacityEntry
+        Public Property EmployeeName As String = ""
+        Public Property CapacityType As String = "Leave"
+        Public Property StartDate As Date = Date.Today
+        Public Property EndDate As Date = Date.Today
+        Public Property Hours As Decimal = 0D
+        Public Property Remarks As String = ""
+    End Class
+
+    Private NotInheritable Class TaskRowTag
+        Public Sub New(taskId As Integer)
+            Me.TaskId = taskId
+        End Sub
+
+        Public ReadOnly Property TaskId As Integer
+    End Class
+
+    Private NotInheritable Class ResourceHeaderRowTag
+        Public Sub New(resourceName As String)
+            Me.ResourceName = resourceName
+        End Sub
+
+        Public ReadOnly Property ResourceName As String
+    End Class
+
+    Private NotInheritable Class ResourceTaskRowTag
+        Public Sub New(resourceName As String, taskId As Integer)
+            Me.ResourceName = resourceName
+            Me.TaskId = taskId
+        End Sub
+
+        Public ReadOnly Property ResourceName As String
+        Public ReadOnly Property TaskId As Integer
+    End Class
+
+    Private NotInheritable Class CapacityAvailableRowTag
+        Public Sub New(resourceName As String)
+            Me.ResourceName = resourceName
+        End Sub
+
+        Public ReadOnly Property ResourceName As String
+    End Class
+
+    Private NotInheritable Class CapacityPlannedRowTag
+        Public Sub New(resourceName As String)
+            Me.ResourceName = resourceName
+        End Sub
+
+        Public ReadOnly Property ResourceName As String
+    End Class
+
+End Class
+
+Public Class TaskUsageRow
+    Public Property TaskIdText As String = ""
+    Public Property TaskName As String = ""
+    Public Property StartDateText As String = ""
+    Public Property FinishDateText As String = ""
+    Public Property DurationText As String = ""
+    Public Property ResourceHoursText As String = ""
+    Public Property AssignedTo As String = ""
+    Public Property Predecessors As String = ""
+
+    Public Shared Function FromTask(task As ScheduleTask) As TaskUsageRow
+        Return New TaskUsageRow With {
+            .TaskIdText = task.TaskId.ToString(CultureInfo.InvariantCulture),
+            .TaskName = task.TaskName,
+            .StartDateText = task.StartDate.ToString("dd-MMM-yyyy", CultureInfo.InvariantCulture),
+            .FinishDateText = task.FinishDate.ToString("dd-MMM-yyyy", CultureInfo.InvariantCulture),
+            .DurationText = task.DurationDays.ToString("0.###", CultureInfo.InvariantCulture),
+            .ResourceHoursText = task.ResourceHours.ToString("0.##", CultureInfo.InvariantCulture),
+            .AssignedTo = task.AssignedTo,
+            .Predecessors = FormatPredecessors(task)
+        }
+    End Function
+
+    Private Shared Function FormatPredecessors(task As ScheduleTask) As String
+        Dim value = If(task.Predecessors, "").Trim()
+        If value.Length = 0 Then
+            Return ""
+        End If
+        If value.Any(Function(ch) Char.IsLetter(ch)) Then
+            Return value.ToUpperInvariant()
+        End If
+        Return value & task.DependencyType
+    End Function
+End Class
+
+Public NotInheritable Class SchedulerThemePreferences
+    Private Sub New()
+    End Sub
+
+    Private Shared ReadOnly Property PreferenceFile As String
+        Get
+            Return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SMA Scheduler", "theme.txt")
+        End Get
+    End Property
+
+    Public Shared Function LoadThemeName() As String
+        Try
+            If File.Exists(PreferenceFile) Then
+                Dim savedName = File.ReadAllText(PreferenceFile).Trim()
+                If Not String.IsNullOrWhiteSpace(savedName) Then
+                    Return savedName
+                End If
+            End If
+        Catch ex As IOException
+        Catch ex As UnauthorizedAccessException
+        End Try
+
+        Return "Fresh"
+    End Function
+
+    Public Shared Sub SaveThemeName(themeName As String)
+        If String.IsNullOrWhiteSpace(themeName) Then
+            Return
+        End If
+
+        Try
+            Directory.CreateDirectory(Path.GetDirectoryName(PreferenceFile))
+            File.WriteAllText(PreferenceFile, themeName.Trim())
+        Catch ex As IOException
+        Catch ex As UnauthorizedAccessException
+        End Try
+    End Sub
+End Class
+
+Public Class ProjectSnapshot
+    Public Property ProjectName As String = "SMA Scheduler"
+    Public Property VersionNumber As String = "1.0"
+    Public Property PlannerPlan As String = "SMA Planning Engine"
+    Public Property ProjectSize As String = "Small"
+    Public Property ProjectType As String = ""
+    Public Property TotalProjectHours As Decimal
+    Public Property ResourcesNeeded As Integer = 1
+    Public Property ResourceHours As Decimal
+    Public Property Tasks As New List(Of ScheduleTask)
+    Public Property UpdatedOn As Date
+End Class
+
+Public Class SchedulerThemePalette
+    Public Property Name As String = ""
+    Public Property WindowBack As Color
+    Public Property PanelBack As Color
+    Public Property HeaderBack As Color
+    Public Property CommandBack As Color
+    Public Property CommandText As Color
+    Public Property GridHeader As Color
+    Public Property GridLine As Color
+    Public Property Selection As Color
+    Public Property AlternatingRow As Color
+    Public Property Text As Color
+    Public Property MutedText As Color
+    Public Property Action As Color
+    Public Property Divider As Color
+    Public Property TileOne As Color
+    Public Property TileTwo As Color
+    Public Property TileThree As Color
+    Public Property TileFour As Color
+
+    Public Shared Function AllNames() As Object()
+        Return Themes().Select(Function(theme) CObj(theme.Name)).ToArray()
+    End Function
+
+    Public Shared Function ThemeByName(themeName As String) As SchedulerThemePalette
+        Dim selected = Themes().FirstOrDefault(Function(theme) String.Equals(theme.Name, themeName, StringComparison.OrdinalIgnoreCase))
+        Return If(selected, Themes().First())
+    End Function
+
+    Private Shared Function Themes() As List(Of SchedulerThemePalette)
+        Return New List(Of SchedulerThemePalette) From {
+            New SchedulerThemePalette With {
+                .Name = "Dusk",
+                .WindowBack = Color.FromArgb(251, 247, 241),
+                .PanelBack = Color.White,
+                .HeaderBack = Color.FromArgb(255, 236, 214),
+                .CommandBack = Color.FromArgb(111, 63, 53),
+                .CommandText = Color.White,
+                .GridHeader = Color.FromArgb(111, 63, 53),
+                .GridLine = Color.FromArgb(236, 226, 214),
+                .Selection = Color.FromArgb(255, 223, 186),
+                .AlternatingRow = Color.FromArgb(255, 251, 246),
+                .Text = Color.FromArgb(51, 37, 31),
+                .MutedText = Color.FromArgb(110, 82, 72),
+                .Action = Color.FromArgb(214, 96, 58),
+                .Divider = Color.FromArgb(230, 214, 199),
+                .TileOne = Color.FromArgb(224, 245, 232),
+                .TileTwo = Color.FromArgb(255, 236, 190),
+                .TileThree = Color.FromArgb(221, 238, 255),
+                .TileFour = Color.FromArgb(252, 214, 226)
+            },
+            New SchedulerThemePalette With {
+                .Name = "Complete",
+                .WindowBack = Color.FromArgb(242, 250, 245),
+                .PanelBack = Color.White,
+                .HeaderBack = Color.FromArgb(219, 244, 228),
+                .CommandBack = Color.FromArgb(34, 99, 66),
+                .CommandText = Color.White,
+                .GridHeader = Color.FromArgb(34, 99, 66),
+                .GridLine = Color.FromArgb(219, 236, 226),
+                .Selection = Color.FromArgb(210, 244, 223),
+                .AlternatingRow = Color.FromArgb(248, 253, 250),
+                .Text = Color.FromArgb(28, 53, 39),
+                .MutedText = Color.FromArgb(71, 108, 84),
+                .Action = Color.FromArgb(22, 163, 74),
+                .Divider = Color.FromArgb(208, 227, 216),
+                .TileOne = Color.FromArgb(210, 244, 223),
+                .TileTwo = Color.FromArgb(233, 248, 214),
+                .TileThree = Color.FromArgb(215, 240, 224),
+                .TileFour = Color.FromArgb(198, 235, 214)
+            },
+            New SchedulerThemePalette With {
+                .Name = "Alert",
+                .WindowBack = Color.FromArgb(254, 245, 245),
+                .PanelBack = Color.White,
+                .HeaderBack = Color.FromArgb(254, 226, 226),
+                .CommandBack = Color.FromArgb(127, 29, 29),
+                .CommandText = Color.White,
+                .GridHeader = Color.FromArgb(127, 29, 29),
+                .GridLine = Color.FromArgb(241, 214, 214),
+                .Selection = Color.FromArgb(254, 215, 215),
+                .AlternatingRow = Color.FromArgb(255, 250, 250),
+                .Text = Color.FromArgb(81, 31, 31),
+                .MutedText = Color.FromArgb(127, 69, 69),
+                .Action = Color.FromArgb(220, 38, 38),
+                .Divider = Color.FromArgb(233, 205, 205),
+                .TileOne = Color.FromArgb(254, 226, 226),
+                .TileTwo = Color.FromArgb(255, 237, 213),
+                .TileThree = Color.FromArgb(255, 220, 220),
+                .TileFour = Color.FromArgb(254, 205, 211)
+            },
+            New SchedulerThemePalette With {
+                .Name = "Update",
+                .WindowBack = Color.FromArgb(245, 246, 254),
+                .PanelBack = Color.White,
+                .HeaderBack = Color.FromArgb(227, 232, 255),
+                .CommandBack = Color.FromArgb(55, 65, 138),
+                .CommandText = Color.White,
+                .GridHeader = Color.FromArgb(55, 65, 138),
+                .GridLine = Color.FromArgb(223, 228, 244),
+                .Selection = Color.FromArgb(218, 226, 255),
+                .AlternatingRow = Color.FromArgb(249, 250, 255),
+                .Text = Color.FromArgb(34, 42, 84),
+                .MutedText = Color.FromArgb(85, 93, 135),
+                .Action = Color.FromArgb(79, 70, 229),
+                .Divider = Color.FromArgb(214, 220, 239),
+                .TileOne = Color.FromArgb(224, 235, 255),
+                .TileTwo = Color.FromArgb(240, 232, 255),
+                .TileThree = Color.FromArgb(221, 232, 255),
+                .TileFour = Color.FromArgb(236, 225, 255)
+            },
+            New SchedulerThemePalette With {
+                .Name = "Fresh",
+                .WindowBack = Color.FromArgb(244, 246, 249),
+                .PanelBack = Color.White,
+                .HeaderBack = Color.FromArgb(229, 241, 255),
+                .CommandBack = Color.FromArgb(35, 46, 66),
+                .CommandText = Color.White,
+                .GridHeader = Color.FromArgb(35, 46, 66),
+                .GridLine = Color.FromArgb(232, 236, 242),
+                .Selection = Color.FromArgb(219, 235, 255),
+                .AlternatingRow = Color.FromArgb(250, 252, 255),
+                .Text = Color.FromArgb(24, 31, 42),
+                .MutedText = Color.FromArgb(75, 85, 99),
+                .Action = Color.FromArgb(32, 164, 112),
+                .Divider = Color.FromArgb(224, 229, 236),
+                .TileOne = Color.FromArgb(223, 245, 232),
+                .TileTwo = Color.FromArgb(255, 243, 205),
+                .TileThree = Color.FromArgb(225, 239, 255),
+                .TileFour = Color.FromArgb(248, 222, 234)
+            },
+            New SchedulerThemePalette With {
+                .Name = "Sunrise",
+                .WindowBack = Color.FromArgb(250, 247, 242),
+                .PanelBack = Color.FromArgb(255, 253, 250),
+                .HeaderBack = Color.FromArgb(255, 235, 214),
+                .CommandBack = Color.FromArgb(95, 55, 50),
+                .CommandText = Color.White,
+                .GridHeader = Color.FromArgb(95, 55, 50),
+                .GridLine = Color.FromArgb(236, 226, 214),
+                .Selection = Color.FromArgb(255, 223, 186),
+                .AlternatingRow = Color.FromArgb(255, 250, 245),
+                .Text = Color.FromArgb(48, 38, 35),
+                .MutedText = Color.FromArgb(102, 82, 75),
+                .Action = Color.FromArgb(212, 95, 56),
+                .Divider = Color.FromArgb(231, 216, 202),
+                .TileOne = Color.FromArgb(225, 245, 232),
+                .TileTwo = Color.FromArgb(255, 232, 190),
+                .TileThree = Color.FromArgb(221, 238, 255),
+                .TileFour = Color.FromArgb(255, 218, 226)
+            },
+            New SchedulerThemePalette With {
+                .Name = "Mint",
+                .WindowBack = Color.FromArgb(241, 248, 246),
+                .PanelBack = Color.White,
+                .HeaderBack = Color.FromArgb(215, 242, 235),
+                .CommandBack = Color.FromArgb(26, 82, 83),
+                .CommandText = Color.White,
+                .GridHeader = Color.FromArgb(26, 82, 83),
+                .GridLine = Color.FromArgb(220, 236, 234),
+                .Selection = Color.FromArgb(202, 238, 230),
+                .AlternatingRow = Color.FromArgb(248, 253, 252),
+                .Text = Color.FromArgb(25, 43, 45),
+                .MutedText = Color.FromArgb(71, 96, 97),
+                .Action = Color.FromArgb(42, 157, 143),
+                .Divider = Color.FromArgb(205, 225, 223),
+                .TileOne = Color.FromArgb(211, 245, 229),
+                .TileTwo = Color.FromArgb(255, 241, 194),
+                .TileThree = Color.FromArgb(218, 234, 255),
+                .TileFour = Color.FromArgb(240, 222, 255)
+            },
+            New SchedulerThemePalette With {
+                .Name = "Graphite",
+                .WindowBack = Color.FromArgb(241, 243, 245),
+                .PanelBack = Color.FromArgb(252, 252, 253),
+                .HeaderBack = Color.FromArgb(232, 235, 239),
+                .CommandBack = Color.FromArgb(42, 45, 52),
+                .CommandText = Color.White,
+                .GridHeader = Color.FromArgb(42, 45, 52),
+                .GridLine = Color.FromArgb(224, 228, 234),
+                .Selection = Color.FromArgb(225, 233, 246),
+                .AlternatingRow = Color.FromArgb(248, 249, 251),
+                .Text = Color.FromArgb(24, 27, 32),
+                .MutedText = Color.FromArgb(89, 96, 107),
+                .Action = Color.FromArgb(50, 132, 120),
+                .Divider = Color.FromArgb(212, 218, 226),
+                .TileOne = Color.FromArgb(220, 240, 230),
+                .TileTwo = Color.FromArgb(255, 239, 201),
+                .TileThree = Color.FromArgb(226, 236, 251),
+                .TileFour = Color.FromArgb(244, 225, 235)
+            }
+        }
+    End Function
+End Class
+
+Public Class BlankNumericUpDown
+    Inherits NumericUpDown
+
+    Private _isDisplayBlank As Boolean
+
+    Public Sub ClearDisplayedValue()
+        _isDisplayBlank = True
+        Text = ""
+    End Sub
+
+    Protected Overrides Sub UpdateEditText()
+        If _isDisplayBlank Then
+            Text = ""
+            Return
+        End If
+
+        MyBase.UpdateEditText()
+    End Sub
+
+    Protected Overrides Sub OnKeyDown(e As KeyEventArgs)
+        If _isDisplayBlank Then
+            _isDisplayBlank = False
+            Text = ""
+        End If
+
+        MyBase.OnKeyDown(e)
+    End Sub
+
+    Protected Overrides Sub OnKeyPress(e As KeyPressEventArgs)
+        If _isDisplayBlank Then
+            _isDisplayBlank = False
+            Text = ""
+        End If
+
+        MyBase.OnKeyPress(e)
+    End Sub
+
+    Protected Overrides Sub OnMouseDown(e As MouseEventArgs)
+        If _isDisplayBlank Then
+            _isDisplayBlank = False
+            UpdateEditText()
+        End If
+
+        MyBase.OnMouseDown(e)
+    End Sub
+End Class
+
+Public Class ResourceChecklistColumn
+    Inherits DataGridViewColumn
+
+    Public Sub New(employeeNames As IEnumerable(Of String))
+        MyBase.New(New ResourceChecklistCell())
+        Me.EmployeeNames = employeeNames.ToList()
+    End Sub
+
+    <Browsable(False), DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)>
+    Public Property EmployeeNames As List(Of String)
+
+    Public Overrides Function Clone() As Object
+        Dim clonedColumn = CType(MyBase.Clone(), ResourceChecklistColumn)
+        clonedColumn.EmployeeNames = New List(Of String)(EmployeeNames)
+        Return clonedColumn
+    End Function
+
+    Public Overrides Property CellTemplate As DataGridViewCell
+        Get
+            Return MyBase.CellTemplate
+        End Get
+        Set(value As DataGridViewCell)
+            If value IsNot Nothing AndAlso Not value.GetType().IsAssignableFrom(GetType(ResourceChecklistCell)) Then
+                Throw New InvalidCastException("ResourceChecklistColumn requires a ResourceChecklistCell template.")
+            End If
+
+            MyBase.CellTemplate = value
+        End Set
+    End Property
+End Class
+
+Public Class ResourceChecklistCell
+    Inherits DataGridViewTextBoxCell
+
+    Public Overrides Sub InitializeEditingControl(rowIndex As Integer, initialFormattedValue As Object, dataGridViewCellStyle As DataGridViewCellStyle)
+        MyBase.InitializeEditingControl(rowIndex, initialFormattedValue, dataGridViewCellStyle)
+        Dim control = CType(DataGridView.EditingControl, ResourceChecklistEditingControl)
+        Dim checklistColumn = TryCast(OwningColumn, ResourceChecklistColumn)
+        control.SetEmployees(If(checklistColumn Is Nothing, Enumerable.Empty(Of String)(), checklistColumn.EmployeeNames))
+        control.EditingControlFormattedValue = If(Value, "")
+    End Sub
+
+    Public Overrides ReadOnly Property EditType As Type
+        Get
+            Return GetType(ResourceChecklistEditingControl)
+        End Get
+    End Property
+
+    Public Overrides ReadOnly Property ValueType As Type
+        Get
+            Return GetType(String)
+        End Get
+    End Property
+
+    Public Overrides ReadOnly Property DefaultNewRowValue As Object
+        Get
+            Return ""
+        End Get
+    End Property
+End Class
+
+Public Class ResourceChecklistEditingControl
+    Inherits UserControl
+    Implements IDataGridViewEditingControl
+
+    Private ReadOnly _textBox As New TextBox()
+    Private ReadOnly _dropButton As New Button()
+    Private ReadOnly _employees As New List(Of String)()
+    Private _dataGridView As DataGridView
+    Private _dropDown As ToolStripDropDown
+    Private _checkedList As CheckedListBox
+    Private _rowIndex As Integer
+    Private _valueChanged As Boolean
+    Private _isClosingDropDown As Boolean
+
+    Public Sub New()
+        BorderStyle = BorderStyle.None
+        Margin = Padding.Empty
+        Padding = Padding.Empty
+
+        _textBox.BorderStyle = BorderStyle.FixedSingle
+        _textBox.Dock = DockStyle.Fill
+        _textBox.ReadOnly = True
+
+        _dropButton.Dock = DockStyle.Right
+        _dropButton.Width = 24
+        _dropButton.Text = "v"
+        _dropButton.FlatStyle = FlatStyle.Flat
+        _dropButton.FlatAppearance.BorderSize = 0
+
+        Controls.Add(_textBox)
+        Controls.Add(_dropButton)
+
+        AddHandler _textBox.Click, Sub() ShowDropDown()
+        AddHandler _dropButton.Click, Sub() ShowDropDown()
+        AddHandler _textBox.KeyDown, AddressOf EditorKeyDown
+        AddHandler _dropButton.KeyDown, AddressOf EditorKeyDown
+    End Sub
+
+    Public Sub SetEmployees(employeeNames As IEnumerable(Of String))
+        _employees.Clear()
+        _employees.AddRange(employeeNames.Where(Function(name) Not String.IsNullOrWhiteSpace(name)).Distinct(StringComparer.OrdinalIgnoreCase))
+    End Sub
+
+    <Browsable(False), DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)>
+    Public Property EditingControlFormattedValue As Object Implements IDataGridViewEditingControl.EditingControlFormattedValue
+        Get
+            Return _textBox.Text
+        End Get
+        Set(value As Object)
+            _textBox.Text = NormalizeResourceValue(Convert.ToString(value, CultureInfo.CurrentCulture))
+        End Set
+    End Property
+
+    Public Function GetEditingControlFormattedValue(context As DataGridViewDataErrorContexts) As Object Implements IDataGridViewEditingControl.GetEditingControlFormattedValue
+        Return EditingControlFormattedValue
+    End Function
+
+    Public Sub ApplyCellStyleToEditingControl(dataGridViewCellStyle As DataGridViewCellStyle) Implements IDataGridViewEditingControl.ApplyCellStyleToEditingControl
+        _textBox.Font = dataGridViewCellStyle.Font
+        _textBox.ForeColor = dataGridViewCellStyle.ForeColor
+        _textBox.BackColor = dataGridViewCellStyle.BackColor
+        Font = dataGridViewCellStyle.Font
+    End Sub
+
+    <Browsable(False), DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)>
+    Public Property EditingControlRowIndex As Integer Implements IDataGridViewEditingControl.EditingControlRowIndex
+        Get
+            Return _rowIndex
+        End Get
+        Set(value As Integer)
+            _rowIndex = value
+        End Set
+    End Property
+
+    Public Function EditingControlWantsInputKey(keyData As Keys, dataGridViewWantsInputKey As Boolean) As Boolean Implements IDataGridViewEditingControl.EditingControlWantsInputKey
+        Select Case keyData And Keys.KeyCode
+            Case Keys.Enter, Keys.Space, Keys.Down, Keys.Up, Keys.Left, Keys.Right, Keys.Escape
+                Return True
+            Case Else
+                Return Not dataGridViewWantsInputKey
+        End Select
+    End Function
+
+    Public Sub PrepareEditingControlForEdit(selectAll As Boolean) Implements IDataGridViewEditingControl.PrepareEditingControlForEdit
+        BeginInvoke(New MethodInvoker(AddressOf ShowDropDown))
+    End Sub
+
+    Public ReadOnly Property RepositionEditingControlOnValueChange As Boolean Implements IDataGridViewEditingControl.RepositionEditingControlOnValueChange
+        Get
+            Return False
+        End Get
+    End Property
+
+    <Browsable(False), DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)>
+    Public Property EditingControlDataGridView As DataGridView Implements IDataGridViewEditingControl.EditingControlDataGridView
+        Get
+            Return _dataGridView
+        End Get
+        Set(value As DataGridView)
+            _dataGridView = value
+        End Set
+    End Property
+
+    <Browsable(False), DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)>
+    Public Property EditingControlValueChanged As Boolean Implements IDataGridViewEditingControl.EditingControlValueChanged
+        Get
+            Return _valueChanged
+        End Get
+        Set(value As Boolean)
+            _valueChanged = value
+        End Set
+    End Property
+
+    Public ReadOnly Property EditingPanelCursor As Cursor Implements IDataGridViewEditingControl.EditingPanelCursor
+        Get
+            Return Cursors.IBeam
+        End Get
+    End Property
+
+    Private Sub ShowDropDown()
+        If _dropDown IsNot Nothing AndAlso Not _dropDown.IsDisposed AndAlso _dropDown.Visible Then
+            Return
+        End If
+
+        _checkedList = New CheckedListBox With {
+            .CheckOnClick = True,
+            .BorderStyle = BorderStyle.None,
+            .IntegralHeight = False,
+            .Width = Math.Max(260, Width),
+            .Height = Math.Min(320, Math.Max(120, _employees.Count * 24 + 8))
+        }
+
+        Dim selectedNames = SelectedResources(_textBox.Text)
+        For Each employeeName In _employees
+            _checkedList.Items.Add(employeeName, selectedNames.Contains(employeeName, StringComparer.OrdinalIgnoreCase))
+        Next
+
+        AddHandler _checkedList.ItemCheck, AddressOf CheckedListItemCheck
+        AddHandler _checkedList.KeyDown, AddressOf EditorKeyDown
+
+        Dim host As New ToolStripControlHost(_checkedList) With {
+            .Margin = Padding.Empty,
+            .Padding = Padding.Empty,
+            .AutoSize = False,
+            .Size = _checkedList.Size
+        }
+
+        _dropDown = New ToolStripDropDown With {
+            .Padding = Padding.Empty,
+            .AutoClose = True
+        }
+        _dropDown.Items.Add(host)
+        AddHandler _dropDown.Closed, AddressOf DropDownClosed
+        _dropDown.Show(Me, New Point(0, Height))
+        _checkedList.Focus()
+    End Sub
+
+    Private Sub CheckedListItemCheck(sender As Object, e As ItemCheckEventArgs)
+        BeginInvoke(New MethodInvoker(Sub()
+                                          UpdateTextFromCheckedList()
+                                          MarkDirty()
+                                      End Sub))
+    End Sub
+
+    Private Sub DropDownClosed(sender As Object, e As ToolStripDropDownClosedEventArgs)
+        If _isClosingDropDown Then
+            Return
+        End If
+
+        _isClosingDropDown = True
+        Dim closedDropDown = TryCast(sender, ToolStripDropDown)
+        UpdateTextFromCheckedList()
+        MarkDirty()
+
+        If closedDropDown IsNot Nothing Then
+            RemoveHandler closedDropDown.Closed, AddressOf DropDownClosed
+        End If
+
+        If Object.ReferenceEquals(_dropDown, closedDropDown) Then
+            _dropDown = Nothing
+        End If
+        _checkedList = Nothing
+        _isClosingDropDown = False
+    End Sub
+
+    Private Sub EditorKeyDown(sender As Object, e As KeyEventArgs)
+        If e.KeyCode = Keys.Enter Then
+            CommitSelection()
+            e.Handled = True
+            e.SuppressKeyPress = True
+        ElseIf e.KeyCode = Keys.Escape Then
+            If _dropDown IsNot Nothing AndAlso Not _dropDown.IsDisposed Then
+                _dropDown.Close()
+            End If
+            e.Handled = True
+            e.SuppressKeyPress = True
+        ElseIf e.KeyCode = Keys.Space AndAlso Not (_dropDown IsNot Nothing AndAlso Not _dropDown.IsDisposed AndAlso _dropDown.Visible) Then
+            ShowDropDown()
+            e.Handled = True
+            e.SuppressKeyPress = True
+        End If
+    End Sub
+
+    Private Sub CommitSelection()
+        UpdateTextFromCheckedList()
+        MarkDirty()
+
+        Dim activeDropDown = _dropDown
+        If activeDropDown IsNot Nothing AndAlso Not activeDropDown.IsDisposed Then
+            _dropDown = Nothing
+            activeDropDown.Close()
+        End If
+
+        If _dataGridView IsNot Nothing Then
+            _dataGridView.CommitEdit(DataGridViewDataErrorContexts.Commit)
+            _dataGridView.EndEdit()
+        End If
+    End Sub
+
+    Private Sub UpdateTextFromCheckedList()
+        If _checkedList Is Nothing Then
+            Return
+        End If
+
+        _textBox.Text = String.Join("; ", _checkedList.CheckedItems.Cast(Of Object)().Select(Function(item) CStr(item)))
+    End Sub
+
+    Private Sub MarkDirty()
+        _valueChanged = True
+        If _dataGridView IsNot Nothing Then
+            _dataGridView.NotifyCurrentCellDirty(True)
+        End If
+    End Sub
+
+    Private Function NormalizeResourceValue(value As String) As String
+        Return String.Join("; ", SelectedResources(value))
+    End Function
+
+    Private Function SelectedResources(value As String) As List(Of String)
+        If String.IsNullOrWhiteSpace(value) Then
+            Return New List(Of String)()
+        End If
+
+        Return value.Split({","c, ";"c}, StringSplitOptions.RemoveEmptyEntries).
+            Select(Function(name) name.Trim()).
+            Where(Function(name) name.Length > 0).
+            Distinct(StringComparer.OrdinalIgnoreCase).
+            ToList()
+    End Function
+End Class
+
+Public Class CalendarColumn
+    Inherits DataGridViewColumn
+
+    Public Sub New()
+        MyBase.New(New CalendarCell())
+    End Sub
+
+    Public Overrides Property CellTemplate As DataGridViewCell
+        Get
+            Return MyBase.CellTemplate
+        End Get
+        Set(value As DataGridViewCell)
+            If value IsNot Nothing AndAlso Not value.GetType().IsAssignableFrom(GetType(CalendarCell)) Then
+                Throw New InvalidCastException("CalendarColumn requires a CalendarCell template.")
+            End If
+
+            MyBase.CellTemplate = value
+        End Set
+    End Property
+End Class
+
+Public Class CalendarCell
+    Inherits DataGridViewTextBoxCell
+
+    Public Sub New()
+        Style.Format = "dd-MM-yyyy"
+    End Sub
+
+    Public Overrides Sub InitializeEditingControl(rowIndex As Integer, initialFormattedValue As Object, dataGridViewCellStyle As DataGridViewCellStyle)
+        MyBase.InitializeEditingControl(rowIndex, initialFormattedValue, dataGridViewCellStyle)
+        Dim control = CType(DataGridView.EditingControl, CalendarEditingControl)
+        If Value Is Nothing OrElse Value Is DBNull.Value Then
+            control.Value = Date.Today
+        Else
+            control.Value = CDate(Value)
+        End If
+    End Sub
+
+    Public Overrides ReadOnly Property EditType As Type
+        Get
+            Return GetType(CalendarEditingControl)
+        End Get
+    End Property
+
+    Public Overrides ReadOnly Property ValueType As Type
+        Get
+            Return GetType(Date)
+        End Get
+    End Property
+
+    Public Overrides ReadOnly Property DefaultNewRowValue As Object
+        Get
+            Return Date.Today
+        End Get
+    End Property
+End Class
+
+Public Class CalendarEditingControl
+    Inherits DateTimePicker
+    Implements IDataGridViewEditingControl
+
+    Private _dataGridView As DataGridView
+    Private _valueChanged As Boolean
+    Private _rowIndex As Integer
+
+    Public Sub New()
+        Format = DateTimePickerFormat.Custom
+        CustomFormat = "dd-MM-yyyy"
+        ShowUpDown = False
+    End Sub
+
+    <Browsable(False), DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)>
+    Public Property EditingControlFormattedValue As Object Implements IDataGridViewEditingControl.EditingControlFormattedValue
+        Get
+            Return Value.ToString("dd-MM-yyyy", CultureInfo.InvariantCulture)
+        End Get
+        Set(value As Object)
+            Dim parsedDate As Date
+            If value IsNot Nothing AndAlso Date.TryParse(CStr(value), parsedDate) Then
+                Value = parsedDate
+            End If
+        End Set
+    End Property
+
+    Public Function GetEditingControlFormattedValue(context As DataGridViewDataErrorContexts) As Object Implements IDataGridViewEditingControl.GetEditingControlFormattedValue
+        Return EditingControlFormattedValue
+    End Function
+
+    Public Sub ApplyCellStyleToEditingControl(dataGridViewCellStyle As DataGridViewCellStyle) Implements IDataGridViewEditingControl.ApplyCellStyleToEditingControl
+        Font = dataGridViewCellStyle.Font
+        CalendarForeColor = dataGridViewCellStyle.ForeColor
+        CalendarMonthBackground = dataGridViewCellStyle.BackColor
+    End Sub
+
+    <Browsable(False), DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)>
+    Public Property EditingControlRowIndex As Integer Implements IDataGridViewEditingControl.EditingControlRowIndex
+        Get
+            Return _rowIndex
+        End Get
+        Set(value As Integer)
+            _rowIndex = value
+        End Set
+    End Property
+
+    Public Function EditingControlWantsInputKey(keyData As Keys, dataGridViewWantsInputKey As Boolean) As Boolean Implements IDataGridViewEditingControl.EditingControlWantsInputKey
+        Select Case keyData And Keys.KeyCode
+            Case Keys.Up, Keys.Down, Keys.PageDown, Keys.PageUp, Keys.F4, Keys.Enter, Keys.Escape, Keys.Tab
+                Return True
+            Case Else
+                Return False
+        End Select
+    End Function
+
+    Public Sub PrepareEditingControlForEdit(selectAll As Boolean) Implements IDataGridViewEditingControl.PrepareEditingControlForEdit
+        BeginInvoke(New MethodInvoker(Sub() SendKeys.SendWait("%{DOWN}")))
+    End Sub
+
+    Protected Overrides Sub OnKeyPress(e As KeyPressEventArgs)
+        e.Handled = True
+        MyBase.OnKeyPress(e)
+    End Sub
+
+    Protected Overrides Sub OnKeyDown(e As KeyEventArgs)
+        Select Case e.KeyCode
+            Case Keys.Up, Keys.Down, Keys.PageDown, Keys.PageUp, Keys.F4, Keys.Enter, Keys.Escape, Keys.Tab
+                MyBase.OnKeyDown(e)
+            Case Else
+                e.Handled = True
+                e.SuppressKeyPress = True
+        End Select
+    End Sub
+
+    Public ReadOnly Property RepositionEditingControlOnValueChange As Boolean Implements IDataGridViewEditingControl.RepositionEditingControlOnValueChange
+        Get
+            Return False
+        End Get
+    End Property
+
+    <Browsable(False), DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)>
+    Public Property EditingControlDataGridView As DataGridView Implements IDataGridViewEditingControl.EditingControlDataGridView
+        Get
+            Return _dataGridView
+        End Get
+        Set(value As DataGridView)
+            _dataGridView = value
+        End Set
+    End Property
+
+    <Browsable(False), DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)>
+    Public Property EditingControlValueChanged As Boolean Implements IDataGridViewEditingControl.EditingControlValueChanged
+        Get
+            Return _valueChanged
+        End Get
+        Set(value As Boolean)
+            _valueChanged = value
+        End Set
+    End Property
+
+    Public ReadOnly Property EditingPanelCursor As Cursor Implements IDataGridViewEditingControl.EditingPanelCursor
+        Get
+            Return MyBase.Cursor
+        End Get
+    End Property
+
+    Protected Overrides Sub OnValueChanged(eventargs As EventArgs)
+        _valueChanged = True
+        If _dataGridView IsNot Nothing Then
+            _dataGridView.NotifyCurrentCellDirty(True)
+        End If
+
+        MyBase.OnValueChanged(eventargs)
+    End Sub
+End Class
+
+Public Class GanttPanel
+    Inherits Panel
+
+    Private ReadOnly _motionTimer As Timer
+    Private _motionPhase As Single
+
+    <DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)>
+    Public Property Tasks As BindingList(Of ScheduleTask)
+
+    Public Sub New()
+        DoubleBuffered = True
+        BackColor = Color.White
+        AutoScroll = True
+        _motionTimer = New Timer With {.Interval = 45}
+        AddHandler _motionTimer.Tick, AddressOf MotionTimerTick
+        _motionTimer.Start()
+    End Sub
+
+    Private Sub MotionTimerTick(sender As Object, e As EventArgs)
+        If IsDisposed Then
+            _motionTimer.Stop()
+            Return
+        End If
+
+        _motionPhase += 0.035F
+        If _motionPhase > 1.0F Then
+            _motionPhase -= 1.0F
+        End If
+        Invalidate()
+    End Sub
+
+    Protected Overrides Sub OnPaint(e As PaintEventArgs)
+        MyBase.OnPaint(e)
+
+        If Tasks Is Nothing OrElse Tasks.Count = 0 Then
+            TextRenderer.DrawText(e.Graphics, "No tasks", Font, New Point(24, 24), Color.DimGray)
+            Return
+        End If
+
+        e.Graphics.SmoothingMode = SmoothingMode.AntiAlias
+
+        Dim minDate = Tasks.Min(Function(t) t.StartDate).Date
+        Dim maxDate = Tasks.Max(Function(t) t.FinishDate).Date
+        Dim totalDays = Math.Max(1, CInt((maxDate - minDate).TotalDays) + 1)
+        Dim dayWidth = Math.Max(20, Math.Min(38, (ClientSize.Width - 110) \ Math.Max(1, totalDays)))
+        Dim left = 96
+        Dim top = 68
+        Dim rowHeight = 34
+        Dim chartWidth = left + totalDays * dayWidth + 160
+        Dim chartHeight = top + Tasks.Count * rowHeight + 64
+        If AutoScrollMinSize.Width <> chartWidth OrElse AutoScrollMinSize.Height <> chartHeight Then
+            AutoScrollMinSize = New Size(chartWidth, chartHeight)
+        End If
+
+        Dim scrollOffset = AutoScrollPosition
+        e.Graphics.TranslateTransform(scrollOffset.X, scrollOffset.Y)
+        Dim visibleLeft = -scrollOffset.X
+        Dim visibleTop = -scrollOffset.Y
+
+        Using headerBrush As New SolidBrush(Color.FromArgb(248, 250, 252)),
+              weekendBrush As New SolidBrush(Color.FromArgb(245, 247, 250)),
+              gridPen As New Pen(Color.FromArgb(226, 230, 235)),
+              todayPen As New Pen(Color.FromArgb(220, 53, 69), 2),
+              barBrush As New SolidBrush(Color.FromArgb(43, 120, 228)),
+              milestoneBrush As New SolidBrush(Color.FromArgb(255, 152, 0)),
+              dependencyPen As New Pen(Color.FromArgb(88, 101, 125), 1.4F)
+
+            e.Graphics.FillRectangle(headerBrush, visibleLeft, visibleTop, ClientSize.Width, top - 8)
+            dependencyPen.CustomEndCap = New AdjustableArrowCap(4, 5)
+
+            Using monthFont As New Font(Font, FontStyle.Bold)
+                Dim monthStart = New Date(minDate.Year, minDate.Month, 1)
+                While monthStart <= maxDate
+                    Dim monthEnd = monthStart.AddMonths(1).AddDays(-1)
+                    Dim segmentStart = If(monthStart < minDate, minDate, monthStart)
+                    Dim segmentEnd = If(monthEnd > maxDate, maxDate, monthEnd)
+
+                    Dim startOffset = CInt((segmentStart - minDate).TotalDays)
+                    Dim endOffset = CInt((segmentEnd - minDate).TotalDays) + 1
+                    Dim monthRectangle = New Rectangle(left + startOffset * dayWidth, 8, Math.Max(dayWidth, (endOffset - startOffset) * dayWidth), 22)
+                    If monthRectangle.Width >= 64 Then
+                        TextRenderer.DrawText(e.Graphics, monthStart.ToString("MMM yyyy"), monthFont, monthRectangle, Color.FromArgb(30, 36, 48), TextFormatFlags.HorizontalCenter Or TextFormatFlags.VerticalCenter Or TextFormatFlags.EndEllipsis)
+                    ElseIf monthRectangle.Width >= 34 Then
+                        TextRenderer.DrawText(e.Graphics, monthStart.ToString("MMM"), monthFont, monthRectangle, Color.FromArgb(30, 36, 48), TextFormatFlags.HorizontalCenter Or TextFormatFlags.VerticalCenter Or TextFormatFlags.EndEllipsis)
+                    End If
+
+                    monthStart = monthStart.AddMonths(1)
+                End While
+            End Using
+
+            For day = 0 To totalDays - 1
+                Dim dateValue = minDate.AddDays(day)
+                Dim x = left + day * dayWidth
+                If dateValue.DayOfWeek = DayOfWeek.Saturday OrElse dateValue.DayOfWeek = DayOfWeek.Sunday Then
+                    e.Graphics.FillRectangle(weekendBrush, x, top - 8, dayWidth, chartHeight - top + 8)
+                End If
+                e.Graphics.DrawLine(gridPen, x, top - 8, x, chartHeight)
+                If dayWidth >= 18 Then
+                    TextRenderer.DrawText(e.Graphics, dateValue.ToString("dd"), Font, New Rectangle(x, 34, dayWidth, 20), Color.DimGray, TextFormatFlags.HorizontalCenter)
+                End If
+            Next
+
+            Dim todayOffset = CInt((Date.Today - minDate).TotalDays)
+            If todayOffset >= 0 AndAlso todayOffset <= totalDays Then
+                Dim todayX = left + todayOffset * dayWidth
+                e.Graphics.DrawLine(todayPen, todayX, top - 8, todayX, chartHeight)
+            End If
+            Dim bars As New Dictionary(Of Integer, Rectangle)
+            For i = 0 To Tasks.Count - 1
+                Dim task = Tasks(i)
+                Dim y = top + i * rowHeight
+                Dim x = left + CInt((task.StartDate.Date - minDate).TotalDays) * dayWidth
+                Dim width = Math.Max(dayWidth, CInt(Math.Ceiling(task.DurationDays)) * dayWidth)
+                Dim bar = New Rectangle(x, y + 9, width, 16)
+                bars(task.TaskId) = bar
+
+                e.Graphics.DrawLine(gridPen, visibleLeft, y, Math.Max(chartWidth, visibleLeft + ClientSize.Width), y)
+                TextRenderer.DrawText(e.Graphics, task.TaskId.ToString(), Font, New Rectangle(8, y + 5, 34, 24), Color.DimGray, TextFormatFlags.Right)
+                TextRenderer.DrawText(e.Graphics, task.TaskName, Font, New Rectangle(48, y + 5, Math.Max(20, left - 54), 24), Color.FromArgb(45, 48, 56), TextFormatFlags.EndEllipsis)
+
+                If task.TaskName.StartsWith("Milestone: ") Then
+                    DrawMilestone(e.Graphics, milestoneBrush, New Point(bar.Left + 8, bar.Top + 8))
+                Else
+                    e.Graphics.FillRoundedRectangle(barBrush, bar, 4)
+                    DrawMovingBarHighlight(e.Graphics, bar)
+                End If
+            Next
+
+            Dim parser As New ScheduleEngine()
+            For Each task In Tasks
+                If Not bars.ContainsKey(task.TaskId) Then
+                    Continue For
+                End If
+
+                For Each predecessorId In parser.ParsePredecessors(task.Predecessors)
+                    If bars.ContainsKey(predecessorId) Then
+                        Dim fromBar = bars(predecessorId)
+                        Dim toBar = bars(task.TaskId)
+                        Dim fromPoint = New Point(fromBar.Right, fromBar.Top + fromBar.Height \ 2)
+                        Dim toPoint = New Point(toBar.Left, toBar.Top + toBar.Height \ 2)
+                        e.Graphics.DrawLine(dependencyPen, fromPoint, toPoint)
+                    End If
+                Next
+            Next
+        End Using
+    End Sub
+
+    Private Sub DrawMilestone(graphics As Graphics, brush As Brush, center As Point)
+        Dim points = {
+            New Point(center.X, center.Y - 9),
+            New Point(center.X + 9, center.Y),
+            New Point(center.X, center.Y + 9),
+            New Point(center.X - 9, center.Y)
+        }
+        graphics.FillPolygon(brush, points)
+    End Sub
+
+    Private Sub DrawMovingBarHighlight(graphics As Graphics, bar As Rectangle)
+        If bar.Width < 18 OrElse bar.Height < 8 Then
+            Return
+        End If
+
+        Dim sweepWidth = Math.Max(14, Math.Min(34, bar.Width \ 2))
+        Dim travel = bar.Width + sweepWidth * 2
+        Dim sweepLeft = bar.Left - sweepWidth + CInt(travel * _motionPhase)
+        Dim sweepBounds = New Rectangle(sweepLeft, bar.Top, sweepWidth, bar.Height)
+
+        Using path As New GraphicsPath()
+            Dim radius = 8
+            path.AddArc(bar.Left, bar.Top, radius, radius, 180, 90)
+            path.AddArc(bar.Right - radius, bar.Top, radius, radius, 270, 90)
+            path.AddArc(bar.Right - radius, bar.Bottom - radius, radius, radius, 0, 90)
+            path.AddArc(bar.Left, bar.Bottom - radius, radius, radius, 90, 90)
+            path.CloseFigure()
+
+            Dim previousClip = graphics.Clip
+            graphics.SetClip(path, CombineMode.Intersect)
+            Using brush As New LinearGradientBrush(sweepBounds, Color.FromArgb(0, Color.White), Color.FromArgb(105, Color.White), LinearGradientMode.Horizontal)
+                Dim blend As New Blend With {
+                    .Positions = New Single() {0.0F, 0.5F, 1.0F},
+                    .Factors = New Single() {0.0F, 1.0F, 0.0F}
+                }
+                brush.Blend = blend
+                graphics.FillRectangle(brush, sweepBounds)
+            End Using
+            graphics.Clip = previousClip
+        End Using
+    End Sub
+
+    Protected Overrides Sub Dispose(disposing As Boolean)
+        If disposing AndAlso _motionTimer IsNot Nothing Then
+            _motionTimer.Stop()
+            RemoveHandler _motionTimer.Tick, AddressOf MotionTimerTick
+            _motionTimer.Dispose()
+        End If
+        MyBase.Dispose(disposing)
+    End Sub
+End Class
+
+Public Module GraphicsExtensions
+    <Runtime.CompilerServices.Extension>
+    Public Sub FillRoundedRectangle(graphics As Graphics, brush As Brush, bounds As Rectangle, radius As Integer)
+        Using path As New GraphicsPath()
+            Dim diameter = radius * 2
+            path.AddArc(bounds.Left, bounds.Top, diameter, diameter, 180, 90)
+            path.AddArc(bounds.Right - diameter, bounds.Top, diameter, diameter, 270, 90)
+            path.AddArc(bounds.Right - diameter, bounds.Bottom - diameter, diameter, diameter, 0, 90)
+            path.AddArc(bounds.Left, bounds.Bottom - diameter, diameter, diameter, 90, 90)
+            path.CloseFigure()
+            graphics.FillPath(brush, path)
+        End Using
+    End Sub
+End Module
+
+
+Public Enum PlannerPreviewMode
+    TaskDuration = 0
+    ResourcesUsed = 1
+    ResourceContribution = 2
+End Enum
+
+Public Class PlannerPreviewSlice
+    Public Property Label As String = ""
+    Public Property Value As Decimal
+End Class
+
+Public Class PlannerPreviewModel
+    Public Property HeaderText As String = "Planner Preview"
+    Public Property CenterTitle As String = "0"
+    Public Property CenterSubtitle As String = "0"
+    Public Property EmptyText As String = "No scheduled tasks"
+    Public Property Slices As New List(Of PlannerPreviewSlice)
+End Class
+
+Public Class PlannerPieChartPanel
+    Inherits Panel
+
+    Public Property PreviewMode As PlannerPreviewMode = PlannerPreviewMode.TaskDuration
+
+    Private _model As New PlannerPreviewModel()
+    Private ReadOnly _motionTimer As System.Windows.Forms.Timer
+    Private _animationProgress As Single = 1.0F
+    Private _pulsePhase As Single = 0.0F
+    Private _modelSignature As String = ""
+
+    Private Shared ReadOnly SliceColors As Color() = {
+        Color.FromArgb(45, 125, 221),
+        Color.FromArgb(32, 164, 112),
+        Color.FromArgb(245, 158, 11),
+        Color.FromArgb(236, 72, 153),
+        Color.FromArgb(99, 102, 241),
+        Color.FromArgb(20, 184, 166),
+        Color.FromArgb(239, 68, 68),
+        Color.FromArgb(132, 204, 22)
+    }
+
+    Public Sub New()
+        DoubleBuffered = True
+        _motionTimer = New System.Windows.Forms.Timer With {.Interval = 35}
+        AddHandler _motionTimer.Tick, AddressOf MotionTimerTick
+        ResetMotion()
+    End Sub
+
+    Public Shared Function SliceColor(index As Integer) As Color
+        Return SliceColors(index Mod SliceColors.Length)
+    End Function
+
+    Public Sub UpdateModel(model As PlannerPreviewModel)
+        Dim nextModel = If(model, New PlannerPreviewModel())
+        Dim nextSignature = BuildModelSignature(nextModel)
+        Dim changed = Not String.Equals(_modelSignature, nextSignature, StringComparison.Ordinal)
+        _model = nextModel
+        _modelSignature = nextSignature
+        If changed Then
+            ResetMotion()
+        End If
+        Invalidate()
+    End Sub
+
+    Private Shared Function BuildModelSignature(model As PlannerPreviewModel) As String
+        If model Is Nothing Then
+            Return ""
+        End If
+
+        Return String.Join("|",
+            {model.HeaderText, model.CenterTitle, model.CenterSubtitle, model.EmptyText}.
+            Concat(model.Slices.Select(Function(item) item.Label & ":" & item.Value.ToString("0.###", CultureInfo.InvariantCulture))))
+    End Function
+
+    Private Sub ResetMotion()
+        _animationProgress = 0.0F
+        _pulsePhase = 0.0F
+        If _motionTimer IsNot Nothing AndAlso Not _motionTimer.Enabled Then
+            _motionTimer.Start()
+        End If
+        Invalidate()
+    End Sub
+
+    Private Sub MotionTimerTick(sender As Object, e As EventArgs)
+        If IsDisposed Then
+            _motionTimer.Stop()
+            Return
+        End If
+
+        If _animationProgress < 1.0F Then
+            _animationProgress = Math.Min(1.0F, _animationProgress + 0.045F)
+        End If
+        _pulsePhase += 0.08F
+        If _pulsePhase > CSng(Math.PI * 2) Then
+            _pulsePhase -= CSng(Math.PI * 2)
+        End If
+
+        Invalidate()
+    End Sub
+
+    Protected Overrides Sub OnPaint(e As PaintEventArgs)
+        MyBase.OnPaint(e)
+
+        e.Graphics.SmoothingMode = SmoothingMode.AntiAlias
+        e.Graphics.Clear(Color.White)
+
+        Dim slices = If(_model.Slices, New List(Of PlannerPreviewSlice)())
+        Dim totalValue = slices.Sum(Function(item) Math.Max(0D, item.Value))
+        If totalValue <= 0D Then
+            DrawEmpty(e.Graphics, _model.EmptyText)
+            Return
+        End If
+
+        Dim compact = ClientSize.Height < 260 OrElse ClientSize.Width < 340
+        Dim titleHeight = If(compact, 0, 28)
+        Dim topPadding = If(compact, 0, 36)
+        Dim bottomPadding = If(compact, 0, 10)
+        Dim sidePadding = If(compact, 0, 24)
+        Dim drawingHeight = Math.Max(1, ClientSize.Height - topPadding - bottomPadding)
+        Dim diameter = Math.Min(ClientSize.Width - (sidePadding * 2), drawingHeight)
+
+        If diameter < 28 Then
+            DrawCenteredText(e.Graphics, _model.CenterTitle, New Font("Segoe UI Semibold", 9.0F), Color.FromArgb(24, 31, 42), ClientRectangle)
+            Return
+        End If
+
+        Dim bounds As New Rectangle((ClientSize.Width - diameter) \ 2, topPadding + ((drawingHeight - diameter) \ 2), Math.Max(1, diameter - 2), Math.Max(1, diameter - 2))
+
+        Dim startAngle As Single = -90.0F
+        Dim remainingSweep As Single = 360.0F * EaseOutCubic(_animationProgress)
+        For i = 0 To slices.Count - 1
+            If slices(i).Value <= 0D Then
+                Continue For
+            End If
+            Dim sweep = CSng(slices(i).Value / totalValue * 360D)
+            Dim visibleSweep = Math.Min(sweep, remainingSweep)
+            If visibleSweep <= 0 Then
+                Exit For
+            End If
+            Using brush As New SolidBrush(SliceColor(i))
+                e.Graphics.FillPie(brush, bounds, startAngle, visibleSweep)
+            End Using
+            startAngle += sweep
+            remainingSweep -= visibleSweep
+        Next
+
+        Using pen As New Pen(Color.White, 2.0F)
+            e.Graphics.DrawEllipse(pen, bounds)
+        End Using
+
+        Dim pulseSize = CInt(Math.Round((Math.Sin(_pulsePhase) + 1.0R) * 2.0R))
+        Dim pulseBounds = Rectangle.Inflate(bounds, pulseSize, pulseSize)
+        Dim pulseAlpha = CInt(32 + ((Math.Sin(_pulsePhase) + 1.0R) * 16.0R))
+        Using pen As New Pen(Color.FromArgb(pulseAlpha, 45, 125, 221), 2.0F)
+            e.Graphics.DrawEllipse(pen, pulseBounds)
+        End Using
+
+        Dim center = New Point(bounds.Left + bounds.Width \ 2, bounds.Top + bounds.Height \ 2)
+        Dim innerDiameter = Math.Max(28, CInt(diameter * 0.55))
+        Dim innerBounds As New Rectangle(center.X - innerDiameter \ 2, center.Y - innerDiameter \ 2, innerDiameter, innerDiameter)
+        Using brush As New SolidBrush(Color.White)
+            e.Graphics.FillEllipse(brush, innerBounds)
+        End Using
+
+        Dim title = If(String.IsNullOrWhiteSpace(_model.CenterTitle), "0", _model.CenterTitle)
+        Dim subtitle = If(String.IsNullOrWhiteSpace(_model.CenterSubtitle), "", _model.CenterSubtitle)
+        Dim titleFontSize = CSng(Math.Max(9.0R, Math.Min(28.0R, diameter / 5.6R)))
+        Dim subtitleFontSize = CSng(Math.Max(7.0R, Math.Min(12.0R, diameter / 15.5R)))
+        Dim centerTitleTop = innerBounds.Top + CInt(innerBounds.Height * If(compact, 0.16R, 0.24R))
+        DrawCenteredText(e.Graphics, title, New Font("Segoe UI Semibold", titleFontSize), Color.FromArgb(24, 31, 42), New Rectangle(innerBounds.Left, centerTitleTop, innerBounds.Width, Math.Max(18, CInt(innerBounds.Height * 0.28R))))
+        If diameter >= 62 AndAlso subtitle.Length > 0 Then
+            DrawCenteredText(e.Graphics, subtitle, New Font("Segoe UI", subtitleFontSize), Color.FromArgb(75, 85, 99), New Rectangle(innerBounds.Left, centerTitleTop + Math.Max(18, CInt(innerBounds.Height * 0.25R)), innerBounds.Width, Math.Max(16, CInt(innerBounds.Height * 0.22R))))
+        End If
+        If Not compact Then
+            DrawCenteredText(e.Graphics, _model.HeaderText, New Font("Segoe UI Semibold", 12.0F), Color.FromArgb(24, 31, 42), New Rectangle(0, 4, ClientSize.Width, titleHeight))
+        End If
+    End Sub
+
+    Private Shared Function EaseOutCubic(value As Single) As Single
+        Dim progress = Math.Max(0.0F, Math.Min(1.0F, value))
+        Dim inverse = 1.0F - progress
+        Return 1.0F - (inverse * inverse * inverse)
+    End Function
+
+    Private Sub DrawEmpty(graphics As Graphics, message As String)
+        DrawCenteredText(graphics, If(String.IsNullOrWhiteSpace(message), "No scheduled tasks", message), New Font("Segoe UI Semibold", 13.0F), Color.DimGray, ClientRectangle)
+    End Sub
+
+    Private Sub DrawCenteredText(graphics As Graphics, text As String, font As Font, color As Color, bounds As Rectangle)
+        Using brush As New SolidBrush(color)
+            Using format As New StringFormat With {.Alignment = StringAlignment.Center, .LineAlignment = StringAlignment.Center}
+                graphics.DrawString(text, font, brush, bounds, format)
+            End Using
+        End Using
+    End Sub
+
+    Protected Overrides Sub Dispose(disposing As Boolean)
+        If disposing AndAlso _motionTimer IsNot Nothing Then
+            _motionTimer.Stop()
+            RemoveHandler _motionTimer.Tick, AddressOf MotionTimerTick
+            _motionTimer.Dispose()
+        End If
+        MyBase.Dispose(disposing)
+    End Sub
+End Class
+
+Public Class PlannerPreviewRow
+    Public Property ColorName As String = ""
+    Public Property ItemName As String = ""
+    Public Property ShareText As String = ""
+    Public Property ValueText As String = ""
+    Public Property ToolTipText As String = ""
+End Class

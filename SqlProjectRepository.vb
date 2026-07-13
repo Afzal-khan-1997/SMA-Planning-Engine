@@ -1,0 +1,1638 @@
+Imports System.ComponentModel
+Imports System.Data
+Imports System.Globalization
+Imports System.Reflection
+
+Public Class SqlProjectRepository
+    Private ReadOnly _connectionString As String
+
+    Public Sub New(connectionString As String)
+        _connectionString = connectionString
+    End Sub
+
+    Public Sub TestConnection()
+        Using connection = CreateConnection()
+            connection.Open()
+        End Using
+    End Sub
+
+    Public Sub SaveProject(projectName As String, tasks As BindingList(Of ScheduleTask), Optional projectVersion As String = "1.0", Optional projectSize As String = "Small", Optional projectType As String = "New", Optional totalProjectHours As Decimal = 0D, Optional resourcesNeeded As Integer = 0, Optional resourceHours As Decimal = 0D)
+        Using connection = CreateConnection()
+            connection.Open()
+            EnsureSchema(connection)
+
+            Dim projectId = GetOrCreateProject(connection, projectName, projectVersion, projectSize, projectType, totalProjectHours, resourcesNeeded, resourceHours)
+            Execute(connection, "DELETE FROM dbo.SmaScheduleTasks WHERE ProjectId = @ProjectId", New Dictionary(Of String, Object) From {{"@ProjectId", projectId}})
+            Execute(connection, "DELETE FROM dbo.TaskAssignment WHERE ProjectId = @ProjectId", New Dictionary(Of String, Object) From {{"@ProjectId", projectId}})
+
+            For Each task In tasks
+                Execute(connection,
+                        "INSERT INTO dbo.SmaScheduleTasks (ProjectId, TaskId, DatabaseTaskId, TaskName, StartDate, DurationDays, FinishDate, PercentComplete, Predecessors, DependencyType, AssignedTo, AssignmentDate, ResourceNames, ResourceAllocations, DailyResourceAllocations, ResourceHours, ModuleId, PlannerTaskId) VALUES (@ProjectId, @TaskId, @DatabaseTaskId, @TaskName, @StartDate, @DurationDays, @FinishDate, @PercentComplete, @Predecessors, @DependencyType, @AssignedTo, @AssignmentDate, @ResourceNames, @ResourceAllocations, @DailyResourceAllocations, @ResourceHours, @ModuleId, @PlannerTaskId)",
+                        New Dictionary(Of String, Object) From {
+                            {"@ProjectId", projectId},
+                            {"@TaskId", task.TaskId},
+                            {"@DatabaseTaskId", task.DatabaseTaskId},
+                            {"@TaskName", task.TaskName},
+                            {"@StartDate", task.StartDate},
+                            {"@DurationDays", task.DurationDays},
+                            {"@FinishDate", task.FinishDate},
+                            {"@PercentComplete", task.PercentComplete},
+                            {"@Predecessors", task.Predecessors},
+                            {"@DependencyType", task.DependencyType},
+                            {"@AssignedTo", task.AssignedTo},
+                            {"@AssignmentDate", task.AssignmentDate},
+                            {"@ResourceNames", task.ResourceNames},
+                            {"@ResourceAllocations", task.ResourceAllocations},
+                            {"@DailyResourceAllocations", task.DailyResourceAllocations},
+                            {"@ResourceHours", task.ResourceHours},
+                            {"@ModuleId", task.ModuleId},
+                            {"@PlannerTaskId", task.PlannerTaskId}
+                        })
+            Next
+
+            SaveTaskAssignments(connection, projectId, projectName, projectVersion, projectSize, projectType, tasks)
+        End Using
+    End Sub
+
+    Public Function ListProjects(Optional maxResults As Integer = 50) As List(Of ProjectLibraryItem)
+        Dim projectsFromAssignments = ListProjectsFromAssignments(maxResults)
+        If projectsFromAssignments.Count > 0 Then
+            Return projectsFromAssignments
+        End If
+
+        Dim projects As New List(Of ProjectLibraryItem)()
+        Using connection = CreateConnection()
+            connection.Open()
+            EnsureSchema(connection)
+
+            Using command = connection.CreateCommand()
+                command.CommandText =
+                    "SELECT TOP " & Math.Max(1, maxResults).ToString(CultureInfo.InvariantCulture) & " " &
+                    "p.ProjectId, p.ProjectName, p.ProjectVersion, p.ProjectSize, p.ProjectType, p.TotalProjectHours, p.ResourceHours, p.UpdatedAt, " &
+                    "COUNT(t.Id) AS TaskCount, MIN(t.StartDate) AS StartDate, MAX(t.FinishDate) AS FinishDate " &
+                    "FROM dbo.SmaScheduleProjects p " &
+                    "LEFT JOIN dbo.SmaScheduleTasks t ON t.ProjectId = p.ProjectId " &
+                    "GROUP BY p.ProjectId, p.ProjectName, p.ProjectVersion, p.ProjectSize, p.ProjectType, p.TotalProjectHours, p.ResourceHours, p.UpdatedAt " &
+                    "ORDER BY p.ProjectId DESC"
+
+                Using reader = command.ExecuteReader()
+                    While reader.Read()
+                        Dim item As New ProjectLibraryItem With {
+                            .ProjectId = CInt(reader("ProjectId")),
+                            .ProjectName = CStr(reader("ProjectName")),
+                            .VersionNumber = If(reader("ProjectVersion") Is DBNull.Value, "1.0", CStr(reader("ProjectVersion"))),
+                            .ProjectSize = If(reader("ProjectSize") Is DBNull.Value OrElse String.IsNullOrWhiteSpace(CStr(reader("ProjectSize"))), "Small", CStr(reader("ProjectSize"))),
+                            .ProjectType = ResolveProjectType(If(reader("ProjectType") Is DBNull.Value, "", CStr(reader("ProjectType"))), CStr(reader("ProjectName"))),
+                            .TaskCount = If(reader("TaskCount") Is DBNull.Value, 0, CInt(reader("TaskCount"))),
+                            .ResourceHours = If(reader("ResourceHours") Is DBNull.Value, 0D, CDec(reader("ResourceHours"))),
+                            .UpdatedOn = If(reader("UpdatedAt") Is DBNull.Value, Date.Now, CDate(reader("UpdatedAt")))
+                        }
+
+                        If reader("StartDate") IsNot DBNull.Value Then
+                            item.StartDate = CDate(reader("StartDate")).Date
+                            item.StartDateText = item.StartDate.Value.ToString("dd-MMM-yyyy", CultureInfo.InvariantCulture)
+                        End If
+
+                        If reader("FinishDate") IsNot DBNull.Value Then
+                            item.FinishDate = CDate(reader("FinishDate")).Date
+                            item.FinishDateText = item.FinishDate.Value.ToString("dd-MMM-yyyy", CultureInfo.InvariantCulture)
+                        End If
+
+                        projects.Add(item)
+                    End While
+                End Using
+            End Using
+        End Using
+
+        Return projects
+    End Function
+
+    Public Function GetProjectPlanningInfo(projectIdAtSma As String) As SqlProjectPlanningInfo
+        Dim projectCode = If(projectIdAtSma, "").Trim()
+        If projectCode.Length = 0 Then
+            Return Nothing
+        End If
+
+        Using connection = CreateConnection()
+            connection.Open()
+
+            If Not TableExists(connection, "dbo.Version_Table") Then
+                Return Nothing
+            End If
+
+            Using command = connection.CreateCommand()
+                command.CommandText =
+                    "SELECT TOP 1 v.[Project Name], v.[Project ID at SMA], v.[Version], v.[Active], v.[Report BRE], v.[Report ROL], v.[Report Within], v.[Final Completion Date], v.[Planning Message], v.[ControlleratROLC], v.[Client Type], v.[Is_Pointcloud], v.[Teck Pack], v.[Deed Profile], v.[Shadow_Analysis], v.[Urgent Small Projects], v.[IsPlanned], t.[Project Size] " &
+                    "FROM dbo.Version_Table v " &
+                    "LEFT JOIN dbo.Table_Project_Tracking t ON t.[Project ID at SMA] = v.[Project ID at SMA] " &
+                    "WHERE v.[Project ID at SMA] = @ProjectIdAtSma"
+                AddParameter(command, "@ProjectIdAtSma", projectCode)
+
+                Using reader = command.ExecuteReader()
+                    If Not reader.Read() Then
+                        Return Nothing
+                    End If
+
+                    Return New SqlProjectPlanningInfo With {
+                        .ProjectIdAtSma = Convert.ToString(reader("Project ID at SMA"), CultureInfo.InvariantCulture),
+                        .ProjectName = Convert.ToString(reader("Project Name"), CultureInfo.InvariantCulture),
+                        .VersionNumber = SqlVersionText(reader("Version")),
+                        .IsActive = SqlBoolean(reader("Active")),
+                        .IsPlanned = SqlNullableBoolean(reader("IsPlanned")),
+                        .ProjectSize = ProjectSizeName(If(reader("Project Size") Is DBNull.Value, 1, CInt(reader("Project Size")))),
+                        .ProjectType = ProjectTypeFromVersion(reader("Version")),
+                        .ReportType = BuildReportTypeDisplay(reader("Report BRE"), reader("Report ROL"), reader("Report Within")),
+                        .FinalCompletionDate = SqlNullableDate(reader("Final Completion Date")),
+                        .PlanningMessage = SqlText(reader("Planning Message")),
+                        .ControllerAtRolc = SqlText(reader("ControlleratROLC")),
+                        .ClientType = SqlText(reader("Client Type")),
+                        .IsPointcloud = SqlBoolean(reader("Is_Pointcloud")),
+                        .TechPack = SqlBoolean(reader("Teck Pack")),
+                        .DeedProfile = SqlBoolean(reader("Deed Profile")),
+                        .ShadowAnalysis = SqlBoolean(reader("Shadow_Analysis")),
+                        .UrgentSmallProjects = SqlBoolean(reader("Urgent Small Projects"))
+                    }
+                End Using
+            End Using
+        End Using
+    End Function
+
+    Public Function ListRecentScheduledProjects(projectIdAtSma As String, activeProjects As Boolean, Optional maxResults As Integer = 50) As List(Of ProjectLibraryItem)
+        Dim projects As New List(Of ProjectLibraryItem)()
+        Dim projectCode = If(projectIdAtSma, "").Trim()
+
+        Using connection = CreateConnection()
+            connection.Open()
+
+            If Not TableExists(connection, "dbo.Version_Table") OrElse Not TableExists(connection, "dbo.Project Schedule Table") Then
+                Return projects
+            End If
+
+            Using command = connection.CreateCommand()
+                command.CommandText =
+                    "SELECT TOP " & Math.Max(1, maxResults).ToString(CultureInfo.InvariantCulture) & " " &
+                    "v.[Project ID at SMA], MAX(v.[Project Name]) AS ProjectName, MAX(v.[Version]) AS VersionNumber, MAX(CASE WHEN v.[Active] = 1 THEN 1 ELSE 0 END) AS IsActive, " &
+                    "MAX(t.[Project Size]) AS ProjectSizeValue, COUNT(DISTINCT s.[Task Order]) AS TaskCount, SUM(CAST(ISNULL(s.[Planned Hours], 0) AS DECIMAL(12,2))) AS ResourceHours, " &
+                    "MIN(s.[Schedule Date]) AS StartDate, MAX(s.[Schedule Date]) AS FinishDate, MAX(s.[Planned On]) AS UpdatedOn, MAX(v.[Version]) AS VersionRaw " &
+                    "FROM dbo.Version_Table v " &
+                    "INNER JOIN [dbo].[Project Schedule Table] s ON s.[ProjectID at SMA] = v.[Project ID at SMA] " &
+                    "LEFT JOIN dbo.Table_Project_Tracking t ON t.[Project ID at SMA] = v.[Project ID at SMA] " &
+                    "WHERE v.[IsPlanned] = 1 AND ISNULL(v.[Active], 0) = @IsActive " &
+                    "AND (@ProjectIdAtSma = '' OR v.[Project ID at SMA] = @ProjectIdAtSma) " &
+                    "GROUP BY v.[Project ID at SMA] " &
+                    "ORDER BY MAX(s.[Planned On]) DESC, v.[Project ID at SMA]"
+                AddParameter(command, "@IsActive", If(activeProjects, 1, 0))
+                AddParameter(command, "@ProjectIdAtSma", projectCode)
+
+                Using reader = command.ExecuteReader()
+                    While reader.Read()
+                        Dim item As New ProjectLibraryItem With {
+                            .ProjectId = 0,
+                            .ProjectCode = Convert.ToString(reader("Project ID at SMA"), CultureInfo.InvariantCulture),
+                            .ProjectName = Convert.ToString(reader("ProjectName"), CultureInfo.InvariantCulture),
+                            .VersionNumber = SqlVersionText(reader("VersionRaw")),
+                            .ProjectSize = ProjectSizeName(If(reader("ProjectSizeValue") Is DBNull.Value, 1, CInt(reader("ProjectSizeValue")))),
+                            .ProjectType = ProjectTypeFromVersion(reader("VersionRaw")),
+                            .TaskCount = If(reader("TaskCount") Is DBNull.Value, 0, CInt(reader("TaskCount"))),
+                            .ResourceHours = If(reader("ResourceHours") Is DBNull.Value, 0D, CDec(reader("ResourceHours"))),
+                            .UpdatedOn = If(reader("UpdatedOn") Is DBNull.Value, Date.Now, CDate(reader("UpdatedOn"))),
+                            .IsActive = If(reader("IsActive") Is DBNull.Value, False, CInt(reader("IsActive")) = 1)
+                        }
+
+                        If reader("StartDate") IsNot DBNull.Value Then
+                            item.StartDate = CDate(reader("StartDate")).Date
+                            item.StartDateText = item.StartDate.Value.ToString("dd-MMM-yyyy", CultureInfo.InvariantCulture)
+                        End If
+
+                        If reader("FinishDate") IsNot DBNull.Value Then
+                            item.FinishDate = CDate(reader("FinishDate")).Date
+                            item.FinishDateText = item.FinishDate.Value.ToString("dd-MMM-yyyy", CultureInfo.InvariantCulture)
+                        End If
+
+                        projects.Add(item)
+                    End While
+                End Using
+            End Using
+        End Using
+
+        Return projects
+    End Function
+
+    Public Function LoadProjectSnapshot(projectId As Integer) As ProjectSnapshot
+        Dim assignmentSnapshot = LoadProjectSnapshotFromAssignments(projectId)
+        If assignmentSnapshot IsNot Nothing Then
+            Return assignmentSnapshot
+        End If
+
+        Using connection = CreateConnection()
+            connection.Open()
+            EnsureSchema(connection)
+
+            Using command = connection.CreateCommand()
+                command.CommandText =
+                    "SELECT ProjectId, ProjectName, ProjectVersion, ProjectSize, ProjectType, TotalProjectHours, ResourcesNeeded, ResourceHours, UpdatedAt " &
+                    "FROM dbo.SmaScheduleProjects WHERE ProjectId = @ProjectId"
+                AddParameter(command, "@ProjectId", projectId)
+
+                Using reader = command.ExecuteReader()
+                    If Not reader.Read() Then
+                        Return Nothing
+                    End If
+
+                    Dim snapshot As New ProjectSnapshot With {
+                        .ProjectName = CStr(reader("ProjectName")),
+                        .VersionNumber = If(reader("ProjectVersion") Is DBNull.Value, "1.0", CStr(reader("ProjectVersion"))),
+                        .ProjectSize = If(reader("ProjectSize") Is DBNull.Value OrElse String.IsNullOrWhiteSpace(CStr(reader("ProjectSize"))), "Small", CStr(reader("ProjectSize"))),
+                        .ProjectType = ResolveProjectType(If(reader("ProjectType") Is DBNull.Value, "", CStr(reader("ProjectType"))), CStr(reader("ProjectName"))),
+                        .TotalProjectHours = If(reader("TotalProjectHours") Is DBNull.Value, 0D, CDec(reader("TotalProjectHours"))),
+                        .ResourcesNeeded = If(reader("ResourcesNeeded") Is DBNull.Value, 0, CInt(reader("ResourcesNeeded"))),
+                        .ResourceHours = If(reader("ResourceHours") Is DBNull.Value, 0D, CDec(reader("ResourceHours"))),
+                        .UpdatedOn = If(reader("UpdatedAt") Is DBNull.Value, Date.Now, CDate(reader("UpdatedAt")))
+                    }
+
+                    reader.Close()
+                    snapshot.Tasks = LoadTasksByProjectId(connection, projectId).ToList()
+                    Return snapshot
+                End Using
+            End Using
+        End Using
+    End Function
+
+    Public Function LoadProjectSnapshotByProjectCode(projectIdAtSma As String) As ProjectSnapshot
+        Dim projectCode = If(projectIdAtSma, "").Trim()
+        If projectCode.Length = 0 Then
+            Return Nothing
+        End If
+
+        Using connection = CreateConnection()
+            connection.Open()
+
+            If Not TableExists(connection, "dbo.Version_Table") OrElse Not TableExists(connection, "dbo.Project Schedule Table") Then
+                Return Nothing
+            End If
+
+            Dim projectInfo = GetProjectPlanningInfo(projectCode)
+            If projectInfo Is Nothing Then
+                Return Nothing
+            End If
+
+            Dim employeeNames = LoadEmployeeNameLookupFromMaster(connection)
+            Dim rows As New List(Of AssignmentSnapshotRow)()
+
+            Using command = connection.CreateCommand()
+                command.CommandText =
+                    "SELECT s.[Task Name], s.[Task Order], s.[Employee ID], s.[Planned Hours], s.[Schedule Date], s.[Planned On] " &
+                    "FROM [dbo].[Project Schedule Table] s " &
+                    "WHERE s.[ProjectID at SMA] = @ProjectIdAtSma " &
+                    "ORDER BY s.[Task Order], s.[Schedule Date], s.[Employee ID]"
+                AddParameter(command, "@ProjectIdAtSma", projectCode)
+
+                Using reader = command.ExecuteReader()
+                    While reader.Read()
+                        If reader("Task Order") Is DBNull.Value OrElse reader("Schedule Date") Is DBNull.Value Then
+                            Continue While
+                        End If
+
+                        Dim employeeId = If(reader("Employee ID") Is DBNull.Value, 0, CInt(reader("Employee ID")))
+                        rows.Add(New AssignmentSnapshotRow With {
+                            .ProjectId = 0,
+                            .ProjectName = projectInfo.ProjectName,
+                            .VersionNumber = projectInfo.VersionNumber,
+                            .ProjectSize = projectInfo.ProjectSize,
+                            .ProjectType = projectInfo.ProjectType,
+                            .TaskId = CInt(reader("Task Order")),
+                            .TaskName = Convert.ToString(reader("Task Name"), CultureInfo.InvariantCulture),
+                            .TaskOrder = CInt(reader("Task Order")),
+                            .EmployeeId = employeeId,
+                            .WorkDate = CDate(reader("Schedule Date")).Date,
+                            .AssignedHours = If(reader("Planned Hours") Is DBNull.Value, 0D, CDec(reader("Planned Hours"))),
+                            .StartDate = CDate(reader("Schedule Date")).Date,
+                            .FinishDate = CDate(reader("Schedule Date")).Date,
+                            .DependencyTaskOrder = Nothing,
+                            .DependencyType = "FS",
+                            .UpdatedOn = If(reader("Planned On") Is DBNull.Value, Date.Now, CDate(reader("Planned On")))
+                        })
+                    End While
+                End Using
+            End Using
+
+            If rows.Count = 0 Then
+                Return Nothing
+            End If
+
+            Dim snapshot As New ProjectSnapshot With {
+                .ProjectName = projectInfo.ProjectName,
+                .VersionNumber = projectInfo.VersionNumber,
+                .ProjectSize = projectInfo.ProjectSize,
+                .ProjectType = projectInfo.ProjectType,
+                .ResourceHours = rows.Sum(Function(row) row.AssignedHours),
+                .UpdatedOn = rows.Max(Function(row) row.UpdatedOn)
+            }
+
+            For Each taskGroup In rows.GroupBy(Function(row) row.TaskOrder).OrderBy(Function(group) group.Key)
+                Dim taskRows = taskGroup.OrderBy(Function(row) row.WorkDate).ToList()
+                Dim taskNames = taskRows.
+                    Select(Function(row)
+                               If employeeNames.ContainsKey(row.EmployeeId) Then
+                                   Return employeeNames(row.EmployeeId)
+                               End If
+                               Return "Employee " & row.EmployeeId.ToString(CultureInfo.InvariantCulture)
+                           End Function).
+                    Distinct(StringComparer.OrdinalIgnoreCase).
+                    ToList()
+
+                Dim allocationTotals As New Dictionary(Of String, Decimal)(StringComparer.OrdinalIgnoreCase)
+                Dim dailyAllocations As New Dictionary(Of String, Decimal)(StringComparer.OrdinalIgnoreCase)
+
+                For Each row In taskRows
+                    Dim employeeName = If(employeeNames.ContainsKey(row.EmployeeId), employeeNames(row.EmployeeId), "Employee " & row.EmployeeId.ToString(CultureInfo.InvariantCulture))
+                    If Not allocationTotals.ContainsKey(employeeName) Then
+                        allocationTotals(employeeName) = 0D
+                    End If
+
+                    allocationTotals(employeeName) += row.AssignedHours
+                    dailyAllocations(employeeName.Trim() & "|" & row.WorkDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)) = row.AssignedHours
+                Next
+
+                Dim startDate = taskRows.Min(Function(row) row.WorkDate)
+                Dim finishDate = taskRows.Max(Function(row) row.WorkDate)
+                Dim resourceHours = taskRows.Sum(Function(row) row.AssignedHours)
+
+                snapshot.Tasks.Add(New ScheduleTask With {
+                    .TaskId = taskGroup.Key,
+                    .DatabaseTaskId = taskGroup.Key,
+                    .TaskName = taskRows(0).TaskName,
+                    .StartDate = startDate,
+                    .FinishDate = finishDate,
+                    .DurationDays = Math.Max(0.031D, Math.Round(resourceHours / 8D, 3, MidpointRounding.AwayFromZero)),
+                    .PercentComplete = 0,
+                    .Predecessors = If(taskGroup.Key <= 1, "", (taskGroup.Key - 1).ToString(CultureInfo.InvariantCulture)),
+                    .DependencyType = "FS",
+                    .AssignedTo = String.Join("; ", taskNames),
+                    .AssignmentDate = startDate,
+                    .ResourceNames = String.Join("; ", taskNames),
+                    .ResourceAllocations = BuildResourceAllocationsString(allocationTotals),
+                    .DailyResourceAllocations = BuildDailyAllocationsString(dailyAllocations),
+                    .ResourceHours = resourceHours,
+                    .ModuleId = 0
+                })
+            Next
+
+            snapshot.TotalProjectHours = snapshot.Tasks.Sum(Function(task) task.ResourceHours)
+            snapshot.ResourcesNeeded = rows.Select(Function(row) row.EmployeeId).Distinct().Count()
+            Return snapshot
+        End Using
+    End Function
+
+    Public Function LoadProject(projectName As String) As BindingList(Of ScheduleTask)
+        Dim snapshotFromAssignments = LoadProjectSnapshotByNameFromAssignments(projectName)
+        If snapshotFromAssignments IsNot Nothing AndAlso snapshotFromAssignments.Tasks IsNot Nothing Then
+            Return New BindingList(Of ScheduleTask)(snapshotFromAssignments.Tasks.OrderBy(Function(task) task.TaskId).ToList())
+        End If
+
+        Using connection = CreateConnection()
+            connection.Open()
+            EnsureSchema(connection)
+
+            Using command = connection.CreateCommand()
+                command.CommandText = "SELECT ProjectId FROM dbo.SmaScheduleProjects WHERE ProjectName = @ProjectName"
+                AddParameter(command, "@ProjectName", projectName)
+                Dim projectIdValue = command.ExecuteScalar()
+                If projectIdValue Is Nothing OrElse projectIdValue Is DBNull.Value Then
+                    Return New BindingList(Of ScheduleTask)()
+                End If
+                Return LoadTasksByProjectId(connection, CInt(projectIdValue))
+            End Using
+        End Using
+    End Function
+
+    Public Function LoadResourceAvailability(startDate As Date, finishDate As Date) As Dictionary(Of String, Dictionary(Of Date, Decimal))
+        Dim result As New Dictionary(Of String, Dictionary(Of Date, Decimal))(StringComparer.OrdinalIgnoreCase)
+
+        Using connection = CreateConnection()
+            connection.Open()
+            EnsureSchema(connection)
+
+            If TableHasRows(connection, "dbo.Employee_Capacity") Then
+                LoadAvailabilityFromEmployeeCapacity(connection, result, startDate, finishDate)
+                If result.Count > 0 Then
+                    Return result
+                End If
+            End If
+
+            If TableHasRows(connection, "dbo.EmployeeDailyAvailability") Then
+                LoadAvailabilityFromDailyAvailability(connection, result, startDate, finishDate)
+                If result.Count > 0 Then
+                    Return result
+                End If
+            End If
+
+            Using command = connection.CreateCommand()
+                command.CommandText =
+                    "IF OBJECT_ID('dbo.SmaResourceAvailability', 'U') IS NULL " &
+                    "SELECT CAST(NULL AS NVARCHAR(200)) AS ResourceName, CAST(NULL AS DATE) AS WorkDate, CAST(NULL AS DECIMAL(12,2)) AS AvailableHours WHERE 1 = 0 " &
+                    "ELSE " &
+                    "SELECT ResourceName, WorkDate, AvailableHours FROM dbo.SmaResourceAvailability WHERE WorkDate BETWEEN @StartDate AND @FinishDate ORDER BY ResourceName, WorkDate"
+                AddParameter(command, "@StartDate", startDate.Date)
+                AddParameter(command, "@FinishDate", finishDate.Date)
+
+                Using reader = command.ExecuteReader()
+                    While reader.Read()
+                        If reader("ResourceName") Is DBNull.Value OrElse reader("WorkDate") Is DBNull.Value Then
+                            Continue While
+                        End If
+
+                        Dim resourceName = CStr(reader("ResourceName")).Trim()
+                        If resourceName.Length = 0 Then
+                            Continue While
+                        End If
+
+                        Dim workDate = CDate(reader("WorkDate")).Date
+                        Dim hours = If(reader("AvailableHours") Is DBNull.Value, 8D, CDec(reader("AvailableHours")))
+
+                        Dim byDate As Dictionary(Of Date, Decimal) = Nothing
+                        If Not result.TryGetValue(resourceName, byDate) Then
+                            byDate = New Dictionary(Of Date, Decimal)()
+                            result(resourceName) = byDate
+                        End If
+
+                        byDate(workDate) = Math.Max(0D, hours)
+                    End While
+                End Using
+            End Using
+        End Using
+
+        Return result
+    End Function
+
+    Public Function LoadEmployees() As List(Of String)
+        Dim result As New List(Of String)()
+
+        Using connection = CreateConnection()
+            connection.Open()
+            EnsureSchema(connection)
+
+            If TableExists(connection, "dbo.Employees_Master") Then
+                Using command = connection.CreateCommand()
+                    command.CommandText =
+                        "SELECT DISTINCT LTRIM(RTRIM(firstname)) AS EmployeeName FROM dbo.Employees_Master WHERE ISNULL(Active, 1) = 1 AND ISNULL(LTRIM(RTRIM(firstname)), '') <> '' ORDER BY EmployeeName"
+
+                    Using reader = command.ExecuteReader()
+                        While reader.Read()
+                            If reader("EmployeeName") Is DBNull.Value Then
+                                Continue While
+                            End If
+
+                            Dim employeeName = CStr(reader("EmployeeName")).Trim()
+                            If employeeName.Length > 0 Then
+                                result.Add(employeeName)
+                            End If
+                        End While
+                    End Using
+                End Using
+
+                Return result.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(Function(name) name, StringComparer.OrdinalIgnoreCase).ToList()
+            End If
+
+            If Not TableExists(connection, "dbo.Employees") Then
+                Return result
+            End If
+
+            Using command = connection.CreateCommand()
+                command.CommandText =
+                    "IF COL_LENGTH('dbo.Employees', 'EmployeeName') IS NOT NULL " &
+                    "SELECT DISTINCT LTRIM(RTRIM(EmployeeName)) AS EmployeeName FROM dbo.Employees WHERE ISNULL(LTRIM(RTRIM(EmployeeName)), '') <> '' ORDER BY EmployeeName " &
+                    "ELSE IF COL_LENGTH('dbo.Employees', 'firstname') IS NOT NULL " &
+                    "SELECT DISTINCT LTRIM(RTRIM(firstname)) AS EmployeeName FROM dbo.Employees WHERE ISNULL(LTRIM(RTRIM(firstname)), '') <> '' ORDER BY firstname " &
+                    "ELSE " &
+                    "SELECT CAST(NULL AS NVARCHAR(200)) AS EmployeeName WHERE 1 = 0"
+
+                Using reader = command.ExecuteReader()
+                    While reader.Read()
+                        If reader("EmployeeName") Is DBNull.Value Then
+                            Continue While
+                        End If
+
+                        Dim employeeName = CStr(reader("EmployeeName")).Trim()
+                        If employeeName.Length > 0 Then
+                            result.Add(employeeName)
+                        End If
+                    End While
+                End Using
+            End Using
+        End Using
+
+        Return result.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(Function(name) name, StringComparer.OrdinalIgnoreCase).ToList()
+    End Function
+
+    Public Function LoadTaskCatalog() As List(Of TaskCatalogItem)
+        Return LoadTaskTemplates("", "")
+    End Function
+
+    Public Function LoadTaskTemplates(templateName As String, projectSize As String, Optional reportType As String = "") As List(Of TaskCatalogItem)
+        Dim result As New List(Of TaskCatalogItem)()
+
+        Using connection = CreateConnection()
+            connection.Open()
+            EnsureSchema(connection)
+
+            Dim taskTemplateTable = ResolveTaskTemplateTable(connection)
+            If taskTemplateTable.Length = 0 Then
+                Return result
+            End If
+
+            If Not ColumnExists(connection, taskTemplateTable, "Task ID") Then
+                Return result
+            End If
+
+            Return LoadTaskTemplatesFromDatabaseDesign(connection, taskTemplateTable, templateName, projectSize, reportType)
+        End Using
+
+        Return result
+    End Function
+
+    Public Function LoadTemplateProjects(Optional searchText As String = "") As List(Of LiveProjectItem)
+        Dim result As New List(Of LiveProjectItem)()
+
+        Using connection = CreateConnection()
+            connection.Open()
+            EnsureSchema(connection)
+
+            Dim taskTemplateTable = ResolveTaskTemplateTable(connection)
+            If taskTemplateTable.Length = 0 Then
+                Return result
+            End If
+
+            If Not ColumnExists(connection, taskTemplateTable, "Task ID") Then
+                Return result
+            End If
+
+            Using command = connection.CreateCommand()
+                command.CommandText =
+                    "SELECT DISTINCT ISNULL([Project Type], 'New') AS ProjectType " &
+                    "FROM " & SqlTableName(taskTemplateTable) & " " &
+                    "WHERE ISNULL(IsActive, 1) = 1 " &
+                    "AND (@SearchText = '' OR ISNULL([Project Type], 'New') LIKE '%' + @SearchText + '%') " &
+                    "ORDER BY ISNULL([Project Type], 'New')"
+                AddParameter(command, "@SearchText", If(searchText, "").Trim())
+
+                Using reader = command.ExecuteReader()
+                    While reader.Read()
+                        Dim projectType = If(reader("ProjectType") Is DBNull.Value, "New", CStr(reader("ProjectType")).Trim())
+                        If projectType.Length = 0 Then
+                            projectType = "New"
+                        End If
+
+                        result.Add(New LiveProjectItem With {
+                            .ProjectCode = "TPL-" & MakeSafeCode(projectType),
+                            .ProjectName = projectType & " Project Template",
+                            .ClientName = "SQL Template",
+                            .VersionNumber = "1.0",
+                            .ProjectSize = "Small",
+                            .TemplateName = projectType,
+                            .ProjectType = projectType,
+                            .ReportType = projectType
+                        })
+                    End While
+                End Using
+            End Using
+        End Using
+
+        Return result
+    End Function
+
+    Private Function LoadTaskTemplatesFromDatabaseDesign(connection As IDbConnection, tableName As String, projectType As String, projectSize As String, reportType As String) As List(Of TaskCatalogItem)
+        Dim result As New List(Of TaskCatalogItem)()
+        Dim projectTypeFilter = If(projectType, "").Trim()
+        Dim allowedReports = AllowedTaskReportTypes(reportType)
+
+        Using command = connection.CreateCommand()
+            command.CommandText =
+                "SELECT [Task ID], [Task Name], [Small (hrs)], [Medium (hrs)], [Large (hrs)], [Very Large (hrs)], [Project Type], [Task Order], [IsActive], [Stage], [Responsibity], [Type of Report] " &
+                "FROM " & SqlTableName(tableName) & " " &
+                "WHERE ISNULL([IsActive], 1) = 1 " &
+                "AND (@ProjectType = '' OR ISNULL([Project Type], 'New') = @ProjectType) " &
+                "AND (@ReportFilter = '' OR ISNULL([Type of Report], 'ALL') IN (" & SqlInList(allowedReports) & ")) " &
+                "ORDER BY [Task Order], [Task ID]"
+            AddParameter(command, "@ProjectType", projectTypeFilter)
+            AddParameter(command, "@ReportFilter", If(allowedReports.Count = 0, "", "1"))
+
+            Using reader = command.ExecuteReader()
+                While reader.Read()
+                    Dim taskName = Convert.ToString(reader("Task Name"), CultureInfo.InvariantCulture).Trim()
+                    If taskName.Length = 0 Then
+                        Continue While
+                    End If
+
+                    result.Add(New TaskCatalogItem With {
+                        .DatabaseTaskId = If(reader("Task ID") Is DBNull.Value, 0, CInt(reader("Task ID"))),
+                        .Title = taskName,
+                        .Predecessor = "Previous Task",
+                        .DependencyType = "FS",
+                        .Summary = If(reader("Stage") Is DBNull.Value, "", CStr(reader("Stage"))),
+                        .SmallHours = If(reader("Small (hrs)") Is DBNull.Value, 0D, CDec(reader("Small (hrs)"))),
+                        .MediumHours = If(reader("Medium (hrs)") Is DBNull.Value, 0D, CDec(reader("Medium (hrs)"))),
+                        .LargeHours = If(reader("Large (hrs)") Is DBNull.Value, 0D, CDec(reader("Large (hrs)"))),
+                        .VeryLargeHours = If(reader("Very Large (hrs)") Is DBNull.Value, 0D, CDec(reader("Very Large (hrs)"))),
+                        .Assignee = If(reader("Responsibity") Is DBNull.Value, "", CStr(reader("Responsibity"))),
+                        .ModuleId = 0,
+                        .ProjectType = If(reader("Project Type") Is DBNull.Value, "", CStr(reader("Project Type"))),
+                        .TypeOfReport = If(reader("Type of Report") Is DBNull.Value, "", CStr(reader("Type of Report"))),
+                        .TaskOrder = If(reader("Task Order") Is DBNull.Value, 0, CInt(reader("Task Order")))
+                    })
+                End While
+            End Using
+        End Using
+
+        Return result
+    End Function
+
+    Private Function LoadTasksByProjectId(connection As IDbConnection, projectId As Integer) As BindingList(Of ScheduleTask)
+        Dim tasks As New BindingList(Of ScheduleTask)
+        Using command = connection.CreateCommand()
+            command.CommandText = "SELECT TaskId, DatabaseTaskId, TaskName, StartDate, DurationDays, FinishDate, PercentComplete, Predecessors, DependencyType, AssignedTo, AssignmentDate, ResourceNames, ResourceAllocations, DailyResourceAllocations, ResourceHours, ModuleId, PlannerTaskId FROM dbo.SmaScheduleTasks WHERE ProjectId = @ProjectId ORDER BY TaskId"
+            AddParameter(command, "@ProjectId", projectId)
+
+            Using reader = command.ExecuteReader()
+                While reader.Read()
+                    tasks.Add(New ScheduleTask With {
+                        .TaskId = CInt(reader("TaskId")),
+                        .DatabaseTaskId = If(reader("DatabaseTaskId") Is DBNull.Value, 0, CInt(reader("DatabaseTaskId"))),
+                        .TaskName = CStr(reader("TaskName")),
+                        .StartDate = CDate(reader("StartDate")),
+                        .DurationDays = If(reader("DurationDays") Is DBNull.Value, 0D, CDec(reader("DurationDays"))),
+                        .FinishDate = CDate(reader("FinishDate")),
+                        .PercentComplete = CInt(reader("PercentComplete")),
+                        .Predecessors = If(reader("Predecessors") Is DBNull.Value, "", CStr(reader("Predecessors"))),
+                        .DependencyType = If(reader("DependencyType") Is DBNull.Value, "FS", CStr(reader("DependencyType"))),
+                        .AssignedTo = If(reader("AssignedTo") Is DBNull.Value, "", CStr(reader("AssignedTo"))),
+                        .AssignmentDate = If(reader("AssignmentDate") Is DBNull.Value, CDate(reader("StartDate")), CDate(reader("AssignmentDate"))),
+                        .ResourceNames = If(reader("ResourceNames") Is DBNull.Value, "", CStr(reader("ResourceNames"))),
+                        .ResourceAllocations = If(reader("ResourceAllocations") Is DBNull.Value, "", CStr(reader("ResourceAllocations"))),
+                        .DailyResourceAllocations = If(reader("DailyResourceAllocations") Is DBNull.Value, "", CStr(reader("DailyResourceAllocations"))),
+                        .ResourceHours = If(reader("ResourceHours") Is DBNull.Value, 0D, CDec(reader("ResourceHours"))),
+                        .ModuleId = If(reader("ModuleId") Is DBNull.Value, 0, CInt(reader("ModuleId"))),
+                        .PlannerTaskId = If(reader("PlannerTaskId") Is DBNull.Value, "", CStr(reader("PlannerTaskId")))
+                    })
+                End While
+            End Using
+        End Using
+
+        Return tasks
+    End Function
+
+    Private Function CreateConnection() As IDbConnection
+        Dim connectionType = ResolveSqlConnectionType()
+        Dim connection = DirectCast(Activator.CreateInstance(connectionType), IDbConnection)
+        connection.ConnectionString = _connectionString
+        Return connection
+    End Function
+
+    Private Function ResolveSqlConnectionType() As Type
+        For Each name In {"Microsoft.Data.SqlClient.SqlConnection, Microsoft.Data.SqlClient", "System.Data.SqlClient.SqlConnection, System.Data.SqlClient"}
+            Dim resolved = Type.GetType(name, False)
+            If resolved IsNot Nothing Then
+                Return resolved
+            End If
+        Next
+
+        Throw New InvalidOperationException("No SQL Server provider was found. Add Microsoft.Data.SqlClient to the project or install the SQL Server client provider on this machine.")
+    End Function
+
+    Private Sub EnsureSchema(connection As IDbConnection)
+        Execute(connection,
+                "IF OBJECT_ID('dbo.Task_Template', 'U') IS NULL CREATE TABLE dbo.Task_Template ([Task ID] INT NOT NULL PRIMARY KEY, [Task Name] NVARCHAR(300) NOT NULL, [Small (hrs)] DECIMAL(12,3) NULL, [Medium (hrs)] DECIMAL(12,3) NULL, [Large (hrs)] DECIMAL(12,3) NULL, [Very Large (hrs)] DECIMAL(12,3) NULL, [Project Type] NVARCHAR(50) NULL, [Task Order] INT NULL, [IsActive] BIT NOT NULL DEFAULT 1, [Stage] NVARCHAR(200) NULL, [Responsibity] NVARCHAR(200) NULL, [Type of Report] NVARCHAR(100) NULL)",
+                Nothing)
+        Execute(connection,
+                "IF OBJECT_ID('dbo.EmployeeDailyAvailability', 'U') IS NULL CREATE TABLE dbo.EmployeeDailyAvailability (Id INT IDENTITY(1,1) NOT NULL PRIMARY KEY, EmployeeId INT NOT NULL, WorkDate DATE NOT NULL, DefaultHours DECIMAL(5,2) NOT NULL DEFAULT 8, LeaveHours DECIMAL(5,2) NOT NULL DEFAULT 0, AvailableHours DECIMAL(5,2) NOT NULL DEFAULT 8, EntryType NVARCHAR(50) NULL, Remarks NVARCHAR(300) NULL, UpdatedOn DATETIME NULL, UpdatedBy NVARCHAR(100) NULL, CONSTRAINT UQ_EmployeeDailyAvailability UNIQUE(EmployeeId, WorkDate))",
+                Nothing)
+        Execute(connection,
+                "IF OBJECT_ID('dbo.TaskAssignment', 'U') IS NULL CREATE TABLE dbo.TaskAssignment (AssignmentId INT IDENTITY(1,1) NOT NULL PRIMARY KEY, ProjectId INT NOT NULL, ProjectName NVARCHAR(200) NOT NULL, VersionNumber NVARCHAR(50) NULL, ProjectSize NVARCHAR(50) NULL, ProjectType NVARCHAR(50) NULL, TaskId INT NOT NULL, TaskName NVARCHAR(300) NOT NULL, TaskOrder INT NOT NULL, EmployeeId INT NOT NULL, WorkDate DATE NOT NULL, AssignedHours DECIMAL(12,2) NOT NULL DEFAULT 0, StartDate DATE NULL, FinishDate DATE NULL, DependencyTaskOrder INT NULL, DependencyType NVARCHAR(2) NULL, Remarks NVARCHAR(300) NULL, UpdatedOn DATETIME NOT NULL DEFAULT GETDATE(), UpdatedBy NVARCHAR(100) NULL)",
+                Nothing)
+        Execute(connection,
+                "IF OBJECT_ID('dbo.SmaScheduleProjects', 'U') IS NULL CREATE TABLE dbo.SmaScheduleProjects (ProjectId INT IDENTITY(1,1) NOT NULL PRIMARY KEY, ProjectName NVARCHAR(200) NOT NULL UNIQUE, ProjectVersion NVARCHAR(50) NOT NULL DEFAULT '1.0', ProjectSize NVARCHAR(50) NULL, ProjectType NVARCHAR(50) NULL, TotalProjectHours DECIMAL(12,2) NOT NULL DEFAULT 0, ResourcesNeeded INT NOT NULL DEFAULT 0, ResourceHours DECIMAL(12,2) NOT NULL DEFAULT 0, CreatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(), UpdatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME())",
+                Nothing)
+        Execute(connection,
+                "IF OBJECT_ID('dbo.SmaScheduleTasks', 'U') IS NULL CREATE TABLE dbo.SmaScheduleTasks (Id INT IDENTITY(1,1) NOT NULL PRIMARY KEY, ProjectId INT NOT NULL, TaskId INT NOT NULL, DatabaseTaskId INT NULL, TaskName NVARCHAR(300) NOT NULL, StartDate DATE NOT NULL, DurationDays DECIMAL(12,3) NOT NULL, FinishDate DATE NOT NULL, PercentComplete INT NOT NULL, Predecessors NVARCHAR(200) NULL, DependencyType NVARCHAR(2) NOT NULL DEFAULT 'FS', AssignedTo NVARCHAR(200) NULL, AssignmentDate DATE NULL, ResourceNames NVARCHAR(500) NULL, ResourceAllocations NVARCHAR(1000) NULL, DailyResourceAllocations NVARCHAR(MAX) NULL, ResourceHours DECIMAL(12,2) NOT NULL DEFAULT 0, ModuleId INT NULL, PlannerTaskId NVARCHAR(200) NULL, CONSTRAINT FK_SmaScheduleTasks_Project FOREIGN KEY(ProjectId) REFERENCES dbo.SmaScheduleProjects(ProjectId), CONSTRAINT UQ_SmaScheduleTasks_Project_Task UNIQUE(ProjectId, TaskId))",
+                Nothing)
+        Execute(connection,
+                "IF OBJECT_ID('dbo.SmaScheduleProjects', 'U') IS NOT NULL AND COL_LENGTH('dbo.SmaScheduleProjects', 'ProjectSize') IS NULL ALTER TABLE dbo.SmaScheduleProjects ADD ProjectSize NVARCHAR(50) NULL",
+                Nothing)
+        Execute(connection,
+                "IF OBJECT_ID('dbo.SmaScheduleProjects', 'U') IS NOT NULL AND COL_LENGTH('dbo.SmaScheduleProjects', 'ProjectType') IS NULL ALTER TABLE dbo.SmaScheduleProjects ADD ProjectType NVARCHAR(50) NULL",
+                Nothing)
+        Execute(connection,
+                "IF OBJECT_ID('dbo.SmaScheduleTasks', 'U') IS NOT NULL AND COL_LENGTH('dbo.SmaScheduleTasks', 'DependencyType') IS NULL ALTER TABLE dbo.SmaScheduleTasks ADD DependencyType NVARCHAR(2) NOT NULL CONSTRAINT DF_SmaScheduleTasks_DependencyType DEFAULT 'FS'",
+                Nothing)
+        Execute(connection,
+                "IF OBJECT_ID('dbo.SmaScheduleTasks', 'U') IS NOT NULL AND COL_LENGTH('dbo.SmaScheduleTasks', 'DailyResourceAllocations') IS NULL ALTER TABLE dbo.SmaScheduleTasks ADD DailyResourceAllocations NVARCHAR(MAX) NULL",
+                Nothing)
+        Execute(connection,
+                "IF OBJECT_ID('dbo.SmaResourceAvailability', 'U') IS NULL CREATE TABLE dbo.SmaResourceAvailability (Id INT IDENTITY(1,1) NOT NULL PRIMARY KEY, ResourceName NVARCHAR(200) NOT NULL, WorkDate DATE NOT NULL, AvailableHours DECIMAL(12,2) NOT NULL DEFAULT 8, UpdatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(), CONSTRAINT UQ_SmaResourceAvailability UNIQUE(ResourceName, WorkDate))",
+                Nothing)
+    End Sub
+
+    Private Function GetOrCreateProject(connection As IDbConnection, projectName As String, projectVersion As String, projectSize As String, projectType As String, totalProjectHours As Decimal, resourcesNeeded As Integer, resourceHours As Decimal) As Integer
+        Execute(connection,
+                "IF NOT EXISTS (SELECT 1 FROM dbo.SmaScheduleProjects WHERE ProjectName = @ProjectName) INSERT INTO dbo.SmaScheduleProjects (ProjectName, ProjectVersion, ProjectSize, ProjectType, TotalProjectHours, ResourcesNeeded, ResourceHours) VALUES (@ProjectName, @ProjectVersion, @ProjectSize, @ProjectType, @TotalProjectHours, @ResourcesNeeded, @ResourceHours) ELSE UPDATE dbo.SmaScheduleProjects SET ProjectVersion = @ProjectVersion, ProjectSize = @ProjectSize, ProjectType = @ProjectType, TotalProjectHours = @TotalProjectHours, ResourcesNeeded = @ResourcesNeeded, ResourceHours = @ResourceHours, UpdatedAt = SYSUTCDATETIME() WHERE ProjectName = @ProjectName",
+                New Dictionary(Of String, Object) From {
+                    {"@ProjectName", projectName},
+                    {"@ProjectVersion", If(String.IsNullOrWhiteSpace(projectVersion), "1.0", projectVersion)},
+                    {"@ProjectSize", If(String.IsNullOrWhiteSpace(projectSize), "Small", projectSize)},
+                    {"@ProjectType", If(String.IsNullOrWhiteSpace(projectType), "New", projectType)},
+                    {"@TotalProjectHours", totalProjectHours},
+                    {"@ResourcesNeeded", resourcesNeeded},
+                    {"@ResourceHours", resourceHours}
+                })
+
+        Using command = connection.CreateCommand()
+            command.CommandText = "SELECT ProjectId FROM dbo.SmaScheduleProjects WHERE ProjectName = @ProjectName"
+            AddParameter(command, "@ProjectName", projectName)
+            Return CInt(command.ExecuteScalar())
+        End Using
+    End Function
+
+    Private Function ListProjectsFromAssignments(maxResults As Integer) As List(Of ProjectLibraryItem)
+        Dim projects As New List(Of ProjectLibraryItem)()
+
+        Using connection = CreateConnection()
+            connection.Open()
+            EnsureSchema(connection)
+
+            If Not TableHasRows(connection, "dbo.TaskAssignment") Then
+                Return projects
+            End If
+
+            Using command = connection.CreateCommand()
+                command.CommandText =
+                    "SELECT TOP " & Math.Max(1, maxResults).ToString(CultureInfo.InvariantCulture) & " " &
+                    "ProjectId, ProjectName, ISNULL(VersionNumber, '1.0') AS VersionNumber, ISNULL(ProjectSize, 'Small') AS ProjectSize, ISNULL(ProjectType, 'New') AS ProjectType, " &
+                    "COUNT(DISTINCT TaskId) AS TaskCount, SUM(AssignedHours) AS ResourceHours, MIN(ISNULL(StartDate, WorkDate)) AS StartDate, MAX(ISNULL(FinishDate, WorkDate)) AS FinishDate, MAX(UpdatedOn) AS UpdatedOn " &
+                    "FROM dbo.TaskAssignment GROUP BY ProjectId, ProjectName, VersionNumber, ProjectSize, ProjectType ORDER BY MAX(UpdatedOn) DESC, ProjectId DESC"
+
+                Using reader = command.ExecuteReader()
+                    While reader.Read()
+                        Dim item As New ProjectLibraryItem With {
+                            .ProjectId = CInt(reader("ProjectId")),
+                            .ProjectName = CStr(reader("ProjectName")),
+                            .VersionNumber = If(reader("VersionNumber") Is DBNull.Value, "1.0", CStr(reader("VersionNumber"))),
+                            .ProjectSize = If(reader("ProjectSize") Is DBNull.Value, "Small", CStr(reader("ProjectSize"))),
+                            .ProjectType = If(reader("ProjectType") Is DBNull.Value, "New", CStr(reader("ProjectType"))),
+                            .TaskCount = If(reader("TaskCount") Is DBNull.Value, 0, CInt(reader("TaskCount"))),
+                            .ResourceHours = If(reader("ResourceHours") Is DBNull.Value, 0D, CDec(reader("ResourceHours"))),
+                            .UpdatedOn = If(reader("UpdatedOn") Is DBNull.Value, Date.Now, CDate(reader("UpdatedOn")))
+                        }
+
+                        If reader("StartDate") IsNot DBNull.Value Then
+                            item.StartDate = CDate(reader("StartDate")).Date
+                            item.StartDateText = item.StartDate.Value.ToString("dd-MMM-yyyy", CultureInfo.InvariantCulture)
+                        End If
+
+                        If reader("FinishDate") IsNot DBNull.Value Then
+                            item.FinishDate = CDate(reader("FinishDate")).Date
+                            item.FinishDateText = item.FinishDate.Value.ToString("dd-MMM-yyyy", CultureInfo.InvariantCulture)
+                        End If
+
+                        projects.Add(item)
+                    End While
+                End Using
+            End Using
+        End Using
+
+        Return projects
+    End Function
+
+    Private Function LoadProjectSnapshotFromAssignments(projectId As Integer) As ProjectSnapshot
+        Using connection = CreateConnection()
+            connection.Open()
+            EnsureSchema(connection)
+
+            If Not TableHasRows(connection, "dbo.TaskAssignment") Then
+                Return Nothing
+            End If
+
+            Return LoadProjectSnapshotFromAssignments(connection, projectId)
+        End Using
+    End Function
+
+    Private Function LoadProjectSnapshotByNameFromAssignments(projectName As String) As ProjectSnapshot
+        Using connection = CreateConnection()
+            connection.Open()
+            EnsureSchema(connection)
+
+            If Not TableHasRows(connection, "dbo.TaskAssignment") Then
+                Return Nothing
+            End If
+
+            Using command = connection.CreateCommand()
+                command.CommandText = "SELECT TOP 1 ProjectId FROM dbo.TaskAssignment WHERE ProjectName = @ProjectName ORDER BY UpdatedOn DESC"
+                AddParameter(command, "@ProjectName", projectName)
+                Dim value = command.ExecuteScalar()
+                If value Is Nothing OrElse value Is DBNull.Value Then
+                    Return Nothing
+                End If
+
+                Return LoadProjectSnapshotFromAssignments(connection, CInt(value))
+            End Using
+        End Using
+    End Function
+
+    Private Function LoadProjectSnapshotFromAssignments(connection As IDbConnection, projectId As Integer) As ProjectSnapshot
+        Using command = connection.CreateCommand()
+            command.CommandText =
+                "SELECT ProjectId, ProjectName, ISNULL(VersionNumber, '1.0') AS VersionNumber, ISNULL(ProjectSize, 'Small') AS ProjectSize, ISNULL(ProjectType, 'New') AS ProjectType, " &
+                "TaskId, TaskName, TaskOrder, EmployeeId, WorkDate, AssignedHours, StartDate, FinishDate, DependencyTaskOrder, DependencyType, UpdatedOn " &
+                "FROM dbo.TaskAssignment WHERE ProjectId = @ProjectId ORDER BY TaskOrder, WorkDate, EmployeeId"
+            AddParameter(command, "@ProjectId", projectId)
+
+            Dim rows As New List(Of AssignmentSnapshotRow)()
+            Using reader = command.ExecuteReader()
+                While reader.Read()
+                    rows.Add(New AssignmentSnapshotRow With {
+                        .ProjectId = CInt(reader("ProjectId")),
+                        .ProjectName = CStr(reader("ProjectName")),
+                        .VersionNumber = If(reader("VersionNumber") Is DBNull.Value, "1.0", CStr(reader("VersionNumber"))),
+                        .ProjectSize = If(reader("ProjectSize") Is DBNull.Value, "Small", CStr(reader("ProjectSize"))),
+                        .ProjectType = If(reader("ProjectType") Is DBNull.Value, "New", CStr(reader("ProjectType"))),
+                        .TaskId = CInt(reader("TaskId")),
+                        .TaskName = CStr(reader("TaskName")),
+                        .TaskOrder = CInt(reader("TaskOrder")),
+                        .EmployeeId = CInt(reader("EmployeeId")),
+                        .WorkDate = CDate(reader("WorkDate")).Date,
+                        .AssignedHours = If(reader("AssignedHours") Is DBNull.Value, 0D, CDec(reader("AssignedHours"))),
+                        .StartDate = If(reader("StartDate") Is DBNull.Value, CType(Nothing, Date?), CDate(reader("StartDate")).Date),
+                        .FinishDate = If(reader("FinishDate") Is DBNull.Value, CType(Nothing, Date?), CDate(reader("FinishDate")).Date),
+                        .DependencyTaskOrder = If(reader("DependencyTaskOrder") Is DBNull.Value, CType(Nothing, Integer?), CInt(reader("DependencyTaskOrder"))),
+                        .DependencyType = If(reader("DependencyType") Is DBNull.Value, "FS", CStr(reader("DependencyType"))),
+                        .UpdatedOn = If(reader("UpdatedOn") Is DBNull.Value, Date.Now, CDate(reader("UpdatedOn")))
+                    })
+                End While
+            End Using
+
+            If rows.Count = 0 Then
+                Return Nothing
+            End If
+
+            Dim employeeNames = LoadEmployeeNameLookup(connection)
+            Dim firstRow = rows(0)
+            Dim snapshot As New ProjectSnapshot With {
+                .ProjectName = firstRow.ProjectName,
+                .VersionNumber = firstRow.VersionNumber,
+                .ProjectSize = firstRow.ProjectSize,
+                .ProjectType = firstRow.ProjectType,
+                .ResourceHours = rows.Sum(Function(row) row.AssignedHours),
+                .UpdatedOn = rows.Max(Function(row) row.UpdatedOn)
+            }
+
+            Dim groupedTasks = rows.GroupBy(Function(row) row.TaskId).OrderBy(Function(group) group.Min(Function(item) item.TaskOrder))
+            For Each taskGroup In groupedTasks
+                Dim taskRows = taskGroup.OrderBy(Function(item) item.WorkDate).ToList()
+                Dim taskNames = taskRows.
+                    Select(Function(row)
+                               If employeeNames.ContainsKey(row.EmployeeId) Then
+                                   Return employeeNames(row.EmployeeId)
+                               End If
+                               Return "Employee " & row.EmployeeId.ToString(CultureInfo.InvariantCulture)
+                           End Function).
+                    Distinct(StringComparer.OrdinalIgnoreCase).
+                    ToList()
+
+                Dim allocationTotals As New Dictionary(Of String, Decimal)(StringComparer.OrdinalIgnoreCase)
+                Dim dailyAllocations As New Dictionary(Of String, Decimal)(StringComparer.OrdinalIgnoreCase)
+
+                For Each row In taskRows
+                    Dim employeeName = If(employeeNames.ContainsKey(row.EmployeeId), employeeNames(row.EmployeeId), "Employee " & row.EmployeeId.ToString(CultureInfo.InvariantCulture))
+                    If Not allocationTotals.ContainsKey(employeeName) Then
+                        allocationTotals(employeeName) = 0D
+                    End If
+                    allocationTotals(employeeName) += row.AssignedHours
+                    dailyAllocations(employeeName.Trim() & "|" & row.WorkDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)) = row.AssignedHours
+                Next
+
+                Dim predecessors = taskRows.
+                    Where(Function(row) row.DependencyTaskOrder.HasValue).
+                    Select(Function(row) row.DependencyTaskOrder.Value.ToString(CultureInfo.InvariantCulture)).
+                    Distinct().
+                    ToList()
+
+                snapshot.Tasks.Add(New ScheduleTask With {
+                    .TaskId = taskGroup.Key,
+                    .DatabaseTaskId = taskGroup.Key,
+                    .TaskName = taskRows(0).TaskName,
+                    .StartDate = taskRows.Min(Function(row) If(row.StartDate.HasValue, row.StartDate.Value, row.WorkDate)),
+                    .FinishDate = taskRows.Max(Function(row) If(row.FinishDate.HasValue, row.FinishDate.Value, row.WorkDate)),
+                    .DurationDays = taskRows.Max(Function(row) If(row.FinishDate.HasValue, row.FinishDate.Value, row.WorkDate)).Subtract(taskRows.Min(Function(row) If(row.StartDate.HasValue, row.StartDate.Value, row.WorkDate))).Days + 1D,
+                    .PercentComplete = 0,
+                    .Predecessors = String.Join(",", predecessors),
+                    .DependencyType = taskRows.Select(Function(row) If(String.IsNullOrWhiteSpace(row.DependencyType), "FS", row.DependencyType)).FirstOrDefault(),
+                    .AssignedTo = String.Join("; ", taskNames),
+                    .AssignmentDate = taskRows.Min(Function(row) row.WorkDate),
+                    .ResourceNames = String.Join("; ", taskNames),
+                    .ResourceAllocations = BuildResourceAllocationsString(allocationTotals),
+                    .DailyResourceAllocations = BuildDailyAllocationsString(dailyAllocations),
+                    .ResourceHours = taskRows.Sum(Function(row) row.AssignedHours),
+                    .ModuleId = 0
+                })
+            Next
+
+            If snapshot.Tasks.Count > 0 Then
+                snapshot.TotalProjectHours = snapshot.Tasks.Sum(Function(task) task.ResourceHours)
+                snapshot.ResourcesNeeded = rows.Select(Function(row) row.EmployeeId).Distinct().Count()
+            End If
+
+            Return snapshot
+        End Using
+    End Function
+
+    Private Sub SaveTaskAssignments(connection As IDbConnection, projectId As Integer, projectName As String, projectVersion As String, projectSize As String, projectType As String, tasks As BindingList(Of ScheduleTask))
+        Dim employeeLookup = LoadEmployeeIdLookup(connection)
+        Dim missingEmployees As New List(Of String)()
+
+        For Each task In tasks
+            Dim assignmentRows = BuildTaskAssignmentRows(task)
+            For Each assignmentRow In assignmentRows
+                If String.IsNullOrWhiteSpace(assignmentRow.EmployeeName) Then
+                    Continue For
+                End If
+
+                If Not employeeLookup.ContainsKey(assignmentRow.EmployeeName) Then
+                    If Not missingEmployees.Contains(assignmentRow.EmployeeName, StringComparer.OrdinalIgnoreCase) Then
+                        missingEmployees.Add(assignmentRow.EmployeeName)
+                    End If
+                    Continue For
+                End If
+
+                Execute(connection,
+                        "INSERT INTO dbo.TaskAssignment (ProjectId, ProjectName, VersionNumber, ProjectSize, ProjectType, TaskId, TaskName, TaskOrder, EmployeeId, WorkDate, AssignedHours, StartDate, FinishDate, DependencyTaskOrder, DependencyType, Remarks, UpdatedOn, UpdatedBy) " &
+                        "VALUES (@ProjectId, @ProjectName, @VersionNumber, @ProjectSize, @ProjectType, @TaskId, @TaskName, @TaskOrder, @EmployeeId, @WorkDate, @AssignedHours, @StartDate, @FinishDate, @DependencyTaskOrder, @DependencyType, @Remarks, GETDATE(), @UpdatedBy)",
+                        New Dictionary(Of String, Object) From {
+                            {"@ProjectId", projectId},
+                            {"@ProjectName", projectName},
+                            {"@VersionNumber", If(String.IsNullOrWhiteSpace(projectVersion), "1.0", projectVersion)},
+                            {"@ProjectSize", If(String.IsNullOrWhiteSpace(projectSize), "Small", projectSize)},
+                            {"@ProjectType", If(String.IsNullOrWhiteSpace(projectType), "New", projectType)},
+                            {"@TaskId", task.TaskId},
+                            {"@TaskName", task.TaskName},
+                            {"@TaskOrder", task.TaskId},
+                            {"@EmployeeId", employeeLookup(assignmentRow.EmployeeName)},
+                            {"@WorkDate", assignmentRow.WorkDate},
+                            {"@AssignedHours", assignmentRow.AssignedHours},
+                            {"@StartDate", task.StartDate},
+                            {"@FinishDate", task.FinishDate},
+                            {"@DependencyTaskOrder", ParseFirstPredecessor(task.Predecessors)},
+                            {"@DependencyType", If(String.IsNullOrWhiteSpace(task.DependencyType), "FS", task.DependencyType)},
+                            {"@Remarks", DBNull.Value},
+                            {"@UpdatedBy", Environment.UserName}
+                        })
+            Next
+        Next
+
+        If missingEmployees.Count > 0 Then
+            Throw New InvalidOperationException("Employee IDs were not found in SQL for: " & String.Join(", ", missingEmployees.OrderBy(Function(name) name, StringComparer.OrdinalIgnoreCase)))
+        End If
+    End Sub
+
+    Private Function BuildTaskAssignmentRows(task As ScheduleTask) As List(Of AssignmentPersistRow)
+        Dim rows As New List(Of AssignmentPersistRow)()
+        If task Is Nothing Then
+            Return rows
+        End If
+
+        Dim daily = ParseDailyAllocations(task.DailyResourceAllocations)
+        If daily.Count = 0 Then
+            daily = BuildFallbackDailyAllocations(task)
+        End If
+
+        For Each item In daily
+            Dim pieces = item.Key.Split({"|"c}, 2, StringSplitOptions.None)
+            If pieces.Length <> 2 Then
+                Continue For
+            End If
+
+            Dim workDate As Date
+            If Not Date.TryParseExact(pieces(1), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, workDate) Then
+                Continue For
+            End If
+
+            rows.Add(New AssignmentPersistRow With {
+                .EmployeeName = pieces(0).Trim(),
+                .WorkDate = workDate.Date,
+                .AssignedHours = Math.Max(0D, item.Value)
+            })
+        Next
+
+        Return rows.Where(Function(row) row.AssignedHours > 0D).ToList()
+    End Function
+
+    Private Function BuildFallbackDailyAllocations(task As ScheduleTask) As Dictionary(Of String, Decimal)
+        Dim result As New Dictionary(Of String, Decimal)(StringComparer.OrdinalIgnoreCase)
+        Dim resourceAllocations = ParseResourceAllocations(task.ResourceAllocations)
+        Dim dates = EnumerateAllDates(task.StartDate.Date, task.FinishDate.Date)
+        If resourceAllocations.Count = 0 OrElse dates.Count = 0 Then
+            Return result
+        End If
+
+        For Each resourceEntry In resourceAllocations
+            Dim remaining = Math.Max(0D, resourceEntry.Value)
+            Dim dailyShare = Math.Round(remaining / dates.Count, 2, MidpointRounding.AwayFromZero)
+            For index = 0 To dates.Count - 1
+                Dim workDate = dates(index)
+                Dim hours = If(index = dates.Count - 1, remaining, dailyShare)
+                hours = Math.Max(0D, Math.Round(hours, 2, MidpointRounding.AwayFromZero))
+                If hours > 0D Then
+                    result(resourceEntry.Key.Trim() & "|" & workDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)) = hours
+                End If
+                remaining -= hours
+            Next
+        Next
+
+        Return result
+    End Function
+
+    Private Function LoadEmployeeIdLookup(connection As IDbConnection) As Dictionary(Of String, Integer)
+        Dim result As New Dictionary(Of String, Integer)(StringComparer.OrdinalIgnoreCase)
+        If TableExists(connection, "dbo.Employees_Master") Then
+            Using command = connection.CreateCommand()
+                command.CommandText =
+                    "SELECT [Office Account], LTRIM(RTRIM(firstname)) AS EmployeeName FROM dbo.Employees_Master WHERE ISNULL(Active, 1) = 1 AND ISNULL(LTRIM(RTRIM(firstname)), '') <> ''"
+
+                Using reader = command.ExecuteReader()
+                    While reader.Read()
+                        If reader("Office Account") Is DBNull.Value OrElse reader("EmployeeName") Is DBNull.Value Then
+                            Continue While
+                        End If
+
+                        Dim employeeName = CStr(reader("EmployeeName")).Trim()
+                        If employeeName.Length > 0 AndAlso Not result.ContainsKey(employeeName) Then
+                            result(employeeName) = CInt(reader("Office Account"))
+                        End If
+                    End While
+                End Using
+            End Using
+
+            Return result
+        End If
+
+        If Not TableExists(connection, "dbo.Employees") Then
+            Return result
+        End If
+
+        Using command = connection.CreateCommand()
+            command.CommandText =
+                "IF COL_LENGTH('dbo.Employees', 'EmployeeName') IS NOT NULL " &
+                "SELECT EmployeeId, LTRIM(RTRIM(EmployeeName)) AS EmployeeName FROM dbo.Employees WHERE ISNULL(LTRIM(RTRIM(EmployeeName)), '') <> '' " &
+                "ELSE IF COL_LENGTH('dbo.Employees', 'firstname') IS NOT NULL " &
+                "SELECT EmployeeId, LTRIM(RTRIM(firstname)) AS EmployeeName FROM dbo.Employees WHERE ISNULL(LTRIM(RTRIM(firstname)), '') <> '' " &
+                "ELSE " &
+                "SELECT CAST(NULL AS INT) AS EmployeeId, CAST(NULL AS NVARCHAR(200)) AS EmployeeName WHERE 1 = 0"
+
+            Using reader = command.ExecuteReader()
+                While reader.Read()
+                    If reader("EmployeeId") Is DBNull.Value OrElse reader("EmployeeName") Is DBNull.Value Then
+                        Continue While
+                    End If
+
+                    Dim employeeName = CStr(reader("EmployeeName")).Trim()
+                    If employeeName.Length > 0 AndAlso Not result.ContainsKey(employeeName) Then
+                        result(employeeName) = CInt(reader("EmployeeId"))
+                    End If
+                End While
+            End Using
+        End Using
+
+        Return result
+    End Function
+
+    Private Function LoadEmployeeNameLookup(connection As IDbConnection) As Dictionary(Of Integer, String)
+        Dim result As New Dictionary(Of Integer, String)()
+        If TableExists(connection, "dbo.Employees_Master") Then
+            Return LoadEmployeeNameLookupFromMaster(connection)
+        End If
+
+        If Not TableExists(connection, "dbo.Employees") Then
+            Return result
+        End If
+
+        Using command = connection.CreateCommand()
+            command.CommandText =
+                "IF COL_LENGTH('dbo.Employees', 'EmployeeName') IS NOT NULL " &
+                "SELECT EmployeeId, LTRIM(RTRIM(EmployeeName)) AS EmployeeName FROM dbo.Employees WHERE ISNULL(LTRIM(RTRIM(EmployeeName)), '') <> '' " &
+                "ELSE IF COL_LENGTH('dbo.Employees', 'firstname') IS NOT NULL " &
+                "SELECT EmployeeId, LTRIM(RTRIM(firstname)) AS EmployeeName FROM dbo.Employees WHERE ISNULL(LTRIM(RTRIM(firstname)), '') <> '' " &
+                "ELSE " &
+                "SELECT CAST(NULL AS INT) AS EmployeeId, CAST(NULL AS NVARCHAR(200)) AS EmployeeName WHERE 1 = 0"
+
+            Using reader = command.ExecuteReader()
+                While reader.Read()
+                    If reader("EmployeeId") Is DBNull.Value OrElse reader("EmployeeName") Is DBNull.Value Then
+                        Continue While
+                    End If
+
+                    Dim employeeId = CInt(reader("EmployeeId"))
+                    If Not result.ContainsKey(employeeId) Then
+                        result(employeeId) = CStr(reader("EmployeeName")).Trim()
+                    End If
+                End While
+            End Using
+        End Using
+
+        Return result
+    End Function
+
+    Private Function LoadEmployeeNameLookupFromMaster(connection As IDbConnection) As Dictionary(Of Integer, String)
+        Dim result As New Dictionary(Of Integer, String)()
+        If Not TableExists(connection, "dbo.Employees_Master") Then
+            Return result
+        End If
+
+        Using command = connection.CreateCommand()
+            command.CommandText =
+                "SELECT [Office Account], LTRIM(RTRIM(firstname)) AS EmployeeName FROM dbo.Employees_Master WHERE ISNULL(Active, 1) = 1 AND ISNULL(LTRIM(RTRIM(firstname)), '') <> ''"
+
+            Using reader = command.ExecuteReader()
+                While reader.Read()
+                    If reader("Office Account") Is DBNull.Value OrElse reader("EmployeeName") Is DBNull.Value Then
+                        Continue While
+                    End If
+
+                    Dim employeeId = CInt(reader("Office Account"))
+                    If Not result.ContainsKey(employeeId) Then
+                        result(employeeId) = CStr(reader("EmployeeName")).Trim()
+                    End If
+                End While
+            End Using
+        End Using
+
+        Return result
+    End Function
+
+    Private Sub LoadAvailabilityFromDailyAvailability(connection As IDbConnection, target As Dictionary(Of String, Dictionary(Of Date, Decimal)), startDate As Date, finishDate As Date)
+        Using command = connection.CreateCommand()
+            command.CommandText =
+                "IF OBJECT_ID('dbo.Employees', 'U') IS NOT NULL AND COL_LENGTH('dbo.Employees', 'EmployeeName') IS NOT NULL " &
+                "SELECT a.EmployeeId, LTRIM(RTRIM(e.EmployeeName)) AS EmployeeName, a.WorkDate, a.AvailableHours FROM dbo.EmployeeDailyAvailability a INNER JOIN dbo.Employees e ON e.EmployeeId = a.EmployeeId WHERE a.WorkDate BETWEEN @StartDate AND @FinishDate " &
+                "ELSE IF OBJECT_ID('dbo.Employees', 'U') IS NOT NULL AND COL_LENGTH('dbo.Employees', 'firstname') IS NOT NULL " &
+                "SELECT a.EmployeeId, LTRIM(RTRIM(e.firstname)) AS EmployeeName, a.WorkDate, a.AvailableHours FROM dbo.EmployeeDailyAvailability a INNER JOIN dbo.Employees e ON e.EmployeeId = a.EmployeeId WHERE a.WorkDate BETWEEN @StartDate AND @FinishDate " &
+                "ELSE " &
+                "SELECT CAST(NULL AS INT) AS EmployeeId, CAST(NULL AS NVARCHAR(200)) AS EmployeeName, CAST(NULL AS DATE) AS WorkDate, CAST(NULL AS DECIMAL(12,2)) AS AvailableHours WHERE 1 = 0"
+            AddParameter(command, "@StartDate", startDate.Date)
+            AddParameter(command, "@FinishDate", finishDate.Date)
+
+            Using reader = command.ExecuteReader()
+                While reader.Read()
+                    If reader("EmployeeName") Is DBNull.Value OrElse reader("WorkDate") Is DBNull.Value Then
+                        Continue While
+                    End If
+
+                    Dim resourceName = CStr(reader("EmployeeName")).Trim()
+                    If resourceName.Length = 0 Then
+                        Continue While
+                    End If
+
+                    Dim workDate = CDate(reader("WorkDate")).Date
+                    Dim hours = If(reader("AvailableHours") Is DBNull.Value, 8D, CDec(reader("AvailableHours")))
+
+                    Dim byDate As Dictionary(Of Date, Decimal) = Nothing
+                    If Not target.TryGetValue(resourceName, byDate) Then
+                        byDate = New Dictionary(Of Date, Decimal)()
+                        target(resourceName) = byDate
+                    End If
+
+                    byDate(workDate) = Math.Max(0D, hours)
+                End While
+            End Using
+        End Using
+    End Sub
+
+    Private Sub LoadAvailabilityFromEmployeeCapacity(connection As IDbConnection, target As Dictionary(Of String, Dictionary(Of Date, Decimal)), startDate As Date, finishDate As Date)
+        Using command = connection.CreateCommand()
+            command.CommandText =
+                "SELECT c.[Employee ID], LTRIM(RTRIM(e.firstname)) AS EmployeeName, c.[Work Date], c.[Available Hours] " &
+                "FROM dbo.Employee_Capacity c " &
+                "INNER JOIN dbo.Employees_Master e ON e.[Office Account] = c.[Employee ID] " &
+                "WHERE ISNULL(e.Active, 1) = 1 AND c.[Work Date] BETWEEN @StartDate AND @FinishDate " &
+                "ORDER BY e.firstname, c.[Work Date]"
+            AddParameter(command, "@StartDate", startDate.Date)
+            AddParameter(command, "@FinishDate", finishDate.Date)
+
+            Using reader = command.ExecuteReader()
+                While reader.Read()
+                    If reader("EmployeeName") Is DBNull.Value OrElse reader("Work Date") Is DBNull.Value Then
+                        Continue While
+                    End If
+
+                    Dim resourceName = CStr(reader("EmployeeName")).Trim()
+                    If resourceName.Length = 0 Then
+                        Continue While
+                    End If
+
+                    Dim workDate = CDate(reader("Work Date")).Date
+                    Dim hours = If(reader("Available Hours") Is DBNull.Value, 8D, CDec(reader("Available Hours")))
+
+                    Dim byDate As Dictionary(Of Date, Decimal) = Nothing
+                    If Not target.TryGetValue(resourceName, byDate) Then
+                        byDate = New Dictionary(Of Date, Decimal)()
+                        target(resourceName) = byDate
+                    End If
+
+                    byDate(workDate) = Math.Max(0D, hours)
+                End While
+            End Using
+        End Using
+    End Sub
+
+    Private Function TableExists(connection As IDbConnection, tableName As String) As Boolean
+        Using command = connection.CreateCommand()
+            command.CommandText = "SELECT CASE WHEN OBJECT_ID('" & tableName & "', 'U') IS NULL THEN 0 ELSE 1 END"
+            Return Convert.ToInt32(command.ExecuteScalar(), CultureInfo.InvariantCulture) = 1
+        End Using
+    End Function
+
+    Private Function ColumnExists(connection As IDbConnection, tableName As String, columnName As String) As Boolean
+        Using command = connection.CreateCommand()
+            command.CommandText = "SELECT CASE WHEN COL_LENGTH(@TableName, @ColumnName) IS NULL THEN 0 ELSE 1 END"
+            AddParameter(command, "@TableName", tableName)
+            AddParameter(command, "@ColumnName", columnName)
+            Return Convert.ToInt32(command.ExecuteScalar(), CultureInfo.InvariantCulture) = 1
+        End Using
+    End Function
+
+    Private Function TableHasRows(connection As IDbConnection, tableName As String) As Boolean
+        If Not TableExists(connection, tableName) Then
+            Return False
+        End If
+
+        Using command = connection.CreateCommand()
+            command.CommandText = "SELECT TOP 1 1 FROM " & SqlTableName(tableName)
+            Dim value = command.ExecuteScalar()
+            Return value IsNot Nothing AndAlso value IsNot DBNull.Value
+        End Using
+    End Function
+
+    Private Function ResolveTaskTemplateTable(connection As IDbConnection) As String
+        If TableExists(connection, "dbo.Task_Template") Then
+            Return "dbo.Task_Template"
+        End If
+
+        Return ""
+    End Function
+
+    Private Shared Function SqlTableName(tableName As String) As String
+        Dim value = If(tableName, "").Trim()
+        If value.Length = 0 Then
+            Return value
+        End If
+
+        Dim parts = value.Split("."c)
+        If parts.Length = 2 Then
+            Return "[" & parts(0).Trim("["c, "]"c) & "].[" & parts(1).Trim("["c, "]"c) & "]"
+        End If
+
+        Return "[" & value.Trim("["c, "]"c) & "]"
+    End Function
+
+    Private Shared Function SqlBoolean(value As Object) As Boolean
+        If value Is Nothing OrElse value Is DBNull.Value Then
+            Return False
+        End If
+
+        If TypeOf value Is Boolean Then
+            Return CBool(value)
+        End If
+
+        Dim intValue As Integer
+        If Integer.TryParse(Convert.ToString(value, CultureInfo.InvariantCulture), intValue) Then
+            Return intValue <> 0
+        End If
+
+        Return String.Equals(Convert.ToString(value, CultureInfo.InvariantCulture), "true", StringComparison.OrdinalIgnoreCase)
+    End Function
+
+    Private Shared Function SqlNullableBoolean(value As Object) As Boolean?
+        If value Is Nothing OrElse value Is DBNull.Value Then
+            Return Nothing
+        End If
+
+        Return SqlBoolean(value)
+    End Function
+
+    Private Shared Function SqlText(value As Object) As String
+        If value Is Nothing OrElse value Is DBNull.Value Then
+            Return ""
+        End If
+
+        Dim text = Convert.ToString(value, CultureInfo.InvariantCulture)
+        If String.Equals(text, "null", StringComparison.OrdinalIgnoreCase) Then
+            Return ""
+        End If
+
+        Return If(text, "").Trim()
+    End Function
+
+    Private Shared Function SqlNullableDate(value As Object) As Date?
+        If value Is Nothing OrElse value Is DBNull.Value Then
+            Return Nothing
+        End If
+
+        Dim parsedDate As Date
+        If Date.TryParse(Convert.ToString(value, CultureInfo.InvariantCulture), CultureInfo.InvariantCulture, DateTimeStyles.None, parsedDate) OrElse
+            Date.TryParse(Convert.ToString(value, CultureInfo.CurrentCulture), CultureInfo.CurrentCulture, DateTimeStyles.None, parsedDate) Then
+            Return parsedDate.Date
+        End If
+
+        Return Nothing
+    End Function
+
+    Private Shared Function SqlVersionText(value As Object) As String
+        If value Is Nothing OrElse value Is DBNull.Value Then
+            Return "1.0"
+        End If
+
+        Dim decimalValue As Decimal
+        If Decimal.TryParse(Convert.ToString(value, CultureInfo.InvariantCulture), NumberStyles.Number, CultureInfo.InvariantCulture, decimalValue) Then
+            Return decimalValue.ToString("0.###", CultureInfo.InvariantCulture)
+        End If
+
+        Dim text = Convert.ToString(value, CultureInfo.InvariantCulture)
+        Return If(String.IsNullOrWhiteSpace(text), "1.0", text.Trim())
+    End Function
+
+    Private Shared Function ProjectTypeFromVersion(value As Object) As String
+        Dim versionText = SqlVersionText(value)
+        Dim versionValue As Decimal
+        If Decimal.TryParse(versionText, NumberStyles.Number, CultureInfo.InvariantCulture, versionValue) Then
+            If Decimal.Truncate(versionValue) = versionValue Then
+                Return "New"
+            End If
+            Return "Feedback"
+        End If
+
+        Return "New"
+    End Function
+
+    Public Shared Function ProjectSizeName(sizeValue As Integer) As String
+        Select Case sizeValue
+            Case 1
+                Return "Small"
+            Case 2
+                Return "Medium"
+            Case 3
+                Return "Large"
+            Case 4
+                Return "Very Large"
+            Case Else
+                Return "Small"
+        End Select
+    End Function
+
+    Private Shared Function ProjectTypeFromVersionFlags(reportBre As Object, reportRol As Object, reportWithin As Object) As String
+        If SqlBoolean(reportBre) AndAlso SqlBoolean(reportRol) Then
+            Return "BRE/ROL"
+        End If
+
+        If SqlBoolean(reportWithin) Then
+            Return "Within"
+        End If
+
+        If SqlBoolean(reportRol) Then
+            Return "ROL"
+        End If
+
+        If SqlBoolean(reportBre) Then
+            Return "BRE"
+        End If
+
+        Return "New"
+    End Function
+
+    Private Shared Function BuildReportTypeDisplay(reportBre As Object, reportRol As Object, reportWithin As Object) As String
+        Dim parts As New List(Of String)()
+        If SqlBoolean(reportBre) Then
+            parts.Add("BRE")
+        End If
+        If SqlBoolean(reportRol) Then
+            parts.Add("ROL")
+        End If
+        If SqlBoolean(reportWithin) Then
+            parts.Add("Within")
+        End If
+
+        Return String.Join("/", parts)
+    End Function
+
+    Private Shared Function AllowedTaskReportTypes(reportType As String) As List(Of String)
+        Dim normalized = If(reportType, "").Trim()
+        Dim result As New List(Of String)()
+
+        If normalized.Length = 0 Then
+            Return result
+        End If
+
+        If normalized.IndexOf("BRE", StringComparison.OrdinalIgnoreCase) >= 0 OrElse
+            normalized.IndexOf("ROL", StringComparison.OrdinalIgnoreCase) >= 0 OrElse
+            normalized.IndexOf("Within", StringComparison.OrdinalIgnoreCase) >= 0 Then
+            result.Add("ALL")
+        End If
+
+        If normalized.IndexOf("Within", StringComparison.OrdinalIgnoreCase) >= 0 Then
+            result.Add("WITHIN")
+        End If
+
+        If normalized.IndexOf("Shadow", StringComparison.OrdinalIgnoreCase) >= 0 Then
+            result.Add("SHADOW ANALYSIS")
+        End If
+
+        If normalized.IndexOf("Deed", StringComparison.OrdinalIgnoreCase) >= 0 Then
+            result.Add("Deed Profile")
+        End If
+
+        Return result.Distinct(StringComparer.OrdinalIgnoreCase).ToList()
+    End Function
+
+    Private Shared Function SqlInList(values As IEnumerable(Of String)) As String
+        Dim cleaned = values.
+            Where(Function(value) Not String.IsNullOrWhiteSpace(value)).
+            Select(Function(value) "'" & value.Replace("'", "''").Trim() & "'").
+            ToList()
+
+        If cleaned.Count = 0 Then
+            Return "''"
+        End If
+
+        Return String.Join(",", cleaned)
+    End Function
+
+    Private Shared Function ParseResourceAllocations(value As String) As Dictionary(Of String, Decimal)
+        Dim result As New Dictionary(Of String, Decimal)(StringComparer.OrdinalIgnoreCase)
+        If String.IsNullOrWhiteSpace(value) Then
+            Return result
+        End If
+
+        For Each part In value.Split({";"c}, StringSplitOptions.RemoveEmptyEntries)
+            Dim pieces = part.Split({"="c}, 2, StringSplitOptions.None)
+            If pieces.Length <> 2 Then
+                Continue For
+            End If
+
+            Dim hours As Decimal
+            If Decimal.TryParse(pieces(1).Trim(), NumberStyles.Number, CultureInfo.InvariantCulture, hours) OrElse
+                Decimal.TryParse(pieces(1).Trim(), NumberStyles.Number, CultureInfo.CurrentCulture, hours) Then
+                Dim name = pieces(0).Trim()
+                If name.Length > 0 Then
+                    result(name) = Math.Max(0D, hours)
+                End If
+            End If
+        Next
+
+        Return result
+    End Function
+
+    Private Shared Function ParseDailyAllocations(value As String) As Dictionary(Of String, Decimal)
+        Dim result As New Dictionary(Of String, Decimal)(StringComparer.OrdinalIgnoreCase)
+        If String.IsNullOrWhiteSpace(value) Then
+            Return result
+        End If
+
+        For Each part In value.Split({";"c}, StringSplitOptions.RemoveEmptyEntries)
+            Dim pieces = part.Split({"="c}, 2, StringSplitOptions.None)
+            If pieces.Length <> 2 Then
+                Continue For
+            End If
+
+            Dim hours As Decimal
+            If Decimal.TryParse(pieces(1).Trim(), NumberStyles.Number, CultureInfo.InvariantCulture, hours) OrElse
+                Decimal.TryParse(pieces(1).Trim(), NumberStyles.Number, CultureInfo.CurrentCulture, hours) Then
+                Dim key = pieces(0).Trim()
+                If key.Length > 0 Then
+                    result(key) = Math.Max(0D, hours)
+                End If
+            End If
+        Next
+
+        Return result
+    End Function
+
+    Private Shared Function BuildResourceAllocationsString(resourceHours As Dictionary(Of String, Decimal)) As String
+        Return String.Join("; ", resourceHours.
+            Where(Function(item) Not String.IsNullOrWhiteSpace(item.Key) AndAlso item.Value > 0D).
+            Select(Function(item) item.Key.Trim() & "=" & item.Value.ToString("0.##", CultureInfo.InvariantCulture)))
+    End Function
+
+    Private Shared Function BuildDailyAllocationsString(daily As Dictionary(Of String, Decimal)) As String
+        Return String.Join("; ", daily.
+            Where(Function(item) Not String.IsNullOrWhiteSpace(item.Key) AndAlso item.Value > 0D).
+            Select(Function(item) item.Key.Trim() & "=" & item.Value.ToString("0.##", CultureInfo.InvariantCulture)))
+    End Function
+
+    Private Shared Function EnumerateAllDates(startDate As Date, finishDate As Date) As List(Of Date)
+        Dim dates As New List(Of Date)()
+        Dim currentDate = startDate.Date
+        Dim lastDate = If(finishDate.Date < currentDate, currentDate, finishDate.Date)
+        While currentDate <= lastDate
+            dates.Add(currentDate)
+            currentDate = currentDate.AddDays(1)
+        End While
+        Return dates
+    End Function
+
+    Private Shared Function ParseFirstPredecessor(predecessors As String) As Object
+        If String.IsNullOrWhiteSpace(predecessors) Then
+            Return DBNull.Value
+        End If
+
+        Dim firstValue = predecessors.Split({","c}, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()
+        Dim predecessorNumber As Integer
+        If firstValue IsNot Nothing AndAlso Integer.TryParse(firstValue.Trim(), predecessorNumber) Then
+            Return predecessorNumber
+        End If
+
+        Return DBNull.Value
+    End Function
+
+    Private Shared Function MakeSafeCode(value As String) As String
+        Dim characters = value.ToUpperInvariant().Select(Function(ch) If(Char.IsLetterOrDigit(ch), ch, "_"c)).ToArray()
+        Return New String(characters)
+    End Function
+
+    Private Sub Execute(connection As IDbConnection, sql As String, parameters As Dictionary(Of String, Object))
+        Using command = connection.CreateCommand()
+            command.CommandText = sql
+            If parameters IsNot Nothing Then
+                For Each item In parameters
+                    AddParameter(command, item.Key, item.Value)
+                Next
+            End If
+            command.ExecuteNonQuery()
+        End Using
+    End Sub
+
+    Private Sub AddParameter(command As IDbCommand, name As String, value As Object)
+        Dim parameter = command.CreateParameter()
+        parameter.ParameterName = name
+        parameter.Value = If(value, DBNull.Value)
+        command.Parameters.Add(parameter)
+    End Sub
+
+    Private Shared Function ResolveProjectType(savedType As String, projectName As String) As String
+        If Not String.IsNullOrWhiteSpace(savedType) Then
+            Return savedType.Trim()
+        End If
+
+        Dim normalizedName = If(projectName, "")
+        If normalizedName.IndexOf("feedback", StringComparison.OrdinalIgnoreCase) >= 0 Then
+            Return "Feedback"
+        End If
+        If normalizedName.IndexOf("update", StringComparison.OrdinalIgnoreCase) >= 0 OrElse
+            normalizedName.IndexOf("bre", StringComparison.OrdinalIgnoreCase) >= 0 OrElse
+            normalizedName.IndexOf("rol", StringComparison.OrdinalIgnoreCase) >= 0 Then
+            Return "Update"
+        End If
+
+        Return "New"
+    End Function
+End Class
+
+Public Class SqlProjectPlanningInfo
+    Public Property ProjectIdAtSma As String = ""
+    Public Property ProjectName As String = ""
+    Public Property VersionNumber As String = "1.0"
+    Public Property IsActive As Boolean
+    Public Property IsPlanned As Boolean?
+    Public Property ProjectSize As String = "Small"
+    Public Property ProjectType As String = "New"
+    Public Property ReportType As String = ""
+    Public Property FinalCompletionDate As Date?
+    Public Property PlanningMessage As String = ""
+    Public Property ControllerAtRolc As String = ""
+    Public Property ClientType As String = ""
+    Public Property IsPointcloud As Boolean
+    Public Property TechPack As Boolean
+    Public Property DeedProfile As Boolean
+    Public Property ShadowAnalysis As Boolean
+    Public Property UrgentSmallProjects As Boolean
+End Class
+
+Friend Class AssignmentPersistRow
+    Public Property EmployeeName As String = ""
+    Public Property WorkDate As Date
+    Public Property AssignedHours As Decimal
+End Class
+
+Friend Class AssignmentSnapshotRow
+    Public Property ProjectId As Integer
+    Public Property ProjectName As String = ""
+    Public Property VersionNumber As String = "1.0"
+    Public Property ProjectSize As String = "Small"
+    Public Property ProjectType As String = "New"
+    Public Property TaskId As Integer
+    Public Property TaskName As String = ""
+    Public Property TaskOrder As Integer
+    Public Property EmployeeId As Integer
+    Public Property WorkDate As Date
+    Public Property AssignedHours As Decimal
+    Public Property StartDate As Date?
+    Public Property FinishDate As Date?
+    Public Property DependencyTaskOrder As Integer?
+    Public Property DependencyType As String = "FS"
+    Public Property UpdatedOn As Date
+End Class
