@@ -42,14 +42,6 @@ Public Class SMAPlannerForm
         _grid.DefaultCellStyle.SelectionBackColor = Color.FromArgb(219, 235, 255)
         _grid.DefaultCellStyle.SelectionForeColor = Color.FromArgb(24, 31, 42)
 
-        AddHandler btnScheduleProject.Click, AddressOf btnScheduleProject_Click
-        AddHandler _liveProjectSearchBox.TextChanged, AddressOf LiveProjectSearchTextChanged
-        AddHandler _liveProjectSearchBox.KeyDown, AddressOf LiveProjectSearchKeyDown
-        AddHandler _recentProjectSearchBox.TextChanged, Sub() LoadProjectList()
-        AddHandler _recentProjectSearchBox.KeyDown, AddressOf RecentProjectSearchKeyDown
-        AddHandler _activeProjectsCheckBox.CheckedChanged, Sub() LoadProjectList()
-        AddHandler _grid.CellDoubleClick, AddressOf OpenSelectedExistingProject
-        AddHandler Activated, AddressOf PlannerActivated
     End Sub
 
     Private Sub AddProjectGridColumns()
@@ -86,7 +78,7 @@ Public Class SMAPlannerForm
         Return New SqlProjectRepository(connectionString)
     End Function
 
-    Private Sub PlannerActivated(sender As Object, e As EventArgs)
+    Private Sub PlannerActivated(sender As Object, e As EventArgs) Handles MyBase.Activated
         ApplyCurrentTheme()
     End Sub
 
@@ -188,7 +180,7 @@ Public Class SMAPlannerForm
         Return control IsNot Nothing AndAlso Not control.IsDisposed
     End Function
 
-    Private Sub LiveProjectSearchTextChanged(sender As Object, e As EventArgs)
+    Private Sub LiveProjectSearchTextChanged(sender As Object, e As EventArgs) Handles _liveProjectSearchBox.TextChanged
         If _isUpdatingSearchText Then
             Return
         End If
@@ -354,7 +346,7 @@ Public Class SMAPlannerForm
         Return Nothing
     End Function
 
-    Private Sub LiveProjectSearchKeyDown(sender As Object, e As KeyEventArgs)
+    Private Sub LiveProjectSearchKeyDown(sender As Object, e As KeyEventArgs) Handles _liveProjectSearchBox.KeyDown
         If e.KeyCode = Keys.Back Then
             HandleSearchBoxBackspace(e)
             Return
@@ -398,7 +390,15 @@ Public Class SMAPlannerForm
         End Try
     End Sub
 
-    Private Sub RecentProjectSearchKeyDown(sender As Object, e As KeyEventArgs)
+    Private Sub RecentProjectSearchTextChanged(sender As Object, e As EventArgs) Handles _recentProjectSearchBox.TextChanged
+        LoadProjectList()
+    End Sub
+
+    Private Sub ActiveProjectsCheckBoxChanged(sender As Object, e As EventArgs) Handles _activeProjectsCheckBox.CheckedChanged
+        LoadProjectList()
+    End Sub
+
+    Private Sub RecentProjectSearchKeyDown(sender As Object, e As KeyEventArgs) Handles _recentProjectSearchBox.KeyDown
         If e.KeyCode <> Keys.Enter Then
             Return
         End If
@@ -411,7 +411,7 @@ Public Class SMAPlannerForm
         End If
     End Sub
 
-    Private Sub btnScheduleProject_Click(sender As Object, e As EventArgs)
+    Private Sub btnScheduleProject_Click(sender As Object, e As EventArgs) Handles btnScheduleProject.Click
         If _sqlRepository Is Nothing Then
             MessageBox.Show(Me, "SQL connection is not configured. Update App.config with the SmaSchedulerDb connection string.", "SQL Not Configured", MessageBoxButtons.OK, MessageBoxIcon.Warning)
             Return
@@ -554,7 +554,7 @@ Public Class SMAPlannerForm
         Return String.Join(" | ", details)
     End Function
 
-    Private Sub OpenSelectedExistingProject(sender As Object, e As DataGridViewCellEventArgs)
+    Private Sub OpenSelectedExistingProject(sender As Object, e As DataGridViewCellEventArgs) Handles _grid.CellDoubleClick
         If e.RowIndex < 0 Then
             Return
         End If

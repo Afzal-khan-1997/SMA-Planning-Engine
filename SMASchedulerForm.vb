@@ -15,7 +15,7 @@ Public Class SMASchedulerForm
     Private ReadOnly _employees As New BindingList(Of String)
 
     Private _plannerLegendGrid As DataGridView
-    Private _scheduleProjectButton As Button
+    Private WithEvents _scheduleProjectButton As Button
     Private _projectDetailsCaptionLabel As Label
     Private _projectDetailsValueLabel As Label
     Private ReadOnly _plannerPieCharts As New List(Of PlannerPieChartPanel)
@@ -41,12 +41,12 @@ Public Class SMASchedulerForm
     Private ReadOnly _employeeCapacityEntries As New BindingList(Of EmployeeCapacityEntry)()
     Private ReadOnly _explicitTaskUsageEdits As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
     Private _capacityFilterPanel As FlowLayoutPanel
-    Private _capacityStartPicker As DateTimePicker
-    Private _capacityFinishPicker As DateTimePicker
+    Private WithEvents _capacityStartPicker As DateTimePicker
+    Private WithEvents _capacityFinishPicker As DateTimePicker
     Private _capacityEmployeeList As CheckedListBox
-    Private _capacityApplyButton As Button
-    Private _capacitySelectAllButton As Button
-    Private _capacityClearButton As Button
+    Private WithEvents _capacityApplyButton As Button
+    Private WithEvents _capacitySelectAllButton As Button
+    Private WithEvents _capacityClearButton As Button
     Private _capacityFilterStatusLabel As Label
     Private _capacitySqlData As SqlCapacityPlanningData
     Private _isUpdatingCapacityFilters As Boolean
@@ -204,22 +204,7 @@ Public Class SMASchedulerForm
         AddGridColumns()
         _grid.DataSource = _tasks
         ApplySchedulerHeaderLayout()
-        AddHandler headerPanel.SizeChanged, Sub() LayoutSchedulerHeaderActions()
         ApplyProjectStateTheme()
-        AddHandler _grid.SelectionChanged, AddressOf ScheduleSelectionChanged
-        AddHandler btnSave.Click, AddressOf btnSave_Click
-        AddHandler btnRefreshCapacity.Click, AddressOf btnRefreshCapacity_Click
-        AddHandler btnAddTask.Click, AddressOf btnAddTask_Click
-        AddHandler btnDelete.Click, AddressOf btnDelete_Click
-        AddHandler btnMoveUp.Click, AddressOf btnMoveUp_Click
-        AddHandler btnMoveDown.Click, AddressOf btnMoveDown_Click
-        AddHandler btnLink.Click, AddressOf btnLink_Click
-        AddHandler btnUnlink.Click, AddressOf btnUnlink_Click
-        AddHandler btnMilestone.Click, AddressOf btnMilestone_Click
-        AddHandler _totalProjectHours.ValueChanged, AddressOf ProjectInputsChanged
-        AddHandler _includeSaturdays.CheckedChanged, AddressOf AllocationInputsChanged
-        AddHandler _taskCatalogSelector.SelectedIndexChanged, AddressOf CatalogSelectionChanged
-        AddHandler _projectSizeSelector.SelectedIndexChanged, AddressOf CatalogSelectionChanged
     End Sub
 
     Private Sub ApplySchedulerHeaderLayout()
@@ -245,7 +230,6 @@ Public Class SMASchedulerForm
                 .TabStop = True
             }
             _scheduleProjectButton.FlatAppearance.BorderSize = 0
-            AddHandler _scheduleProjectButton.Click, AddressOf _scheduleProjectButton_Click
         End If
 
         If _projectDetailsCaptionLabel Is Nothing Then
@@ -312,7 +296,7 @@ Public Class SMASchedulerForm
         _projectDetailsValueLabel.Text = If(String.IsNullOrWhiteSpace(_projectDetailsText), baseText, baseText & " | " & _projectDetailsText)
     End Sub
 
-    Private Sub _scheduleProjectButton_Click(sender As Object, e As EventArgs)
+    Private Sub _scheduleProjectButton_Click(sender As Object, e As EventArgs) Handles _scheduleProjectButton.Click
         ScheduleProjectFromHeader()
     End Sub
 
@@ -571,7 +555,11 @@ Public Class SMASchedulerForm
         }
     End Function
 
-    Private Sub ProjectInputsChanged(sender As Object, e As EventArgs)
+    Private Sub SchedulerHeaderSizeChanged(sender As Object, e As EventArgs) Handles headerPanel.SizeChanged
+        LayoutSchedulerHeaderActions()
+    End Sub
+
+    Private Sub ProjectInputsChanged(sender As Object, e As EventArgs) Handles _totalProjectHours.ValueChanged
         UpdateSummary()
         UpdateProjectMetadataDisplay()
         ApplyProjectStateTheme()
@@ -588,7 +576,7 @@ Public Class SMASchedulerForm
 
     End Sub
 
-    Private Sub CatalogSelectionChanged(sender As Object, e As EventArgs)
+    Private Sub CatalogSelectionChanged(sender As Object, e As EventArgs) Handles _taskCatalogSelector.SelectedIndexChanged, _projectSizeSelector.SelectedIndexChanged
         If _isLoadingCatalogControls Then
             Return
         End If
@@ -596,7 +584,7 @@ Public Class SMASchedulerForm
         UpdateAllocationHoursFromSelectedCatalog()
     End Sub
 
-    Private Sub AllocationInputsChanged(sender As Object, e As EventArgs)
+    Private Sub AllocationInputsChanged(sender As Object, e As EventArgs) Handles _includeSaturdays.CheckedChanged
         If _isLoadingCatalogControls OrElse _isRecalculating Then
             Return
         End If
@@ -651,11 +639,6 @@ Public Class SMASchedulerForm
         If _resourceUtilizationColorSelector.Items.Count > 0 AndAlso _resourceUtilizationColorSelector.SelectedIndex < 0 Then
             _resourceUtilizationColorSelector.SelectedIndex = 0
         End If
-        AddHandler _resourceUtilizationRefreshButton.Click, AddressOf _resourceUtilizationRefreshButton_Click
-        AddHandler _resourceUtilizationApplyButton.Click, AddressOf _resourceUtilizationApplyButton_Click
-        AddHandler _resourceUtilizationClearButton.Click, AddressOf _resourceUtilizationClearButton_Click
-        AddHandler _resourceUtilizationMailButton.Click, AddressOf _resourceUtilizationMailButton_Click
-
         AddHandler _taskUsageGrid.CellParsing, AddressOf CalendarGridCellParsing
         AddHandler _taskUsageGrid.CellEndEdit, AddressOf TaskViewGridCellEndEdit
         AddHandler _taskUsageGrid.DataError, AddressOf CalendarGridDataError
@@ -668,9 +651,6 @@ Public Class SMASchedulerForm
         AddHandler _resourceUtilizationGrid.CellEndEdit, AddressOf ResourceUtilizationGridCellEndEdit
         AddHandler _resourceUtilizationGrid.DataError, AddressOf CalendarGridDataError
 
-        AddHandler _employeeCapacityAddButton.Click, AddressOf _employeeCapacityAddButton_Click
-        AddHandler _employeeCapacityDeleteButton.Click, AddressOf _employeeCapacityDeleteButton_Click
-        AddHandler _employeeCapacityRefreshButton.Click, AddressOf _employeeCapacityRefreshButton_Click
         AddHandler _employeeCapacityGrid.CellParsing, AddressOf EmployeeCapacityGridCellParsing
         AddHandler _employeeCapacityGrid.CellEndEdit, AddressOf EmployeeCapacityGridCellEndEdit
         AddHandler _employeeCapacityGrid.CellFormatting, AddressOf EmployeeCapacityGridCellFormatting
@@ -823,12 +803,6 @@ Public Class SMASchedulerForm
             .ForeColor = Color.FromArgb(75, 85, 99)
         }
 
-        AddHandler _capacityApplyButton.Click, AddressOf CapacityFilterApplyButton_Click
-        AddHandler _capacitySelectAllButton.Click, AddressOf CapacityFilterSelectAllButton_Click
-        AddHandler _capacityClearButton.Click, AddressOf CapacityFilterClearButton_Click
-        AddHandler _capacityStartPicker.ValueChanged, AddressOf CapacityFilterDateChanged
-        AddHandler _capacityFinishPicker.ValueChanged, AddressOf CapacityFilterDateChanged
-
         _capacityFilterPanel.Controls.Add(CapacityFilterLabel("From"))
         _capacityFilterPanel.Controls.Add(_capacityStartPicker)
         _capacityFilterPanel.Controls.Add(CapacityFilterLabel("To"))
@@ -908,11 +882,11 @@ Public Class SMASchedulerForm
             ToList()
     End Function
 
-    Private Sub CapacityFilterApplyButton_Click(sender As Object, e As EventArgs)
+    Private Sub CapacityFilterApplyButton_Click(sender As Object, e As EventArgs) Handles _capacityApplyButton.Click
         UpdateCapacityPlanningGrid()
     End Sub
 
-    Private Sub CapacityFilterSelectAllButton_Click(sender As Object, e As EventArgs)
+    Private Sub CapacityFilterSelectAllButton_Click(sender As Object, e As EventArgs) Handles _capacitySelectAllButton.Click
         If _capacityEmployeeList Is Nothing Then
             Return
         End If
@@ -923,7 +897,7 @@ Public Class SMASchedulerForm
         UpdateCapacityPlanningGrid()
     End Sub
 
-    Private Sub CapacityFilterClearButton_Click(sender As Object, e As EventArgs)
+    Private Sub CapacityFilterClearButton_Click(sender As Object, e As EventArgs) Handles _capacityClearButton.Click
         If _capacityEmployeeList Is Nothing Then
             Return
         End If
@@ -934,7 +908,7 @@ Public Class SMASchedulerForm
         UpdateCapacityPlanningGrid()
     End Sub
 
-    Private Sub CapacityFilterDateChanged(sender As Object, e As EventArgs)
+    Private Sub CapacityFilterDateChanged(sender As Object, e As EventArgs) Handles _capacityStartPicker.ValueChanged, _capacityFinishPicker.ValueChanged
         If _isUpdatingCapacityFilters Then
             Return
         End If
@@ -1333,11 +1307,6 @@ Public Class SMASchedulerForm
             .ForeColor = Color.White
         }
 
-        AddHandler _resourceUtilizationRefreshButton.Click, AddressOf _resourceUtilizationRefreshButton_Click
-        AddHandler _resourceUtilizationApplyButton.Click, AddressOf _resourceUtilizationApplyButton_Click
-        AddHandler _resourceUtilizationClearButton.Click, AddressOf _resourceUtilizationClearButton_Click
-        AddHandler _resourceUtilizationMailButton.Click, AddressOf _resourceUtilizationMailButton_Click
-
         toolbar.Controls.Add(_resourceUtilizationRefreshButton)
         toolbar.Controls.Add(_resourceUtilizationColorSelector)
         toolbar.Controls.Add(_resourceUtilizationApplyButton)
@@ -1633,7 +1602,7 @@ Public Class SMASchedulerForm
         _isUrgentSmallProject = False
     End Sub
 
-    Private Sub btnAddTask_Click(sender As Object, e As EventArgs)
+    Private Sub btnAddTask_Click(sender As Object, e As EventArgs) Handles btnAddTask.Click
         Dim nextId = If(_tasks.Count = 0, 1, _tasks.Max(Function(t) t.TaskId) + 1)
         Dim startDate = NextWorkingDate(If(_tasks.Count = 0, Date.Today, _tasks.Max(Function(t) t.FinishDate).AddDays(1)))
         _tasks.Add(New ScheduleTask With {
@@ -1729,7 +1698,7 @@ Public Class SMASchedulerForm
         }
     End Function
 
-    Private Sub btnDelete_Click(sender As Object, e As EventArgs)
+    Private Sub btnDelete_Click(sender As Object, e As EventArgs) Handles btnDelete.Click
         Dim selected = SelectedTask()
         If selected Is Nothing Then
             Return
@@ -1748,11 +1717,11 @@ Public Class SMASchedulerForm
         RecalculateAndRefresh("Task deleted")
     End Sub
 
-    Private Sub btnMoveUp_Click(sender As Object, e As EventArgs)
+    Private Sub btnMoveUp_Click(sender As Object, e As EventArgs) Handles btnMoveUp.Click
         MoveSelectedTask(-1)
     End Sub
 
-    Private Sub btnMoveDown_Click(sender As Object, e As EventArgs)
+    Private Sub btnMoveDown_Click(sender As Object, e As EventArgs) Handles btnMoveDown.Click
         MoveSelectedTask(1)
     End Sub
 
@@ -1784,7 +1753,7 @@ Public Class SMASchedulerForm
         RecalculateAndRefresh("Task moved")
     End Sub
 
-    Private Sub btnLink_Click(sender As Object, e As EventArgs)
+    Private Sub btnLink_Click(sender As Object, e As EventArgs) Handles btnLink.Click
         If _grid.CurrentRow Is Nothing OrElse _grid.CurrentRow.Index <= 0 Then
             Return
         End If
@@ -1796,7 +1765,7 @@ Public Class SMASchedulerForm
         RecalculateAndRefresh("Linked to previous task")
     End Sub
 
-    Private Sub btnUnlink_Click(sender As Object, e As EventArgs)
+    Private Sub btnUnlink_Click(sender As Object, e As EventArgs) Handles btnUnlink.Click
         Dim task = SelectedTask()
         If task IsNot Nothing Then
             task.Predecessors = ""
@@ -1804,7 +1773,7 @@ Public Class SMASchedulerForm
         End If
     End Sub
 
-    Private Sub btnMilestone_Click(sender As Object, e As EventArgs)
+    Private Sub btnMilestone_Click(sender As Object, e As EventArgs) Handles btnMilestone.Click
         Dim task = SelectedTask()
         If task Is Nothing Then
             Return
@@ -1815,7 +1784,7 @@ Public Class SMASchedulerForm
         RecalculateAndRefresh("Milestone updated")
     End Sub
 
-    Private Sub btnSave_Click(sender As Object, e As EventArgs)
+    Private Sub btnSave_Click(sender As Object, e As EventArgs) Handles btnSave.Click
         If _tasks.Count = 0 Then
             MessageBox.Show(Me, "There is no task assigned for the project.", "No Tasks", MessageBoxButtons.OK, MessageBoxIcon.Information)
             Return
@@ -1824,7 +1793,7 @@ Public Class SMASchedulerForm
         SaveProjectToSql(showSuccessMessage:=True)
     End Sub
 
-    Private Sub btnRefreshCapacity_Click(sender As Object, e As EventArgs)
+    Private Sub btnRefreshCapacity_Click(sender As Object, e As EventArgs) Handles btnRefreshCapacity.Click
         CommitWorkspaceGridEdits()
         RecalculateAndRefresh("Capacity planning refreshed")
         Dim sqlSaved = SaveProjectToSql(showSuccessMessage:=False)
@@ -2275,7 +2244,7 @@ Public Class SMASchedulerForm
             Select(Function(item) item.Key.Trim() & "=" & item.Value.ToString("0.##", CultureInfo.InvariantCulture)))
     End Function
 
-    Private Sub ScheduleSelectionChanged(sender As Object, e As EventArgs)
+    Private Sub ScheduleSelectionChanged(sender As Object, e As EventArgs) Handles _grid.SelectionChanged
         RefreshWorkspaceTabs()
     End Sub
 
@@ -3265,7 +3234,7 @@ Public Class SMASchedulerForm
         UpdateResourceUtilizationGrid()
     End Sub
 
-    Private Sub _employeeCapacityAddButton_Click(sender As Object, e As EventArgs)
+    Private Sub _employeeCapacityAddButton_Click(sender As Object, e As EventArgs) Handles _employeeCapacityAddButton.Click
         AddEmployeeCapacityEntry()
     End Sub
 
@@ -3288,7 +3257,7 @@ Public Class SMASchedulerForm
         SetStatus("Employee capacity entry added")
     End Sub
 
-    Private Sub _employeeCapacityDeleteButton_Click(sender As Object, e As EventArgs)
+    Private Sub _employeeCapacityDeleteButton_Click(sender As Object, e As EventArgs) Handles _employeeCapacityDeleteButton.Click
         DeleteEmployeeCapacityEntry()
     End Sub
 
@@ -3307,7 +3276,7 @@ Public Class SMASchedulerForm
         SetStatus("Employee capacity entry deleted")
     End Sub
 
-    Private Sub _employeeCapacityRefreshButton_Click(sender As Object, e As EventArgs)
+    Private Sub _employeeCapacityRefreshButton_Click(sender As Object, e As EventArgs) Handles _employeeCapacityRefreshButton.Click
         RefreshEmployeeCapacityView()
     End Sub
 
@@ -3388,7 +3357,7 @@ Public Class SMASchedulerForm
         End If
     End Sub
 
-    Private Sub _resourceUtilizationRefreshButton_Click(sender As Object, e As EventArgs)
+    Private Sub _resourceUtilizationRefreshButton_Click(sender As Object, e As EventArgs) Handles _resourceUtilizationRefreshButton.Click
         RefreshResourceUtilizationTab()
     End Sub
 
@@ -3408,7 +3377,7 @@ Public Class SMASchedulerForm
         SetStatus("Resource utilization has been refreshed from SQL.")
     End Sub
 
-    Private Sub _resourceUtilizationApplyButton_Click(sender As Object, e As EventArgs)
+    Private Sub _resourceUtilizationApplyButton_Click(sender As Object, e As EventArgs) Handles _resourceUtilizationApplyButton.Click
         ApplyResourceUtilizationHighlight()
     End Sub
 
@@ -3434,7 +3403,7 @@ Public Class SMASchedulerForm
         UpdateResourceUtilizationGrid()
     End Sub
 
-    Private Sub _resourceUtilizationClearButton_Click(sender As Object, e As EventArgs)
+    Private Sub _resourceUtilizationClearButton_Click(sender As Object, e As EventArgs) Handles _resourceUtilizationClearButton.Click
         ClearResourceUtilizationHighlight()
     End Sub
 
@@ -3480,7 +3449,7 @@ Public Class SMASchedulerForm
         Return Color.FromArgb(33, 150, 243)
     End Function
 
-    Private Sub _resourceUtilizationMailButton_Click(sender As Object, e As EventArgs)
+    Private Sub _resourceUtilizationMailButton_Click(sender As Object, e As EventArgs) Handles _resourceUtilizationMailButton.Click
         SendResourceUtilizationSnip()
     End Sub
 

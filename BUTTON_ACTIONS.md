@@ -1,12 +1,12 @@
 # Button Action Map
 
-This project keeps the WinForms frontend controls in the `.Designer.vb` files and the button behavior in the matching form `.vb` code-behind files.
+This project keeps the WinForms frontend controls in the `.Designer.vb` files and the button behavior in the matching form `.vb` code-behind files. Main visible buttons use direct VB.NET `Handles Button.Click` declarations so the action behind each button is easy to find.
 
 ## SMA Planning Engine Start Form
 
 | Frontend control | Code-behind handler | Backend action |
 | --- | --- | --- |
-| `btnScheduleProject` | `btnScheduleProject_Click` in `SMAPlannerForm.vb` | Validates the selected live project/template and opens `SMASchedulerForm`. |
+| `btnScheduleProject` | `btnScheduleProject_Click` in `SMAPlannerForm.vb` | Reads the Project ID from SQL, validates the SQL project, and opens `SMASchedulerForm`. |
 
 ## SMA Scheduler Toolbar
 

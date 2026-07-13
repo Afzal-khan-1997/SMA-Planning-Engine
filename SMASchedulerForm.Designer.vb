@@ -1313,18 +1313,18 @@ Partial Class SMASchedulerForm
     End Sub
 
     Private commandBar As ToolStrip
-    Private btnSave As ToolStripButton
-    Private btnRefreshCapacity As ToolStripButton
+    Private WithEvents btnSave As ToolStripButton
+    Private WithEvents btnRefreshCapacity As ToolStripButton
     Private sepFile As ToolStripSeparator
-    Private btnAddTask As ToolStripButton
-    Private btnDelete As ToolStripButton
-    Private btnMoveUp As ToolStripButton
-    Private btnMoveDown As ToolStripButton
+    Private WithEvents btnAddTask As ToolStripButton
+    Private WithEvents btnDelete As ToolStripButton
+    Private WithEvents btnMoveUp As ToolStripButton
+    Private WithEvents btnMoveDown As ToolStripButton
     Private sepTasks As ToolStripSeparator
-    Private btnLink As ToolStripButton
-    Private btnUnlink As ToolStripButton
-    Private btnMilestone As ToolStripButton
-    Private headerPanel As Panel
+    Private WithEvents btnLink As ToolStripButton
+    Private WithEvents btnUnlink As ToolStripButton
+    Private WithEvents btnMilestone As ToolStripButton
+    Private WithEvents headerPanel As Panel
     Private appTitle As Label
     Private projectLabel As Label
     Private versionLabel As Label
@@ -1370,17 +1370,17 @@ Partial Class SMASchedulerForm
     Private _capacityGrid As DataGridView
     Private resourceUtilizationHost As Panel
     Private resourceUtilizationToolbar As FlowLayoutPanel
-    Private _resourceUtilizationRefreshButton As Button
+    Private WithEvents _resourceUtilizationRefreshButton As Button
     Private _resourceUtilizationColorSelector As ComboBox
-    Private _resourceUtilizationApplyButton As Button
-    Private _resourceUtilizationClearButton As Button
-    Private _resourceUtilizationMailButton As Button
+    Private WithEvents _resourceUtilizationApplyButton As Button
+    Private WithEvents _resourceUtilizationClearButton As Button
+    Private WithEvents _resourceUtilizationMailButton As Button
     Private _resourceUtilizationGrid As DataGridView
     Private employeeCapacityHost As Panel
     Private employeeCapacityToolbar As FlowLayoutPanel
-    Private _employeeCapacityAddButton As Button
-    Private _employeeCapacityDeleteButton As Button
-    Private _employeeCapacityRefreshButton As Button
+    Private WithEvents _employeeCapacityAddButton As Button
+    Private WithEvents _employeeCapacityDeleteButton As Button
+    Private WithEvents _employeeCapacityRefreshButton As Button
     Private _employeeCapacityGrid As DataGridView
     Private projectSizeLabel As Label
     Private taskCatalogLabel As Label
@@ -1388,10 +1388,10 @@ Partial Class SMASchedulerForm
     Private statusBar As StatusStrip
     Private _projectName As TextBox
     Private _versionNumber As TextBox
-    Private _totalProjectHours As BlankNumericUpDown
-    Private _taskCatalogSelector As ComboBox
-    Private _projectSizeSelector As ComboBox
-    Private _includeSaturdays As CheckBox
+    Private WithEvents _totalProjectHours As BlankNumericUpDown
+    Private WithEvents _taskCatalogSelector As ComboBox
+    Private WithEvents _projectSizeSelector As ComboBox
+    Private WithEvents _includeSaturdays As CheckBox
     Private _summaryTitle As Label
     Private _summaryDates As Label
     Private _summaryResources As Label

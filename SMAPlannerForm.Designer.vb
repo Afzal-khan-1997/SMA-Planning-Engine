@@ -392,14 +392,14 @@ Partial Class SMAPlannerForm
     Private headerPanel As Panel
     Private titleLabel As Label
     Private searchLabel As Label
-    Private _liveProjectSearchBox As TextBox
-    Private btnScheduleProject As Button
+    Private WithEvents _liveProjectSearchBox As TextBox
+    Private WithEvents btnScheduleProject As Button
     Private gridPanel As Panel
-    Private _grid As DataGridView
+    Private WithEvents _grid As DataGridView
     Private recentFilterPanel As Panel
     Private recentSearchLabel As Label
-    Private _recentProjectSearchBox As TextBox
-    Private _activeProjectsCheckBox As CheckBox
+    Private WithEvents _recentProjectSearchBox As TextBox
+    Private WithEvents _activeProjectsCheckBox As CheckBox
     Private listTitle As Label
     Private planningSummaryPanel As Panel
     Private summaryTitleLabel As Label
