@@ -1445,7 +1445,7 @@ Public Class SqlProjectRepository
 
         Dim decimalValue As Decimal
         If Decimal.TryParse(Convert.ToString(value, CultureInfo.InvariantCulture), NumberStyles.Number, CultureInfo.InvariantCulture, decimalValue) Then
-            Return decimalValue.ToString("0.###", CultureInfo.InvariantCulture)
+            Return decimalValue.ToString("0.0##", CultureInfo.InvariantCulture)
         End If
 
         Dim text = Convert.ToString(value, CultureInfo.InvariantCulture)
@@ -1456,10 +1456,15 @@ Public Class SqlProjectRepository
         Dim versionText = SqlVersionText(value)
         Dim versionValue As Decimal
         If Decimal.TryParse(versionText, NumberStyles.Number, CultureInfo.InvariantCulture, versionValue) Then
-            If Decimal.Truncate(versionValue) = versionValue Then
+            Dim versionFraction = versionValue - Decimal.Truncate(versionValue)
+
+            If versionFraction = 0D Then
                 Return "New"
             End If
-            Return "Feedback"
+
+            If versionFraction = 0.1D Then
+                Return "Feedback"
+            End If
         End If
 
         Return "New"

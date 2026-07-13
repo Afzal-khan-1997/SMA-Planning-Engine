@@ -12,6 +12,9 @@
    - Project type/report type
    - Project size
    - Planning flags and project details
+   - Version-to-type rule:
+     - `1.0`, `2.0`, etc. are treated as `New`.
+     - `1.1`, `2.1`, etc. are treated as `Feedback`.
 5. `SMASchedulerForm.LoadLiveProjectTemplate` receives that `LiveProjectItem`.
 6. The Scheduler form selects the matching project size in `_projectSizeSelector`.
 7. `TaskCatalogService.LoadTemplateTasks` loads the task template.
