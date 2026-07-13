@@ -457,6 +457,7 @@ Public Class SMAPlannerForm
         Dim projectCode = _liveProjectSearchBox.Text.Trim()
         Dim sqlProject As SqlProjectPlanningInfo = Nothing
         ' Step 2: load the live project details from SQL by Project ID at SMA.
+        ' Project size comes from Table_Project_Tracking and drives scheduler resource hours.
         If _sqlRepository IsNot Nothing AndAlso projectCode.Length > 0 Then
             Try
                 sqlProject = _sqlRepository.GetProjectPlanningInfo(projectCode)
@@ -481,7 +482,8 @@ Public Class SMAPlannerForm
             Return
         End If
 
-        ' Step 4: build the scheduler input model with project metadata and report filters.
+        ' Step 4: build the scheduler input model with SQL project metadata and report filters.
+        ' SQL values win over template defaults so the Scheduler uses the tracked project size.
         Dim projectName = FirstNonBlank(
             If(sqlProject Is Nothing, "", sqlProject.ProjectName),
             If(selectedProject Is Nothing, "", selectedProject.ProjectName),

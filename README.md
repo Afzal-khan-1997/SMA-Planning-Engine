@@ -45,6 +45,10 @@ bin\Debug\net8.0-windows\SMA Planning Engine.exe
 
 WinForms frontend controls are kept in the `.Designer.vb` files, while button behavior lives in the matching `.vb` code-behind files. See `BUTTON_ACTIONS.md` for the button-to-handler map.
 
+## Planning Workflow
+
+Project ID planning uses SQL project tracking as the source of truth. The user enters a Project ID, SQL returns project name and project size, and the Scheduler loads task resource hours based on that project size. See `WORKFLOW.md` for the full flow.
+
 ## Local Storage
 
 Saved schedules are stored in:

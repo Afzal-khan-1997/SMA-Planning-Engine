@@ -104,6 +104,8 @@ Public Class SMASchedulerForm
         _versionNumber.Text = If(String.IsNullOrWhiteSpace(liveProject.VersionNumber), "1.0", liveProject.VersionNumber.Trim())
         _projectType = If(String.IsNullOrWhiteSpace(liveProject.ProjectType), ProjectTypeFromTemplate(liveProject.TemplateName, liveProject.ProjectName), liveProject.ProjectType)
         _projectDetailsText = liveProject.ProjectDetailsText
+        ' The Planning Engine passes SQL Table_Project_Tracking project size here.
+        ' That selected size controls which task resource-hour column is used.
         SelectProjectSize(liveProject.ProjectSize)
         UpdateProjectMetadataDisplay()
 
