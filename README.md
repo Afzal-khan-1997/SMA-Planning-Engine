@@ -49,6 +49,8 @@ WinForms frontend controls are kept in the `.Designer.vb` files, while button be
 
 Project ID planning uses SQL project tracking as the source of truth. The user enters a Project ID, SQL returns project name and project size, and the Scheduler loads task resource hours based on that project size. See `WORKFLOW.md` for the full flow.
 
+The Capacity Planning tab also supports SQL-backed filtering by date range and active employees. It shows available hours, planned hours, project names, and task-level planned hours for the selected employees and dates.
+
 ## Local Storage
 
 Saved schedules are stored in:

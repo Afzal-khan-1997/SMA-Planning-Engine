@@ -525,6 +525,103 @@ Public Class SqlProjectRepository
         Return result.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(Function(name) name, StringComparer.OrdinalIgnoreCase).ToList()
     End Function
 
+    Public Function LoadCapacityPlanningData(startDate As Date, finishDate As Date) As SqlCapacityPlanningData
+        Dim result As New SqlCapacityPlanningData()
+
+        Using connection = CreateConnection()
+            connection.Open()
+            EnsureSchema(connection)
+
+            If TableExists(connection, "dbo.Employees_Master") Then
+                Using command = connection.CreateCommand()
+                    command.CommandText =
+                        "SELECT DISTINCT LTRIM(RTRIM(CAST([Office Account] AS NVARCHAR(100)))) AS EmployeeId, LTRIM(RTRIM(firstname)) AS EmployeeName " &
+                        "FROM dbo.Employees_Master " &
+                        "WHERE ISNULL(Active, 1) = 1 AND ISNULL(LTRIM(RTRIM(firstname)), '') <> '' " &
+                        "ORDER BY EmployeeName"
+
+                    Using reader = command.ExecuteReader()
+                        While reader.Read()
+                            Dim employeeName = SqlText(reader("EmployeeName"))
+                            If employeeName.Length = 0 Then
+                                Continue While
+                            End If
+
+                            result.Employees.Add(New SqlCapacityEmployee With {
+                                .EmployeeId = SqlText(reader("EmployeeId")),
+                                .EmployeeName = employeeName
+                            })
+                        End While
+                    End Using
+                End Using
+            End If
+
+            If TableExists(connection, "dbo.Employee_Capacity") AndAlso TableExists(connection, "dbo.Employees_Master") Then
+                Using command = connection.CreateCommand()
+                    command.CommandText =
+                        "SELECT LTRIM(RTRIM(CAST(c.[Employee ID] AS NVARCHAR(100)))) AS EmployeeId, LTRIM(RTRIM(e.firstname)) AS EmployeeName, c.[Work Date], c.[Available Hours] " &
+                        "FROM dbo.Employee_Capacity c " &
+                        "INNER JOIN dbo.Employees_Master e ON LTRIM(RTRIM(CAST(e.[Office Account] AS NVARCHAR(100)))) = LTRIM(RTRIM(CAST(c.[Employee ID] AS NVARCHAR(100)))) " &
+                        "WHERE ISNULL(e.Active, 1) = 1 AND c.[Work Date] BETWEEN @StartDate AND @FinishDate " &
+                        "ORDER BY e.firstname, c.[Work Date]"
+                    AddParameter(command, "@StartDate", startDate.Date)
+                    AddParameter(command, "@FinishDate", finishDate.Date)
+
+                    Using reader = command.ExecuteReader()
+                        While reader.Read()
+                            If reader("Work Date") Is DBNull.Value Then
+                                Continue While
+                            End If
+
+                            result.Availability.Add(New SqlCapacityAvailability With {
+                                .EmployeeId = SqlText(reader("EmployeeId")),
+                                .EmployeeName = SqlText(reader("EmployeeName")),
+                                .WorkDate = CDate(reader("Work Date")).Date,
+                                .AvailableHours = If(reader("Available Hours") Is DBNull.Value, 8D, Math.Max(0D, CDec(reader("Available Hours"))))
+                            })
+                        End While
+                    End Using
+                End Using
+            End If
+
+            If TableExists(connection, "dbo.Project Schedule Table") AndAlso TableExists(connection, "dbo.Employees_Master") Then
+                Using command = connection.CreateCommand()
+                    command.CommandText =
+                        "SELECT LTRIM(RTRIM(CAST(s.[Employee ID] AS NVARCHAR(100)))) AS EmployeeId, LTRIM(RTRIM(e.firstname)) AS EmployeeName, " &
+                        "s.[Schedule Date], s.[Planned Hours], s.[ProjectID at SMA], ISNULL(v.[Project Name], s.[ProjectID at SMA]) AS ProjectName, s.[Task Name], s.[Task Order] " &
+                        "FROM [dbo].[Project Schedule Table] s " &
+                        "INNER JOIN dbo.Employees_Master e ON LTRIM(RTRIM(CAST(e.[Office Account] AS NVARCHAR(100)))) = LTRIM(RTRIM(CAST(s.[Employee ID] AS NVARCHAR(100)))) " &
+                        "LEFT JOIN dbo.Version_Table v ON v.[Project ID at SMA] = s.[ProjectID at SMA] " &
+                        "WHERE ISNULL(e.Active, 1) = 1 AND s.[Schedule Date] BETWEEN @StartDate AND @FinishDate " &
+                        "ORDER BY e.firstname, s.[Schedule Date], ProjectName, s.[Task Order]"
+                    AddParameter(command, "@StartDate", startDate.Date)
+                    AddParameter(command, "@FinishDate", finishDate.Date)
+
+                    Using reader = command.ExecuteReader()
+                        While reader.Read()
+                            If reader("Schedule Date") Is DBNull.Value Then
+                                Continue While
+                            End If
+
+                            result.Assignments.Add(New SqlCapacityAssignment With {
+                                .EmployeeId = SqlText(reader("EmployeeId")),
+                                .EmployeeName = SqlText(reader("EmployeeName")),
+                                .WorkDate = CDate(reader("Schedule Date")).Date,
+                                .PlannedHours = If(reader("Planned Hours") Is DBNull.Value, 0D, Math.Max(0D, CDec(reader("Planned Hours")))),
+                                .ProjectIdAtSma = SqlText(reader("ProjectID at SMA")),
+                                .ProjectName = SqlText(reader("ProjectName")),
+                                .TaskName = SqlText(reader("Task Name")),
+                                .TaskOrder = If(reader("Task Order") Is DBNull.Value, 0, CInt(reader("Task Order")))
+                            })
+                        End While
+                    End Using
+                End Using
+            End If
+        End Using
+
+        Return result
+    End Function
+
     Public Function LoadTaskCatalog() As List(Of TaskCatalogItem)
         Return LoadTaskTemplates("", "")
     End Function
@@ -1610,6 +1707,35 @@ Public Class SqlProjectPlanningInfo
     Public Property DeedProfile As Boolean
     Public Property ShadowAnalysis As Boolean
     Public Property UrgentSmallProjects As Boolean
+End Class
+
+Public Class SqlCapacityPlanningData
+    Public Property Employees As New List(Of SqlCapacityEmployee)()
+    Public Property Availability As New List(Of SqlCapacityAvailability)()
+    Public Property Assignments As New List(Of SqlCapacityAssignment)()
+End Class
+
+Public Class SqlCapacityEmployee
+    Public Property EmployeeId As String = ""
+    Public Property EmployeeName As String = ""
+End Class
+
+Public Class SqlCapacityAvailability
+    Public Property EmployeeId As String = ""
+    Public Property EmployeeName As String = ""
+    Public Property WorkDate As Date
+    Public Property AvailableHours As Decimal
+End Class
+
+Public Class SqlCapacityAssignment
+    Public Property EmployeeId As String = ""
+    Public Property EmployeeName As String = ""
+    Public Property WorkDate As Date
+    Public Property PlannedHours As Decimal
+    Public Property ProjectIdAtSma As String = ""
+    Public Property ProjectName As String = ""
+    Public Property TaskName As String = ""
+    Public Property TaskOrder As Integer
 End Class
 
 Friend Class AssignmentPersistRow

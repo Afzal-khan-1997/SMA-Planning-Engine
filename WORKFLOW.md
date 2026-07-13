@@ -35,3 +35,29 @@ The Scheduler form has `Small` as the UI default only so the form has a valid in
 | Scheduler handoff | `SMASchedulerForm.LoadLiveProjectTemplate` |
 | Template task loading | `TaskCatalogService.LoadTemplateTasks` |
 | Size-based hours selection | `TaskCatalogItem.HoursForSize` |
+
+## SQL Capacity Planning View
+
+The Capacity Planning tab includes filters for:
+
+- Start date
+- End date
+- Active employee selection
+
+When filters are applied, the Scheduler reads SQL capacity data through `SqlProjectRepository.LoadCapacityPlanningData`.
+
+The view uses:
+
+- `Employees_Master` for active employee IDs and names.
+- `Employee_Capacity` for available hours by employee and date.
+- `Project Schedule Table` for planned hours by employee, project, task, and schedule date.
+- `Version_Table` for project names.
+
+The grid groups rows as:
+
+1. Employee available hours.
+2. Employee planned hours.
+3. Project name.
+4. Task rows under that project with date-wise planned hours.
+
+Only the selected employees and selected date range are shown.

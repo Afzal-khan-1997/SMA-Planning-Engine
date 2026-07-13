@@ -36,6 +36,16 @@ Public Class SMASchedulerForm
     Private ReadOnly _resourceUtilizationHighlights As New Dictionary(Of String, Color)(StringComparer.OrdinalIgnoreCase)
     Private ReadOnly _employeeCapacityEntries As New BindingList(Of EmployeeCapacityEntry)()
     Private ReadOnly _explicitTaskUsageEdits As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+    Private _capacityFilterPanel As FlowLayoutPanel
+    Private _capacityStartPicker As DateTimePicker
+    Private _capacityFinishPicker As DateTimePicker
+    Private _capacityEmployeeList As CheckedListBox
+    Private _capacityApplyButton As Button
+    Private _capacitySelectAllButton As Button
+    Private _capacityClearButton As Button
+    Private _capacityFilterStatusLabel As Label
+    Private _capacitySqlData As SqlCapacityPlanningData
+    Private _isUpdatingCapacityFilters As Boolean
     Private _isRecalculating As Boolean
     Private _isRefreshingWorkspace As Boolean
     Private _isLoadingCatalogControls As Boolean
@@ -592,6 +602,7 @@ Public Class SMASchedulerForm
         ConfigureStaticWorkspaceGrid(_capacityGrid, DataGridViewSelectionMode.FullRowSelect, True, False)
         ConfigureStaticWorkspaceGrid(_resourceUtilizationGrid, DataGridViewSelectionMode.CellSelect, False, True)
         ConfigureEmployeeCapacityGrid()
+        EnsureCapacityPlanningFilters()
         _resourceUtilizationGrid.ReadOnly = False
 
         ConfigureDesignerPreview(PlannerPreviewMode.ResourcesUsed, allocationPreviewChart, allocationLegendGrid, allocationPrimaryLabel, allocationSecondaryLabel)
@@ -714,6 +725,185 @@ Public Class SMASchedulerForm
         })
 
         _employeeCapacityGrid.DataSource = _employeeCapacityEntries
+    End Sub
+
+    Private Sub EnsureCapacityPlanningFilters()
+        If capacityPlanningTab Is Nothing OrElse _capacityGrid Is Nothing Then
+            Return
+        End If
+
+        If _capacityFilterPanel IsNot Nothing Then
+            Return
+        End If
+
+        Dim defaultStart As Date
+        Dim defaultFinish As Date
+        If Not TryGetProjectDateRange(defaultStart, defaultFinish) Then
+            defaultStart = Date.Today
+            defaultFinish = Date.Today.AddDays(14)
+        End If
+
+        _capacityFilterPanel = New FlowLayoutPanel With {
+            .Name = "_capacityFilterPanel",
+            .Dock = DockStyle.Top,
+            .Height = 104,
+            .Padding = New Padding(10, 8, 10, 6),
+            .BackColor = Color.White,
+            .WrapContents = False,
+            .AutoScroll = True
+        }
+
+        _capacityStartPicker = New DateTimePicker With {
+            .Name = "_capacityStartPicker",
+            .Format = DateTimePickerFormat.Custom,
+            .CustomFormat = "dd-MM-yyyy",
+            .Width = 118,
+            .Value = defaultStart.Date
+        }
+        _capacityFinishPicker = New DateTimePicker With {
+            .Name = "_capacityFinishPicker",
+            .Format = DateTimePickerFormat.Custom,
+            .CustomFormat = "dd-MM-yyyy",
+            .Width = 118,
+            .Value = defaultFinish.Date
+        }
+        _capacityEmployeeList = New CheckedListBox With {
+            .Name = "_capacityEmployeeList",
+            .CheckOnClick = True,
+            .Width = 260,
+            .Height = 82,
+            .IntegralHeight = False
+        }
+        _capacityApplyButton = CapacityFilterButton("Apply", Color.FromArgb(42, 95, 160), Color.White)
+        _capacitySelectAllButton = CapacityFilterButton("Select All", Color.FromArgb(35, 46, 66), Color.White)
+        _capacityClearButton = CapacityFilterButton("Clear", Color.FromArgb(234, 238, 245), Color.FromArgb(35, 46, 66))
+        _capacityFilterStatusLabel = New Label With {
+            .AutoSize = False,
+            .Width = 300,
+            .Height = 42,
+            .TextAlign = ContentAlignment.MiddleLeft,
+            .ForeColor = Color.FromArgb(75, 85, 99)
+        }
+
+        AddHandler _capacityApplyButton.Click, AddressOf CapacityFilterApplyButton_Click
+        AddHandler _capacitySelectAllButton.Click, AddressOf CapacityFilterSelectAllButton_Click
+        AddHandler _capacityClearButton.Click, AddressOf CapacityFilterClearButton_Click
+        AddHandler _capacityStartPicker.ValueChanged, AddressOf CapacityFilterDateChanged
+        AddHandler _capacityFinishPicker.ValueChanged, AddressOf CapacityFilterDateChanged
+
+        _capacityFilterPanel.Controls.Add(CapacityFilterLabel("From"))
+        _capacityFilterPanel.Controls.Add(_capacityStartPicker)
+        _capacityFilterPanel.Controls.Add(CapacityFilterLabel("To"))
+        _capacityFilterPanel.Controls.Add(_capacityFinishPicker)
+        _capacityFilterPanel.Controls.Add(CapacityFilterLabel("Employees"))
+        _capacityFilterPanel.Controls.Add(_capacityEmployeeList)
+        _capacityFilterPanel.Controls.Add(_capacityApplyButton)
+        _capacityFilterPanel.Controls.Add(_capacitySelectAllButton)
+        _capacityFilterPanel.Controls.Add(_capacityClearButton)
+        _capacityFilterPanel.Controls.Add(_capacityFilterStatusLabel)
+
+        capacityPlanningTab.Controls.Add(_capacityFilterPanel)
+        _capacityFilterPanel.BringToFront()
+        PopulateCapacityEmployeeChecklist(_employees.Cast(Of String)(), checkAll:=True)
+    End Sub
+
+    Private Shared Function CapacityFilterLabel(text As String) As Label
+        Return New Label With {
+            .Text = text,
+            .AutoSize = True,
+            .TextAlign = ContentAlignment.MiddleLeft,
+            .Margin = New Padding(0, 8, 6, 0),
+            .ForeColor = Color.FromArgb(75, 85, 99)
+        }
+    End Function
+
+    Private Shared Function CapacityFilterButton(text As String, backColor As Color, foreColor As Color) As Button
+        Dim button As New Button With {
+            .Text = text,
+            .Width = 92,
+            .Height = 30,
+            .FlatStyle = FlatStyle.Flat,
+            .BackColor = backColor,
+            .ForeColor = foreColor,
+            .Margin = New Padding(8, 5, 0, 0)
+        }
+        button.FlatAppearance.BorderSize = 0
+        Return button
+    End Function
+
+    Private Sub PopulateCapacityEmployeeChecklist(employeeNames As IEnumerable(Of String), checkAll As Boolean)
+        If _capacityEmployeeList Is Nothing OrElse employeeNames Is Nothing Then
+            Return
+        End If
+
+        Dim selected = New HashSet(Of String)(SelectedCapacityEmployees(), StringComparer.OrdinalIgnoreCase)
+        Dim names = employeeNames.
+            Where(Function(name) Not String.IsNullOrWhiteSpace(name)).
+            Select(Function(name) name.Trim()).
+            Distinct(StringComparer.OrdinalIgnoreCase).
+            OrderBy(Function(name) name, StringComparer.OrdinalIgnoreCase).
+            ToList()
+
+        _isUpdatingCapacityFilters = True
+        Try
+            _capacityEmployeeList.Items.Clear()
+            For Each employeeName In names
+                Dim shouldCheck = checkAll OrElse selected.Contains(employeeName)
+                _capacityEmployeeList.Items.Add(employeeName, shouldCheck)
+            Next
+        Finally
+            _isUpdatingCapacityFilters = False
+        End Try
+    End Sub
+
+    Private Function SelectedCapacityEmployees() As List(Of String)
+        If _capacityEmployeeList Is Nothing Then
+            Return New List(Of String)()
+        End If
+
+        Return _capacityEmployeeList.CheckedItems.
+            Cast(Of Object)().
+            Select(Function(item) Convert.ToString(item, CultureInfo.InvariantCulture)).
+            Where(Function(name) Not String.IsNullOrWhiteSpace(name)).
+            Select(Function(name) name.Trim()).
+            Distinct(StringComparer.OrdinalIgnoreCase).
+            ToList()
+    End Function
+
+    Private Sub CapacityFilterApplyButton_Click(sender As Object, e As EventArgs)
+        UpdateCapacityPlanningGrid()
+    End Sub
+
+    Private Sub CapacityFilterSelectAllButton_Click(sender As Object, e As EventArgs)
+        If _capacityEmployeeList Is Nothing Then
+            Return
+        End If
+
+        For index = 0 To _capacityEmployeeList.Items.Count - 1
+            _capacityEmployeeList.SetItemChecked(index, True)
+        Next
+        UpdateCapacityPlanningGrid()
+    End Sub
+
+    Private Sub CapacityFilterClearButton_Click(sender As Object, e As EventArgs)
+        If _capacityEmployeeList Is Nothing Then
+            Return
+        End If
+
+        For index = 0 To _capacityEmployeeList.Items.Count - 1
+            _capacityEmployeeList.SetItemChecked(index, False)
+        Next
+        UpdateCapacityPlanningGrid()
+    End Sub
+
+    Private Sub CapacityFilterDateChanged(sender As Object, e As EventArgs)
+        If _isUpdatingCapacityFilters Then
+            Return
+        End If
+
+        If _capacityStartPicker IsNot Nothing AndAlso _capacityFinishPicker IsNot Nothing AndAlso _capacityFinishPicker.Value.Date < _capacityStartPicker.Value.Date Then
+            _capacityFinishPicker.Value = _capacityStartPicker.Value.Date
+        End If
     End Sub
 
     Private Sub ConfigureDesignerPreview(mode As PlannerPreviewMode, chart As PlannerPieChartPanel, legend As DataGridView, primaryLabel As Label, secondaryLabel As Label)
@@ -2329,16 +2519,25 @@ Public Class SMASchedulerForm
 
             _capacityGrid.Columns.Add(New DataGridViewTextBoxColumn With {.HeaderText = "Resource / Task", .Width = 320, .ReadOnly = True, .Frozen = True})
 
-            Dim projectStart As Date
-            Dim projectFinish As Date
-            If Not TryGetProjectDateRange(projectStart, projectFinish) Then
-                projectStart = Date.Today
-                projectFinish = Date.Today
+            Dim projectStart = CapacityFilterStartDate()
+            Dim projectFinish = CapacityFilterFinishDate()
+            If projectFinish < projectStart Then
+                projectFinish = projectStart
             End If
 
-            AddDateColumns(_capacityGrid, _capacityDateColumns, projectStart.AddDays(-5), projectFinish)
+            AddDateColumns(_capacityGrid, _capacityDateColumns, projectStart, projectFinish)
 
-            Dim resources = AllKnownEmployees()
+            Dim sqlData = LoadSqlCapacityPlanningData(projectStart, projectFinish)
+            If sqlData IsNot Nothing AndAlso sqlData.Employees.Count > 0 Then
+                PopulateCapacityEmployeeChecklist(sqlData.Employees.Select(Function(employee) employee.EmployeeName), checkAll:=_capacityEmployeeList Is Nothing OrElse _capacityEmployeeList.Items.Count = 0)
+                RenderSqlCapacityPlanningGrid(sqlData, projectStart, projectFinish)
+                Return
+            End If
+
+            Dim resources = SelectedCapacityEmployees()
+            If resources.Count = 0 Then
+                resources = AllKnownEmployees()
+            End If
             If resources.Count = 0 Then
                 _capacityGrid.Rows.Add("No employees loaded")
                 Return
@@ -2408,6 +2607,224 @@ Public Class SMASchedulerForm
         Finally
             _isLoadingCapacityGrid = False
         End Try
+    End Sub
+
+    Private Function CapacityFilterStartDate() As Date
+        If _capacityStartPicker IsNot Nothing Then
+            Return _capacityStartPicker.Value.Date
+        End If
+
+        Dim projectStart As Date
+        Dim projectFinish As Date
+        If TryGetProjectDateRange(projectStart, projectFinish) Then
+            Return projectStart.Date
+        End If
+
+        Return Date.Today
+    End Function
+
+    Private Function CapacityFilterFinishDate() As Date
+        If _capacityFinishPicker IsNot Nothing Then
+            Return _capacityFinishPicker.Value.Date
+        End If
+
+        Dim projectStart As Date
+        Dim projectFinish As Date
+        If TryGetProjectDateRange(projectStart, projectFinish) Then
+            Return projectFinish.Date
+        End If
+
+        Return Date.Today
+    End Function
+
+    Private Function LoadSqlCapacityPlanningData(projectStart As Date, projectFinish As Date) As SqlCapacityPlanningData
+        If _sqlRepository Is Nothing Then
+            Return Nothing
+        End If
+
+        Try
+            _capacitySqlData = _sqlRepository.LoadCapacityPlanningData(projectStart, projectFinish)
+            Return _capacitySqlData
+        Catch ex As Exception
+            SetStatus("SQL capacity planning data could not be loaded. Showing current schedule data.")
+            Return Nothing
+        End Try
+    End Function
+
+    Private Sub RenderSqlCapacityPlanningGrid(sqlData As SqlCapacityPlanningData, projectStart As Date, projectFinish As Date)
+        Dim selectedNames = SelectedCapacityEmployees()
+        If selectedNames.Count = 0 AndAlso _capacityEmployeeList IsNot Nothing AndAlso _capacityEmployeeList.Items.Count > 0 Then
+            _capacityGrid.Rows.Add("Select employee(s) to view capacity planning.")
+            UpdateCapacityFilterStatus(0, projectStart, projectFinish, True)
+            Return
+        End If
+
+        Dim selectedSet = New HashSet(Of String)(selectedNames, StringComparer.OrdinalIgnoreCase)
+        Dim employees = sqlData.Employees.
+            Where(Function(employee) selectedSet.Contains(employee.EmployeeName)).
+            OrderBy(Function(employee) employee.EmployeeName, StringComparer.OrdinalIgnoreCase).
+            ToList()
+
+        If employees.Count = 0 Then
+            _capacityGrid.Rows.Add("No selected active employees found.")
+            UpdateCapacityFilterStatus(0, projectStart, projectFinish, True)
+            Return
+        End If
+
+        Dim availability = sqlData.Availability.
+            GroupBy(Function(item) CapacitySqlKey(item.EmployeeId, item.WorkDate)).
+            ToDictionary(Function(group) group.Key, Function(group) group.Last().AvailableHours, StringComparer.OrdinalIgnoreCase)
+
+        Dim assignmentsByEmployee = sqlData.Assignments.
+            Where(Function(item) selectedSet.Contains(item.EmployeeName)).
+            GroupBy(Function(item) item.EmployeeId, StringComparer.OrdinalIgnoreCase).
+            ToDictionary(Function(group) group.Key, Function(group) group.ToList(), StringComparer.OrdinalIgnoreCase)
+
+        For Each employee In employees
+            Dim employeeAssignments As List(Of SqlCapacityAssignment) = Nothing
+            If Not assignmentsByEmployee.TryGetValue(employee.EmployeeId, employeeAssignments) Then
+                employeeAssignments = New List(Of SqlCapacityAssignment)()
+            End If
+
+            AddSqlCapacityAvailableRow(employee, availability)
+            AddSqlCapacityPlannedRow(employee, employeeAssignments)
+
+            For Each projectGroup In employeeAssignments.
+                GroupBy(Function(item) If(String.IsNullOrWhiteSpace(item.ProjectName), item.ProjectIdAtSma, item.ProjectName), StringComparer.OrdinalIgnoreCase).
+                OrderBy(Function(group) group.Key, StringComparer.OrdinalIgnoreCase)
+
+                AddSqlCapacityProjectRow(projectGroup.Key, projectGroup.ToList())
+
+                For Each taskGroup In projectGroup.
+                    GroupBy(Function(item) item.TaskOrder.ToString(CultureInfo.InvariantCulture) & "|" & item.TaskName, StringComparer.OrdinalIgnoreCase).
+                    OrderBy(Function(group) group.Min(Function(item) item.TaskOrder)).
+                    ThenBy(Function(group) group.First().TaskName, StringComparer.OrdinalIgnoreCase)
+
+                    AddSqlCapacityTaskRow(taskGroup.First(), taskGroup.ToList())
+                Next
+            Next
+        Next
+
+        UpdateCapacityFilterStatus(employees.Count, projectStart, projectFinish, True)
+    End Sub
+
+    Private Sub AddSqlCapacityAvailableRow(employee As SqlCapacityEmployee, availability As Dictionary(Of String, Decimal))
+        Dim row = _capacityGrid.Rows(_capacityGrid.Rows.Add())
+        row.ReadOnly = True
+        row.Cells(0).Value = employee.EmployeeName & " - Available"
+        row.DefaultCellStyle.BackColor = Color.FromArgb(245, 248, 252)
+        row.DefaultCellStyle.ForeColor = Color.FromArgb(37, 47, 63)
+        row.DefaultCellStyle.Font = New Font("Segoe UI", 9.0F, FontStyle.Italic)
+
+        For Each dateColumn In _capacityDateColumns
+            Dim workDate = dateColumn.Value
+            Dim cell = row.Cells(dateColumn.Key)
+            If IsBlockedScheduleDate(workDate) Then
+                StyleBlockedCell(cell)
+                Continue For
+            End If
+
+            Dim availableHours As Decimal
+            If Not availability.TryGetValue(CapacitySqlKey(employee.EmployeeId, workDate), availableHours) Then
+                availableHours = 8D
+            End If
+            cell.Value = availableHours
+            cell.Style.BackColor = If(availableHours <= 0D, Color.FromArgb(255, 238, 200), Color.FromArgb(209, 242, 224))
+            cell.Style.ForeColor = If(availableHours <= 0D, Color.FromArgb(120, 70, 0), Color.FromArgb(22, 101, 52))
+            cell.ToolTipText = "SQL available hours for " & employee.EmployeeName & " on " & workDate.ToString("dd-MMM-yyyy", CultureInfo.InvariantCulture)
+        Next
+    End Sub
+
+    Private Sub AddSqlCapacityPlannedRow(employee As SqlCapacityEmployee, assignments As List(Of SqlCapacityAssignment))
+        Dim row = _capacityGrid.Rows(_capacityGrid.Rows.Add())
+        row.ReadOnly = True
+        row.Cells(0).Value = employee.EmployeeName & " - Planned"
+
+        For Each dateColumn In _capacityDateColumns
+            Dim workDate = dateColumn.Value
+            Dim cell = row.Cells(dateColumn.Key)
+            If IsBlockedScheduleDate(workDate) Then
+                StyleBlockedCell(cell)
+                Continue For
+            End If
+
+            Dim plannedHours = assignments.
+                Where(Function(item) item.WorkDate.Date = workDate.Date).
+                Sum(Function(item) item.PlannedHours)
+            cell.Value = plannedHours
+            StyleUsageSummaryCell(cell, plannedHours)
+            cell.ToolTipText = "SQL planned hours for " & employee.EmployeeName & " on " & workDate.ToString("dd-MMM-yyyy", CultureInfo.InvariantCulture)
+        Next
+    End Sub
+
+    Private Sub AddSqlCapacityProjectRow(projectName As String, assignments As List(Of SqlCapacityAssignment))
+        Dim row = _capacityGrid.Rows(_capacityGrid.Rows.Add())
+        row.ReadOnly = True
+        row.Cells(0).Value = "   Project: " & If(String.IsNullOrWhiteSpace(projectName), "Unknown Project", projectName)
+        row.DefaultCellStyle.BackColor = Color.FromArgb(235, 241, 252)
+        row.DefaultCellStyle.ForeColor = Color.FromArgb(31, 78, 121)
+        row.DefaultCellStyle.Font = New Font("Segoe UI Semibold", 9.0F)
+
+        For Each dateColumn In _capacityDateColumns
+            Dim workDate = dateColumn.Value
+            Dim cell = row.Cells(dateColumn.Key)
+            If IsBlockedScheduleDate(workDate) Then
+                StyleBlockedCell(cell)
+                Continue For
+            End If
+
+            Dim projectHours = assignments.
+                Where(Function(item) item.WorkDate.Date = workDate.Date).
+                Sum(Function(item) item.PlannedHours)
+            cell.Value = projectHours
+            StyleUsageSummaryCell(cell, projectHours)
+        Next
+    End Sub
+
+    Private Sub AddSqlCapacityTaskRow(sample As SqlCapacityAssignment, assignments As List(Of SqlCapacityAssignment))
+        Dim row = _capacityGrid.Rows(_capacityGrid.Rows.Add())
+        row.ReadOnly = True
+        row.Cells(0).Value = "      " & sample.TaskOrder.ToString(CultureInfo.InvariantCulture) & ". " & sample.TaskName
+
+        For Each dateColumn In _capacityDateColumns
+            Dim workDate = dateColumn.Value
+            Dim cell = row.Cells(dateColumn.Key)
+            If IsBlockedScheduleDate(workDate) Then
+                StyleBlockedCell(cell)
+                Continue For
+            End If
+
+            Dim taskHours = assignments.
+                Where(Function(item) item.WorkDate.Date = workDate.Date).
+                Sum(Function(item) item.PlannedHours)
+            cell.Value = taskHours
+            If taskHours > 8D Then
+                cell.Style.BackColor = Color.FromArgb(255, 210, 210)
+                cell.Style.ForeColor = Color.Firebrick
+            ElseIf taskHours > 0D Then
+                cell.Style.BackColor = Color.FromArgb(224, 245, 232)
+                cell.Style.ForeColor = Color.FromArgb(34, 94, 74)
+            Else
+                cell.Style.BackColor = Color.White
+                cell.Style.ForeColor = Color.FromArgb(75, 85, 99)
+            End If
+            cell.ToolTipText = sample.TaskName & " on " & workDate.ToString("dd-MMM-yyyy", CultureInfo.InvariantCulture)
+        Next
+    End Sub
+
+    Private Shared Function CapacitySqlKey(employeeId As String, workDate As Date) As String
+        Return If(employeeId, "").Trim().ToUpperInvariant() & "|" & workDate.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+    End Function
+
+    Private Sub UpdateCapacityFilterStatus(employeeCount As Integer, projectStart As Date, projectFinish As Date, sqlBacked As Boolean)
+        If _capacityFilterStatusLabel Is Nothing Then
+            Return
+        End If
+
+        Dim sourceText = If(sqlBacked, "SQL", "Current schedule")
+        _capacityFilterStatusLabel.Text = sourceText & ": " & employeeCount.ToString(CultureInfo.InvariantCulture) & " employee(s), " &
+            projectStart.ToString("dd-MMM", CultureInfo.InvariantCulture) & " to " &
+            projectFinish.ToString("dd-MMM-yyyy", CultureInfo.InvariantCulture)
     End Sub
 
     Private Sub UpdateResourceUtilizationGrid()
