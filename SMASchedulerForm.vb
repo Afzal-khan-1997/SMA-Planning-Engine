@@ -8,8 +8,6 @@ Imports System.IO
 Public Class SMASchedulerForm
     Private ReadOnly _tasks As New BindingList(Of ScheduleTask)
     Private ReadOnly _engine As New ScheduleEngine()
-    Private ReadOnly _xlsxExportService As New XlsxExportService()
-    Private ReadOnly _projectLibrary As New ProjectLibraryService()
     Private ReadOnly _sqlRepository As SqlProjectRepository = CreateSqlRepository()
     Private ReadOnly _taskCatalogService As TaskCatalogService
     Private ReadOnly _employeeCatalogService As EmployeeCatalogService
@@ -1859,8 +1857,6 @@ Public Class SMASchedulerForm
 
             _sqlRepository.SaveProject(projectName, _tasks, version, projectSize, _projectType, _totalProjectHours.Value, AssignedResourceCount(), totalAssignedHours)
 
-            SaveEmployeeWorkspaceWorkbook()
-            SaveProjectSnapshotToLibrary()
             MarkCurrentStateSaved()
 
             If showSuccessMessage Then
@@ -1919,24 +1915,6 @@ Public Class SMASchedulerForm
             taskSignature
         })
     End Function
-
-    Private Sub OpenProjectFile(sender As Object, e As EventArgs)
-        Using dialog As New OpenFileDialog()
-            dialog.Title = "Open SMA schedule"
-            dialog.Filter = "SMA schedule (*.smaschedule;*.json)|*.smaschedule;*.json"
-
-            If dialog.ShowDialog(Me) <> DialogResult.OK Then
-                Return
-            End If
-
-            Dim snapshot = _projectLibrary.LoadSnapshot(dialog.FileName)
-            If snapshot Is Nothing Then
-                Return
-            End If
-
-            LoadProjectSnapshot(snapshot)
-        End Using
-    End Sub
 
     Private Sub GridCellValueChanged(sender As Object, e As DataGridViewCellEventArgs) Handles _grid.CellValueChanged
         If e.RowIndex < 0 OrElse e.ColumnIndex < 0 OrElse _isRecalculating Then
@@ -2061,7 +2039,6 @@ Public Class SMASchedulerForm
                 task.StartDate = NextWorkingDate(task.StartDate)
                 task.FinishDate = FinishFromWorkingDuration(task.StartDate, task.DurationDays)
                 SyncTaskResourceDistribution(task)
-                SaveEmployeeWorkspaceWorkbook()
         End Select
     End Sub
 
@@ -3979,51 +3956,6 @@ Public Class SMASchedulerForm
         End If
 
         Return 0D
-    End Function
-
-    Private Function SaveEmployeeWorkspaceWorkbook() As Boolean
-        Try
-            Dim resourceMonth = ResourceWorkbookMonth()
-            Dim filePath = CapacityPlanningWorkbookPath(resourceMonth)
-            Directory.CreateDirectory(Path.GetDirectoryName(filePath))
-            Dim fileName = Path.GetFileName(filePath)
-            _xlsxExportService.ExportResourceMonth(filePath, _projectName.Text, _versionNumber.Text, _employees, _tasks, resourceMonth, _includeSaturdays.Checked)
-            SetStatus("Capacity Planning updated: " & fileName)
-            Return True
-        Catch ex As IOException
-            SetStatus("Capacity Planning workbook is open or locked. Close the Excel file and save again.")
-        Catch ex As UnauthorizedAccessException
-            SetStatus("Capacity Planning workbook could not be saved. Check folder permission.")
-        End Try
-        Return False
-    End Function
-
-    Private Function BuildProjectSnapshot() As ProjectSnapshot
-        Return New ProjectSnapshot With {
-            .ProjectName = _projectName.Text,
-            .VersionNumber = _versionNumber.Text,
-            .ProjectSize = If(_projectSizeSelector.SelectedItem Is Nothing, "Small", CStr(_projectSizeSelector.SelectedItem)),
-            .ProjectType = _projectType,
-            .TotalProjectHours = _totalProjectHours.Value,
-            .ResourcesNeeded = AssignedResourceCount(),
-            .Tasks = _tasks.ToList(),
-            .UpdatedOn = Date.Now
-        }
-    End Function
-
-    Private Sub SaveProjectSnapshotToLibrary()
-        Try
-            _projectLibrary.SaveSnapshot(BuildProjectSnapshot())
-        Catch ex As IOException
-            SetStatus("Project schedule could not be stored in the planner library.")
-        Catch ex As UnauthorizedAccessException
-            SetStatus("Project schedule could not be stored. Check folder permission.")
-        End Try
-    End Sub
-
-    Private Function CapacityPlanningWorkbookPath(monthDate As Date) As String
-        Dim folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "SMA Scheduler", "Capacity Planning")
-        Return Path.Combine(folder, "Capacity Planning_" & monthDate.ToString("yyyyMM") & ".xlsx")
     End Function
 
     Private Function IsScheduleEditColumn(propertyName As String) As Boolean

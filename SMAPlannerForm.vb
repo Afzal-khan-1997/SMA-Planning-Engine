@@ -6,11 +6,9 @@ Imports System.ComponentModel.Design
 Public Class SMAPlannerForm
     Inherits Form
 
-    Private ReadOnly _projectLibrary As New ProjectLibraryService()
     Private ReadOnly _sqlRepository As SqlProjectRepository = CreateSqlRepository()
     Private ReadOnly _liveProjectCatalog As LiveProjectCatalogService
     Private ReadOnly _projects As New BindingList(Of ProjectLibraryItem)()
-    Private ReadOnly _liveProjects As New BindingList(Of LiveProjectItem)()
     Private ReadOnly _searchProjectMatches As New List(Of LiveProjectItem)()
     Private _selectedSearchProject As LiveProjectItem
     Private _currentTheme As SchedulerThemePalette = SchedulerThemePalette.ThemeByName("Dusk")
@@ -24,7 +22,6 @@ Public Class SMAPlannerForm
             SeedPlannerDesignerData()
         Else
             LoadProjectList()
-            LoadLiveProjectList()
         End If
         ApplyCurrentTheme()
     End Sub
@@ -191,22 +188,6 @@ Public Class SMAPlannerForm
         Return control IsNot Nothing AndAlso Not control.IsDisposed
     End Function
 
-    Private Sub LoadLiveProjectList()
-        Dim matches = _liveProjectCatalog.SearchProjects("").
-            Where(Function(project) Not project.IsStoredProject).
-            GroupBy(Function(project) project.ProjectCode, StringComparer.OrdinalIgnoreCase).
-            Select(Function(group) group.First()).
-            OrderBy(Function(project) project.ProjectName, StringComparer.OrdinalIgnoreCase).
-            ToList()
-
-        _liveProjects.Clear()
-        For Each project In matches
-            _liveProjects.Add(project)
-        Next
-
-        RefreshSearchProjectSuggestions()
-    End Sub
-
     Private Sub LiveProjectSearchTextChanged(sender As Object, e As EventArgs)
         If _isUpdatingSearchText Then
             Return
@@ -299,28 +280,22 @@ Public Class SMAPlannerForm
         Dim recentSearchText = If(_recentProjectSearchBox Is Nothing, "", _recentProjectSearchBox.Text.Trim())
         Dim activeOnly = _activeProjectsCheckBox Is Nothing OrElse _activeProjectsCheckBox.Checked
 
-        If _sqlRepository IsNot Nothing Then
-            Try
-                For Each project In _sqlRepository.ListRecentScheduledProjects(recentSearchText, activeOnly)
-                    _projects.Add(project)
-                Next
-                loadedFromSql = True
-            Catch ex As Exception
-                SetPlannerStatus("SQL project list could not be loaded. Showing local backups.")
-            End Try
+        If _sqlRepository Is Nothing Then
+            SetPlannerStatus("SQL connection is not configured. Update App.config with SmaSchedulerDb.")
+            RefreshSearchProjectSuggestions()
+            UpdatePlanningSummary()
+            Return
         End If
 
-        If Not loadedFromSql Then
-            For Each project In _projectLibrary.ListProjects()
+        Try
+            For Each project In _sqlRepository.ListRecentScheduledProjects(recentSearchText, activeOnly)
                 _projects.Add(project)
             Next
-        End If
-
-        If loadedFromSql Then
+            loadedFromSql = True
             _status.Text = _projects.Count.ToString(CultureInfo.InvariantCulture) & " recent scheduled project(s) loaded from SQL. Double-click a project to update its schedule."
-        Else
-            _status.Text = _projects.Count.ToString(CultureInfo.InvariantCulture) & " planned project(s). Double-click a project to update its schedule."
-        End If
+        Catch ex As Exception
+            SetPlannerStatus("SQL project list could not be loaded. Check the SmaSchedulerDb connection.")
+        End Try
 
         If loadedFromSql AndAlso recentSearchText.Length > 0 AndAlso _projects.Count = 0 Then
             SetPlannerStatus("This project is not planned in this application.")
@@ -331,7 +306,6 @@ Public Class SMAPlannerForm
 
     Private Sub RefreshPlannerLists()
         LoadProjectList()
-        LoadLiveProjectList()
     End Sub
 
     Private Sub UpdatePlanningSummary()
@@ -357,14 +331,6 @@ Public Class SMAPlannerForm
 
     Private Shared Function CountProjects(projects As IEnumerable(Of ProjectLibraryItem), projectType As String) As Integer
         Return projects.Count(Function(project) String.Equals(project.ProjectType, projectType, StringComparison.OrdinalIgnoreCase))
-    End Function
-
-    Private Function SelectedLiveProject() As LiveProjectItem
-        If _liveProjects.Count > 0 Then
-            Return _liveProjects(0)
-        End If
-
-        Return _liveProjectCatalog.GetDefaultNewProjectTemplate()
     End Function
 
     Private Function ResolveSearchProject(preferFirstMatch As Boolean) As LiveProjectItem
@@ -446,27 +412,29 @@ Public Class SMAPlannerForm
     End Sub
 
     Private Sub btnScheduleProject_Click(sender As Object, e As EventArgs)
-        ' Step 1: identify the project/template selected from the Planning Engine form.
-        Dim selectedTemplate = SelectedLiveProject()
-        If selectedTemplate Is Nothing Then
-            MessageBox.Show(Me, "No template is selected.", "Schedule Project", MessageBoxButtons.OK, MessageBoxIcon.Information)
+        If _sqlRepository Is Nothing Then
+            MessageBox.Show(Me, "SQL connection is not configured. Update App.config with the SmaSchedulerDb connection string.", "SQL Not Configured", MessageBoxButtons.OK, MessageBoxIcon.Warning)
             Return
         End If
 
-        Dim selectedProject = ResolveSearchProject(True)
         Dim projectCode = _liveProjectSearchBox.Text.Trim()
-        Dim sqlProject As SqlProjectPlanningInfo = Nothing
-        ' Step 2: load the live project details from SQL by Project ID at SMA.
-        ' Project size comes from Table_Project_Tracking and drives scheduler resource hours.
-        If _sqlRepository IsNot Nothing AndAlso projectCode.Length > 0 Then
-            Try
-                sqlProject = _sqlRepository.GetProjectPlanningInfo(projectCode)
-            Catch ex As Exception
-                SetPlannerStatus("SQL project details could not be loaded.")
-            End Try
+        If projectCode.Length = 0 Then
+            MessageBox.Show(Me, "Type a Project ID first.", "Schedule Project", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return
         End If
 
-        ' Step 3: enforce planning rules before opening the Scheduler form.
+        Dim sqlProject As SqlProjectPlanningInfo = Nothing
+        ' Step 1: load the live project details from SQL by Project ID at SMA.
+        ' Project size comes from Table_Project_Tracking and drives scheduler resource hours.
+        Try
+            sqlProject = _sqlRepository.GetProjectPlanningInfo(projectCode)
+        Catch ex As Exception
+            MessageBox.Show(Me, "SQL project details could not be loaded." & Environment.NewLine & ex.Message, "SQL Load Failed", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            SetPlannerStatus("SQL project details could not be loaded.")
+            Return
+        End Try
+
+        ' Step 2: enforce planning rules before opening the Scheduler form.
         If sqlProject IsNot Nothing AndAlso sqlProject.IsPlanned.HasValue AndAlso sqlProject.IsPlanned.Value Then
             MessageBox.Show(Me, "This project has already been planned. Please search for it in the 'Recent Scheduled Projects' list.", "Schedule Project", MessageBoxButtons.OK, MessageBoxIcon.Warning)
             Return
@@ -477,17 +445,13 @@ Public Class SMAPlannerForm
             Return
         End If
 
-        If sqlProject Is Nothing AndAlso _sqlRepository IsNot Nothing AndAlso projectCode.Length > 0 Then
+        If sqlProject Is Nothing Then
             MessageBox.Show(Me, "This project is not planned in this application.", "Schedule Project", MessageBoxButtons.OK, MessageBoxIcon.Information)
             Return
         End If
 
-        ' Step 4: build the scheduler input model with SQL project metadata and report filters.
-        ' SQL values win over template defaults so the Scheduler uses the tracked project size.
-        Dim projectName = FirstNonBlank(
-            If(sqlProject Is Nothing, "", sqlProject.ProjectName),
-            If(selectedProject Is Nothing, "", selectedProject.ProjectName),
-            projectCode)
+        ' Step 3: build the scheduler input model from SQL project metadata and report filters.
+        Dim projectName = FirstNonBlank(sqlProject.ProjectName, projectCode)
 
         If String.IsNullOrWhiteSpace(projectName) Then
             MessageBox.Show(Me, "Type or select a live project first.", "Schedule Project", MessageBoxButtons.OK, MessageBoxIcon.Information)
@@ -495,30 +459,28 @@ Public Class SMAPlannerForm
         End If
 
         Dim projectToSchedule As New LiveProjectItem With {
-            .ProjectCode = FirstNonBlank(If(sqlProject Is Nothing, "", sqlProject.ProjectIdAtSma), If(selectedProject Is Nothing, "", selectedProject.ProjectCode), selectedTemplate.ProjectCode, projectName),
+            .ProjectCode = FirstNonBlank(sqlProject.ProjectIdAtSma, projectName),
             .ProjectName = projectName,
-            .ClientName = FirstNonBlank(If(selectedProject Is Nothing, "", selectedProject.ClientName), selectedTemplate.ClientName, "SQL"),
-            .VersionNumber = FirstNonBlank(If(sqlProject Is Nothing, "", sqlProject.VersionNumber), If(selectedProject Is Nothing, "", selectedProject.VersionNumber), "1.0"),
-            .ProjectSize = FirstNonBlank(If(sqlProject Is Nothing, "", sqlProject.ProjectSize), If(selectedProject Is Nothing, "", selectedProject.ProjectSize), "Small"),
-            .TemplateName = FirstNonBlank(If(sqlProject Is Nothing, "", sqlProject.ProjectType), selectedTemplate.TemplateName, selectedTemplate.ProjectName, "SMA New Project"),
-            .ProjectType = FirstNonBlank(If(sqlProject Is Nothing, "", sqlProject.ProjectType), selectedTemplate.ProjectType, If(selectedProject Is Nothing, "", selectedProject.ProjectType), "New"),
-            .SavedProjectId = If(selectedProject Is Nothing, 0, selectedProject.SavedProjectId),
-            .SourceFilePath = If(selectedProject Is Nothing, "", selectedProject.SourceFilePath),
-            .ReportType = FirstNonBlank(If(sqlProject Is Nothing, "", sqlProject.ReportType), selectedTemplate.ReportType),
-            .TaskReportFilter = BuildTaskReportFilter(sqlProject, selectedTemplate),
+            .ClientName = "SQL",
+            .VersionNumber = FirstNonBlank(sqlProject.VersionNumber, "1.0"),
+            .ProjectSize = FirstNonBlank(sqlProject.ProjectSize, "Small"),
+            .TemplateName = FirstNonBlank(sqlProject.ProjectType, "New"),
+            .ProjectType = FirstNonBlank(sqlProject.ProjectType, "New"),
+            .ReportType = sqlProject.ReportType,
+            .TaskReportFilter = BuildTaskReportFilter(sqlProject),
             .ProjectDetailsText = BuildProjectDetailsText(sqlProject),
-            .FinalCompletionDate = If(sqlProject Is Nothing, Nothing, sqlProject.FinalCompletionDate),
-            .PlanningMessage = If(sqlProject Is Nothing, "", sqlProject.PlanningMessage),
-            .ControllerAtRolc = If(sqlProject Is Nothing, "", sqlProject.ControllerAtRolc),
-            .ClientType = If(sqlProject Is Nothing, "", sqlProject.ClientType),
-            .IsPointcloud = sqlProject IsNot Nothing AndAlso sqlProject.IsPointcloud,
-            .TechPack = sqlProject IsNot Nothing AndAlso sqlProject.TechPack,
-            .DeedProfile = sqlProject IsNot Nothing AndAlso sqlProject.DeedProfile,
-            .ShadowAnalysis = sqlProject IsNot Nothing AndAlso sqlProject.ShadowAnalysis,
-            .UrgentSmallProjects = sqlProject IsNot Nothing AndAlso sqlProject.UrgentSmallProjects
+            .FinalCompletionDate = sqlProject.FinalCompletionDate,
+            .PlanningMessage = sqlProject.PlanningMessage,
+            .ControllerAtRolc = sqlProject.ControllerAtRolc,
+            .ClientType = sqlProject.ClientType,
+            .IsPointcloud = sqlProject.IsPointcloud,
+            .TechPack = sqlProject.TechPack,
+            .DeedProfile = sqlProject.DeedProfile,
+            .ShadowAnalysis = sqlProject.ShadowAnalysis,
+            .UrgentSmallProjects = sqlProject.UrgentSmallProjects
         }
 
-        ' Step 5: open SMA Scheduler; LoadLiveProjectTemplate loads template tasks into the task grid.
+        ' Step 4: open SMA Scheduler; SQL task rows are loaded into the task grid.
         Using scheduler As New SMASchedulerForm()
             scheduler.LoadLiveProjectTemplate(projectToSchedule)
             FormTransitionService.ShowDialogWithMotion(Me, scheduler)
@@ -537,11 +499,7 @@ Public Class SMAPlannerForm
         Return ""
     End Function
 
-    Private Shared Function BuildTaskReportFilter(sqlProject As SqlProjectPlanningInfo, selectedTemplate As LiveProjectItem) As String
-        If sqlProject Is Nothing Then
-            Return FirstNonBlank(selectedTemplate.TaskReportFilter, selectedTemplate.ReportType)
-        End If
-
+    Private Shared Function BuildTaskReportFilter(sqlProject As SqlProjectPlanningInfo) As String
         Dim parts As New List(Of String)()
         If Not String.IsNullOrWhiteSpace(sqlProject.ReportType) Then
             parts.Add(sqlProject.ReportType)
@@ -626,7 +584,7 @@ Public Class SMAPlannerForm
             Try
                 snapshot = _sqlRepository.LoadProjectSnapshotByProjectCode(item.ProjectCode)
             Catch ex As Exception
-                SetPlannerStatus("SQL project schedule load failed. Trying local backup.")
+                SetPlannerStatus("SQL project schedule load failed.")
             End Try
         End If
 
@@ -634,16 +592,12 @@ Public Class SMAPlannerForm
             Try
                 snapshot = _sqlRepository.LoadProjectSnapshot(item.ProjectId)
             Catch ex As Exception
-                SetPlannerStatus("SQL project load failed. Trying local backup.")
+                SetPlannerStatus("SQL project load failed.")
             End Try
         End If
 
-        If snapshot Is Nothing AndAlso Not String.IsNullOrWhiteSpace(item.FilePath) Then
-            snapshot = _projectLibrary.LoadSnapshot(item.FilePath)
-        End If
-
         If snapshot Is Nothing Then
-            MessageBox.Show(Me, "This planned project could not be opened.", "Open Project", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            MessageBox.Show(Me, "This planned project could not be opened from SQL.", "Open Project", MessageBoxButtons.OK, MessageBoxIcon.Warning)
             LoadProjectList()
             Return
         End If
@@ -692,11 +646,6 @@ Public Class SMAPlannerForm
             .StartDate = New Date(2026, 6, 27),
             .FinishDate = New Date(2026, 7, 4)
         })
-
-        _liveProjects.Clear()
-        _liveProjects.Add(New LiveProjectItem With {.ProjectCode = "TPL-BRE", .ProjectName = "SMA - BRE Project", .TemplateName = "SMA - BRE Project", .ProjectSize = "Small", .ProjectType = "New", .ReportType = "New"})
-        _liveProjects.Add(New LiveProjectItem With {.ProjectCode = "TPL-ROL", .ProjectName = "SMA - ROL Project", .TemplateName = "SMA - ROL Project", .ProjectSize = "Medium", .ProjectType = "Update", .ReportType = "Update"})
-        _liveProjects.Add(New LiveProjectItem With {.ProjectCode = "TPL-WITHIN", .ProjectName = "SMA - Within Project", .TemplateName = "SMA - Within Project", .ProjectSize = "Small", .ProjectType = "Update", .ReportType = "Update"})
 
         _grid.DataSource = _projects
         _liveProjectSearchBox.Text = "1201"

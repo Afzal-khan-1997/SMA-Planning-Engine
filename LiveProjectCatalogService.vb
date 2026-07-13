@@ -2,104 +2,27 @@ Imports System.Globalization
 
 Public Class LiveProjectCatalogService
     Private ReadOnly _sqlRepository As SqlProjectRepository
-    Private ReadOnly _projects As List(Of LiveProjectItem)
 
     Public Sub New(Optional sqlRepository As SqlProjectRepository = Nothing)
         _sqlRepository = sqlRepository
-        ' SQL connection will replace this seed list later. The form and scheduler already use this service boundary.
-        _projects = New List(Of LiveProjectItem) From {
-            CreateSmaBreProjectTemplate(),
-            CreateSmaRolProjectTemplate(),
-            CreateSmaWithinProjectTemplate(),
-            New LiveProjectItem With {.ProjectCode = "TPL-BRE-ROL", .ProjectName = "SMA BRE/ROL Update", .ClientName = "Template", .TemplateName = "BRE/ROL Update template", .ProjectType = "Update"},
-            New LiveProjectItem With {.ProjectCode = "TPL-BRE-WITHIN", .ProjectName = "SMA BRE Within Update", .ClientName = "Template", .TemplateName = "BRE Within Update", .ProjectType = "Update"},
-            New LiveProjectItem With {.ProjectCode = "TPL-FEEDBACK", .ProjectName = "SMA Feedback update", .ClientName = "Template", .TemplateName = "Feedback Change", .ProjectType = "Feedback"}
-        }
     End Sub
-
-    Public Shared Function CreateSmaNewProjectTemplate() As LiveProjectItem
-        Return CreateSmaBreProjectTemplate()
-    End Function
-
-    Public Shared Function CreateSmaBreProjectTemplate() As LiveProjectItem
-        Return New LiveProjectItem With {
-            .ProjectCode = "TPL-NEW-BRE",
-            .ProjectName = "SMA - BRE Project",
-            .ClientName = "Template",
-            .TemplateName = "SMA New Project",
-            .ProjectType = "New"
-        }
-    End Function
-
-    Public Shared Function CreateSmaRolProjectTemplate() As LiveProjectItem
-        Return New LiveProjectItem With {
-            .ProjectCode = "TPL-NEW-ROL",
-            .ProjectName = "SMA - ROL Project",
-            .ClientName = "Template",
-            .TemplateName = "SMA New Project",
-            .ProjectType = "New"
-        }
-    End Function
-
-    Public Shared Function CreateSmaWithinProjectTemplate() As LiveProjectItem
-        Return New LiveProjectItem With {
-            .ProjectCode = "TPL-NEW-WITHIN",
-            .ProjectName = "SMA - Within Project",
-            .ClientName = "Template",
-            .TemplateName = "SMA New Project",
-            .ProjectType = "New"
-        }
-    End Function
 
     Public Function SearchProjects(searchText As String) As List(Of LiveProjectItem)
         Dim query = If(searchText, "").Trim()
-        Dim results As New List(Of LiveProjectItem)()
 
-        If _sqlRepository IsNot Nothing Then
-            Try
-                results.AddRange(_sqlRepository.LoadTemplateProjects(query))
-            Catch
-            End Try
+        If _sqlRepository Is Nothing Then
+            Return New List(Of LiveProjectItem)()
         End If
 
-        Dim matches = _projects.AsEnumerable()
-
-        If query.Length > 0 Then
-            matches = matches.Where(Function(project)
-                                        Return project.ProjectCode.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0 OrElse
-                                            project.ProjectName.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0 OrElse
-                                            project.ClientName.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0 OrElse
-                                            project.ProjectSize.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0 OrElse
-                                            project.TemplateName.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0
-                                    End Function)
-        End If
-
-        results.AddRange(matches)
-
-        Return results.
+        Try
+            Return _sqlRepository.LoadTemplateProjects(query).
             GroupBy(Function(project) project.ProjectName, StringComparer.OrdinalIgnoreCase).
             Select(Function(group) group.First()).
             OrderBy(Function(project) project.ProjectName).
             ToList()
-    End Function
-
-    Public Function GetDefaultNewProjectTemplate() As LiveProjectItem
-        Dim availableProjects = SearchProjects("")
-        Dim preferred = availableProjects.FirstOrDefault(
-            Function(project) project.ProjectType.Equals("New", StringComparison.OrdinalIgnoreCase) AndAlso
-                (project.ProjectName.IndexOf("new", StringComparison.OrdinalIgnoreCase) >= 0 OrElse
-                 project.TemplateName.IndexOf("new", StringComparison.OrdinalIgnoreCase) >= 0))
-
-        If preferred IsNot Nothing Then
-            Return preferred
-        End If
-
-        preferred = availableProjects.FirstOrDefault(Function(project) project.ProjectType.Equals("New", StringComparison.OrdinalIgnoreCase))
-        If preferred IsNot Nothing Then
-            Return preferred
-        End If
-
-        Return CreateSmaNewProjectTemplate()
+        Catch
+            Return New List(Of LiveProjectItem)()
+        End Try
     End Function
 End Class
 

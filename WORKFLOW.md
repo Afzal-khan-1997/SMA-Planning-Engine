@@ -15,9 +15,9 @@
    - Version-to-type rule:
      - `1.0`, `2.0`, etc. are treated as `New`.
      - `1.1`, `2.1`, etc. are treated as `Feedback`.
-5. `SMASchedulerForm.LoadLiveProjectTemplate` receives that `LiveProjectItem`.
+5. `SMASchedulerForm.LoadLiveProjectTemplate` receives that SQL-backed `LiveProjectItem`.
 6. The Scheduler form selects the matching project size in `_projectSizeSelector`.
-7. `TaskCatalogService.LoadTemplateTasks` loads the task template.
+7. `TaskCatalogService.LoadTemplateTasks` loads matching task rows from SQL by project type/report type.
 8. Each task uses `TaskCatalogItem.HoursForSize(projectSize)` to choose the correct resource hours:
    - `SmallHours`
    - `MediumHours`
@@ -27,6 +27,8 @@
 ## Important Rule
 
 The Scheduler form has `Small` as the UI default only so the form has a valid initial value. For real Project ID planning, the project size should come from SQL `Table_Project_Tracking.[Project Size]`, and that size controls which resource-hour column is used in the scheduler.
+
+The normal user flow is SQL-only. Project lookup, displayed project metadata, task loading, capacity planning, and schedule saving are handled through SQL. Local `.smaschedule`, `.json`, and `.xlsx` files are not used by the Planning form or Scheduler save path.
 
 ## Code Locations
 
