@@ -64,3 +64,15 @@ The grid groups rows as:
 4. Task rows under that project with date-wise planned hours.
 
 Only the selected employees and selected date range are shown.
+
+## Scheduler Theme Colors
+
+When a live SQL project is opened, the Scheduler theme is selected from `Version_Table` flags:
+
+- No point cloud for BRE/ROL/Within reports: `Report Standard`
+- Point cloud for BRE/ROL/Within reports: `Point Cloud`
+- `Teck Pack` or `Deed Profile`: `Tech Pack`
+- `Shadow_Analysis`: `Shadow Analysis`
+- `Urgent Small Projects`: `Urgent Small`
+
+Capacity overrun still uses the `Alert` theme first because it is a live scheduling warning.

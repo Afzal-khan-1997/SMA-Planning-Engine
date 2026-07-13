@@ -27,6 +27,12 @@ Public Class SMASchedulerForm
     Private _currentTheme As SchedulerThemePalette = SchedulerThemePalette.ThemeByName("Dusk")
     Private _projectType As String = "New"
     Private _projectDetailsText As String = ""
+    Private _projectReportType As String = ""
+    Private _isPointcloudProject As Boolean
+    Private _hasTechPack As Boolean
+    Private _hasDeedProfile As Boolean
+    Private _hasShadowAnalysis As Boolean
+    Private _isUrgentSmallProject As Boolean
     Private ReadOnly _capacityDateColumns As New Dictionary(Of Integer, Date)
     Private ReadOnly _taskViewDateColumns As New Dictionary(Of Integer, Date)
     Private ReadOnly _resourceUsageDateColumns As New Dictionary(Of Integer, Date)
@@ -114,6 +120,12 @@ Public Class SMASchedulerForm
         _versionNumber.Text = If(String.IsNullOrWhiteSpace(liveProject.VersionNumber), "1.0", liveProject.VersionNumber.Trim())
         _projectType = If(String.IsNullOrWhiteSpace(liveProject.ProjectType), ProjectTypeFromTemplate(liveProject.TemplateName, liveProject.ProjectName), liveProject.ProjectType)
         _projectDetailsText = liveProject.ProjectDetailsText
+        _projectReportType = If(String.IsNullOrWhiteSpace(liveProject.ReportType), liveProject.TaskReportFilter, liveProject.ReportType)
+        _isPointcloudProject = liveProject.IsPointcloud
+        _hasTechPack = liveProject.TechPack
+        _hasDeedProfile = liveProject.DeedProfile
+        _hasShadowAnalysis = liveProject.ShadowAnalysis
+        _isUrgentSmallProject = liveProject.UrgentSmallProjects
         ' The Planning Engine passes SQL Table_Project_Tracking project size here.
         ' That selected size controls which task resource-hour column is used.
         SelectProjectSize(liveProject.ProjectSize)
@@ -140,6 +152,7 @@ Public Class SMASchedulerForm
         _versionNumber.Text = If(String.IsNullOrWhiteSpace(snapshot.VersionNumber), "1.0", snapshot.VersionNumber)
         _projectType = If(String.IsNullOrWhiteSpace(snapshot.ProjectType), ProjectTypeFromTemplate("", snapshot.ProjectName), snapshot.ProjectType)
         _projectDetailsText = ""
+        ResetProjectFlagState()
         SelectProjectSize(snapshot.ProjectSize)
         _totalProjectHours.Value = ClampDecimal(snapshot.TotalProjectHours, _totalProjectHours.Minimum, _totalProjectHours.Maximum)
         UpdateProjectMetadataDisplay()
@@ -324,6 +337,26 @@ Public Class SMASchedulerForm
             Return SchedulerThemePalette.ThemeByName("Alert")
         End If
 
+        If _isUrgentSmallProject Then
+            Return SchedulerThemePalette.ThemeByName("Urgent Small")
+        End If
+
+        If _hasShadowAnalysis Then
+            Return SchedulerThemePalette.ThemeByName("Shadow Analysis")
+        End If
+
+        If _hasTechPack OrElse _hasDeedProfile Then
+            Return SchedulerThemePalette.ThemeByName("Tech Pack")
+        End If
+
+        If IsBreRolWithinProject() Then
+            If _isPointcloudProject Then
+                Return SchedulerThemePalette.ThemeByName("Point Cloud")
+            End If
+
+            Return SchedulerThemePalette.ThemeByName("Report Standard")
+        End If
+
         If String.Equals(_projectType, "Update", StringComparison.OrdinalIgnoreCase) OrElse
             String.Equals(_projectType, "Feedback", StringComparison.OrdinalIgnoreCase) Then
             Return SchedulerThemePalette.ThemeByName("Update")
@@ -336,6 +369,13 @@ Public Class SMASchedulerForm
         End If
 
         Return SchedulerThemePalette.ThemeByName("Dusk")
+    End Function
+
+    Private Function IsBreRolWithinProject() As Boolean
+        Dim classificationText = (_projectReportType & " " & _projectDetailsText & " " & _projectType).Trim()
+        Return classificationText.IndexOf("BRE", StringComparison.OrdinalIgnoreCase) >= 0 OrElse
+            classificationText.IndexOf("ROL", StringComparison.OrdinalIgnoreCase) >= 0 OrElse
+            classificationText.IndexOf("Within", StringComparison.OrdinalIgnoreCase) >= 0
     End Function
 
     Private Function HasDailyCapacityOverrun() As Boolean
@@ -1547,6 +1587,7 @@ Public Class SMASchedulerForm
         _projectName.Text = "SMA Scheduler"
         _versionNumber.Text = "1.0"
         _projectType = "New"
+        ResetProjectFlagState()
         SelectProjectSize("Small")
         ClearPlanningInputDisplays()
     End Sub
@@ -1567,6 +1608,7 @@ Public Class SMASchedulerForm
         ResetWorkspaceTransientState()
         _tasks.Clear()
         _projectType = "New"
+        ResetProjectFlagState()
         _projectName.Text = "SMA Scheduler"
         _versionNumber.Text = "1.0"
         _totalProjectHours.Value = 0
@@ -1581,6 +1623,16 @@ Public Class SMASchedulerForm
         _resourceUtilizationOverrides.Clear()
         _resourceUtilizationHighlights.Clear()
         _resourceAvailabilityCache.Clear()
+    End Sub
+
+    Private Sub ResetProjectFlagState()
+        _projectDetailsText = ""
+        _projectReportType = ""
+        _isPointcloudProject = False
+        _hasTechPack = False
+        _hasDeedProfile = False
+        _hasShadowAnalysis = False
+        _isUrgentSmallProject = False
     End Sub
 
     Private Sub btnAddTask_Click(sender As Object, e As EventArgs)
@@ -4397,6 +4449,106 @@ Public Class SchedulerThemePalette
                 .TileTwo = Color.FromArgb(255, 237, 213),
                 .TileThree = Color.FromArgb(255, 220, 220),
                 .TileFour = Color.FromArgb(254, 205, 211)
+            },
+            New SchedulerThemePalette With {
+                .Name = "Report Standard",
+                .WindowBack = Color.FromArgb(244, 248, 250),
+                .PanelBack = Color.White,
+                .HeaderBack = Color.FromArgb(219, 238, 244),
+                .CommandBack = Color.FromArgb(31, 78, 96),
+                .CommandText = Color.White,
+                .GridHeader = Color.FromArgb(31, 78, 96),
+                .GridLine = Color.FromArgb(219, 232, 237),
+                .Selection = Color.FromArgb(207, 232, 241),
+                .AlternatingRow = Color.FromArgb(249, 252, 253),
+                .Text = Color.FromArgb(28, 52, 61),
+                .MutedText = Color.FromArgb(75, 104, 116),
+                .Action = Color.FromArgb(14, 116, 144),
+                .Divider = Color.FromArgb(207, 224, 231),
+                .TileOne = Color.FromArgb(216, 240, 245),
+                .TileTwo = Color.FromArgb(235, 247, 231),
+                .TileThree = Color.FromArgb(225, 235, 248),
+                .TileFour = Color.FromArgb(246, 230, 238)
+            },
+            New SchedulerThemePalette With {
+                .Name = "Point Cloud",
+                .WindowBack = Color.FromArgb(244, 250, 249),
+                .PanelBack = Color.White,
+                .HeaderBack = Color.FromArgb(209, 242, 238),
+                .CommandBack = Color.FromArgb(17, 94, 89),
+                .CommandText = Color.White,
+                .GridHeader = Color.FromArgb(17, 94, 89),
+                .GridLine = Color.FromArgb(213, 234, 231),
+                .Selection = Color.FromArgb(190, 235, 229),
+                .AlternatingRow = Color.FromArgb(248, 253, 252),
+                .Text = Color.FromArgb(22, 54, 52),
+                .MutedText = Color.FromArgb(63, 110, 106),
+                .Action = Color.FromArgb(13, 148, 136),
+                .Divider = Color.FromArgb(201, 225, 222),
+                .TileOne = Color.FromArgb(203, 245, 235),
+                .TileTwo = Color.FromArgb(235, 246, 220),
+                .TileThree = Color.FromArgb(222, 236, 250),
+                .TileFour = Color.FromArgb(240, 226, 248)
+            },
+            New SchedulerThemePalette With {
+                .Name = "Tech Pack",
+                .WindowBack = Color.FromArgb(250, 247, 252),
+                .PanelBack = Color.White,
+                .HeaderBack = Color.FromArgb(242, 226, 250),
+                .CommandBack = Color.FromArgb(91, 55, 112),
+                .CommandText = Color.White,
+                .GridHeader = Color.FromArgb(91, 55, 112),
+                .GridLine = Color.FromArgb(233, 221, 239),
+                .Selection = Color.FromArgb(235, 218, 246),
+                .AlternatingRow = Color.FromArgb(253, 250, 254),
+                .Text = Color.FromArgb(55, 38, 68),
+                .MutedText = Color.FromArgb(101, 78, 116),
+                .Action = Color.FromArgb(147, 51, 171),
+                .Divider = Color.FromArgb(222, 209, 231),
+                .TileOne = Color.FromArgb(238, 224, 250),
+                .TileTwo = Color.FromArgb(255, 239, 211),
+                .TileThree = Color.FromArgb(224, 236, 250),
+                .TileFour = Color.FromArgb(247, 224, 236)
+            },
+            New SchedulerThemePalette With {
+                .Name = "Shadow Analysis",
+                .WindowBack = Color.FromArgb(247, 248, 251),
+                .PanelBack = Color.White,
+                .HeaderBack = Color.FromArgb(225, 229, 237),
+                .CommandBack = Color.FromArgb(51, 65, 85),
+                .CommandText = Color.White,
+                .GridHeader = Color.FromArgb(51, 65, 85),
+                .GridLine = Color.FromArgb(224, 229, 237),
+                .Selection = Color.FromArgb(218, 226, 240),
+                .AlternatingRow = Color.FromArgb(250, 251, 253),
+                .Text = Color.FromArgb(30, 41, 59),
+                .MutedText = Color.FromArgb(82, 96, 116),
+                .Action = Color.FromArgb(71, 85, 105),
+                .Divider = Color.FromArgb(211, 218, 229),
+                .TileOne = Color.FromArgb(224, 231, 243),
+                .TileTwo = Color.FromArgb(242, 238, 220),
+                .TileThree = Color.FromArgb(226, 236, 248),
+                .TileFour = Color.FromArgb(238, 226, 244)
+            },
+            New SchedulerThemePalette With {
+                .Name = "Urgent Small",
+                .WindowBack = Color.FromArgb(255, 248, 242),
+                .PanelBack = Color.White,
+                .HeaderBack = Color.FromArgb(255, 228, 204),
+                .CommandBack = Color.FromArgb(124, 45, 18),
+                .CommandText = Color.White,
+                .GridHeader = Color.FromArgb(124, 45, 18),
+                .GridLine = Color.FromArgb(242, 222, 203),
+                .Selection = Color.FromArgb(255, 219, 186),
+                .AlternatingRow = Color.FromArgb(255, 252, 248),
+                .Text = Color.FromArgb(76, 38, 21),
+                .MutedText = Color.FromArgb(132, 78, 48),
+                .Action = Color.FromArgb(234, 88, 12),
+                .Divider = Color.FromArgb(232, 210, 190),
+                .TileOne = Color.FromArgb(255, 228, 204),
+                .TileTwo = Color.FromArgb(255, 242, 194),
+                .TileThree = Color.FromArgb(224, 238, 250),
+                .TileFour = Color.FromArgb(255, 220, 220)
             },
             New SchedulerThemePalette With {
                 .Name = "Update",
