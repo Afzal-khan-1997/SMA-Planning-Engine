@@ -1,5 +1,7 @@
 # SMA Planning Engine - .NET 8
 
+Smart Planning system designed for Optimized Resource Management.
+
 SMA Planning Engine is a VB.NET Windows Forms planning tool migrated from the SMA Scheduler .NET Framework 4.8 project to a cleaner .NET 8 project layout.
 
 ## Included
