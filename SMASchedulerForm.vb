@@ -222,7 +222,7 @@ Public Class SMASchedulerForm
                 .TabStop = True
             }
             _scheduleProjectButton.FlatAppearance.BorderSize = 0
-            AddHandler _scheduleProjectButton.Click, AddressOf scheduleProjectButton_Click
+            AddHandler _scheduleProjectButton.Click, AddressOf _scheduleProjectButton_Click
         End If
 
         If _projectDetailsCaptionLabel Is Nothing Then
@@ -289,7 +289,11 @@ Public Class SMASchedulerForm
         _projectDetailsValueLabel.Text = If(String.IsNullOrWhiteSpace(_projectDetailsText), baseText, baseText & " | " & _projectDetailsText)
     End Sub
 
-    Private Sub scheduleProjectButton_Click(sender As Object, e As EventArgs)
+    Private Sub _scheduleProjectButton_Click(sender As Object, e As EventArgs)
+        ScheduleProjectFromHeader()
+    End Sub
+
+    Private Sub ScheduleProjectFromHeader()
         If _tasks.Count = 0 Then
             MessageBox.Show(Me, "There is no task assigned for the project.", "No Tasks", MessageBoxButtons.OK, MessageBoxIcon.Information)
             Return
@@ -596,10 +600,10 @@ Public Class SMASchedulerForm
         If _resourceUtilizationColorSelector.Items.Count > 0 AndAlso _resourceUtilizationColorSelector.SelectedIndex < 0 Then
             _resourceUtilizationColorSelector.SelectedIndex = 0
         End If
-        AddHandler _resourceUtilizationRefreshButton.Click, AddressOf RefreshResourceUtilizationTab
-        AddHandler _resourceUtilizationApplyButton.Click, AddressOf ApplyResourceUtilizationHighlight
-        AddHandler _resourceUtilizationClearButton.Click, AddressOf ClearResourceUtilizationHighlight
-        AddHandler _resourceUtilizationMailButton.Click, AddressOf SendResourceUtilizationSnip
+        AddHandler _resourceUtilizationRefreshButton.Click, AddressOf _resourceUtilizationRefreshButton_Click
+        AddHandler _resourceUtilizationApplyButton.Click, AddressOf _resourceUtilizationApplyButton_Click
+        AddHandler _resourceUtilizationClearButton.Click, AddressOf _resourceUtilizationClearButton_Click
+        AddHandler _resourceUtilizationMailButton.Click, AddressOf _resourceUtilizationMailButton_Click
 
         AddHandler _taskUsageGrid.CellParsing, AddressOf CalendarGridCellParsing
         AddHandler _taskUsageGrid.CellEndEdit, AddressOf TaskViewGridCellEndEdit
@@ -613,9 +617,9 @@ Public Class SMASchedulerForm
         AddHandler _resourceUtilizationGrid.CellEndEdit, AddressOf ResourceUtilizationGridCellEndEdit
         AddHandler _resourceUtilizationGrid.DataError, AddressOf CalendarGridDataError
 
-        AddHandler _employeeCapacityAddButton.Click, AddressOf AddEmployeeCapacityEntry
-        AddHandler _employeeCapacityDeleteButton.Click, AddressOf DeleteEmployeeCapacityEntry
-        AddHandler _employeeCapacityRefreshButton.Click, AddressOf RefreshEmployeeCapacityView
+        AddHandler _employeeCapacityAddButton.Click, AddressOf _employeeCapacityAddButton_Click
+        AddHandler _employeeCapacityDeleteButton.Click, AddressOf _employeeCapacityDeleteButton_Click
+        AddHandler _employeeCapacityRefreshButton.Click, AddressOf _employeeCapacityRefreshButton_Click
         AddHandler _employeeCapacityGrid.CellParsing, AddressOf EmployeeCapacityGridCellParsing
         AddHandler _employeeCapacityGrid.CellEndEdit, AddressOf EmployeeCapacityGridCellEndEdit
         AddHandler _employeeCapacityGrid.CellFormatting, AddressOf EmployeeCapacityGridCellFormatting
@@ -1099,10 +1103,10 @@ Public Class SMASchedulerForm
             .ForeColor = Color.White
         }
 
-        AddHandler _resourceUtilizationRefreshButton.Click, AddressOf RefreshResourceUtilizationTab
-        AddHandler _resourceUtilizationApplyButton.Click, AddressOf ApplyResourceUtilizationHighlight
-        AddHandler _resourceUtilizationClearButton.Click, AddressOf ClearResourceUtilizationHighlight
-        AddHandler _resourceUtilizationMailButton.Click, AddressOf SendResourceUtilizationSnip
+        AddHandler _resourceUtilizationRefreshButton.Click, AddressOf _resourceUtilizationRefreshButton_Click
+        AddHandler _resourceUtilizationApplyButton.Click, AddressOf _resourceUtilizationApplyButton_Click
+        AddHandler _resourceUtilizationClearButton.Click, AddressOf _resourceUtilizationClearButton_Click
+        AddHandler _resourceUtilizationMailButton.Click, AddressOf _resourceUtilizationMailButton_Click
 
         toolbar.Controls.Add(_resourceUtilizationRefreshButton)
         toolbar.Controls.Add(_resourceUtilizationColorSelector)
@@ -2813,7 +2817,11 @@ Public Class SMASchedulerForm
         UpdateResourceUtilizationGrid()
     End Sub
 
-    Private Sub AddEmployeeCapacityEntry(sender As Object, e As EventArgs)
+    Private Sub _employeeCapacityAddButton_Click(sender As Object, e As EventArgs)
+        AddEmployeeCapacityEntry()
+    End Sub
+
+    Private Sub AddEmployeeCapacityEntry()
         Dim entry As New EmployeeCapacityEntry With {
             .EmployeeName = DefaultEmployeeForTask(Nothing),
             .CapacityType = "Leave",
@@ -2832,7 +2840,11 @@ Public Class SMASchedulerForm
         SetStatus("Employee capacity entry added")
     End Sub
 
-    Private Sub DeleteEmployeeCapacityEntry(sender As Object, e As EventArgs)
+    Private Sub _employeeCapacityDeleteButton_Click(sender As Object, e As EventArgs)
+        DeleteEmployeeCapacityEntry()
+    End Sub
+
+    Private Sub DeleteEmployeeCapacityEntry()
         If _employeeCapacityGrid Is Nothing OrElse _employeeCapacityGrid.CurrentRow Is Nothing Then
             Return
         End If
@@ -2847,7 +2859,11 @@ Public Class SMASchedulerForm
         SetStatus("Employee capacity entry deleted")
     End Sub
 
-    Private Sub RefreshEmployeeCapacityView(sender As Object, e As EventArgs)
+    Private Sub _employeeCapacityRefreshButton_Click(sender As Object, e As EventArgs)
+        RefreshEmployeeCapacityView()
+    End Sub
+
+    Private Sub RefreshEmployeeCapacityView()
         RefreshWorkspaceTabs()
         SetStatus("Employee capacity has been refreshed")
     End Sub
@@ -2924,7 +2940,11 @@ Public Class SMASchedulerForm
         End If
     End Sub
 
-    Private Sub RefreshResourceUtilizationTab(sender As Object, e As EventArgs)
+    Private Sub _resourceUtilizationRefreshButton_Click(sender As Object, e As EventArgs)
+        RefreshResourceUtilizationTab()
+    End Sub
+
+    Private Sub RefreshResourceUtilizationTab()
         _resourceUtilizationOverrides.Clear()
         _resourceUtilizationHighlights.Clear()
 
@@ -2940,7 +2960,11 @@ Public Class SMASchedulerForm
         SetStatus("Resource utilization has been refreshed from SQL.")
     End Sub
 
-    Private Sub ApplyResourceUtilizationHighlight(sender As Object, e As EventArgs)
+    Private Sub _resourceUtilizationApplyButton_Click(sender As Object, e As EventArgs)
+        ApplyResourceUtilizationHighlight()
+    End Sub
+
+    Private Sub ApplyResourceUtilizationHighlight()
         If _resourceUtilizationGrid Is Nothing OrElse _resourceUtilizationGrid.SelectedCells.Count = 0 OrElse _resourceUtilizationColorSelector Is Nothing Then
             Return
         End If
@@ -2962,7 +2986,11 @@ Public Class SMASchedulerForm
         UpdateResourceUtilizationGrid()
     End Sub
 
-    Private Sub ClearResourceUtilizationHighlight(sender As Object, e As EventArgs)
+    Private Sub _resourceUtilizationClearButton_Click(sender As Object, e As EventArgs)
+        ClearResourceUtilizationHighlight()
+    End Sub
+
+    Private Sub ClearResourceUtilizationHighlight()
         If _resourceUtilizationGrid Is Nothing OrElse _resourceUtilizationGrid.SelectedCells.Count = 0 Then
             Return
         End If
@@ -3004,7 +3032,11 @@ Public Class SMASchedulerForm
         Return Color.FromArgb(33, 150, 243)
     End Function
 
-    Private Sub SendResourceUtilizationSnip(sender As Object, e As EventArgs)
+    Private Sub _resourceUtilizationMailButton_Click(sender As Object, e As EventArgs)
+        SendResourceUtilizationSnip()
+    End Sub
+
+    Private Sub SendResourceUtilizationSnip()
         If _resourceUtilizationGrid Is Nothing Then
             Return
         End If

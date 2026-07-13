@@ -41,6 +41,10 @@ The Debug executable is written to:
 bin\Debug\net8.0-windows\SMA Planning Engine.exe
 ```
 
+## Frontend And Code-Behind
+
+WinForms frontend controls are kept in the `.Designer.vb` files, while button behavior lives in the matching `.vb` code-behind files. See `BUTTON_ACTIONS.md` for the button-to-handler map.
+
 ## Local Storage
 
 Saved schedules are stored in:
