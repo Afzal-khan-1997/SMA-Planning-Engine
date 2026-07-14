@@ -21,15 +21,27 @@ Public Class SqlProjectRepository
             connection.Open()
             EnsureSchema(connection)
 
+            Dim normalizedVersion = If(String.IsNullOrWhiteSpace(projectVersion), "1.0", projectVersion.Trim())
             Dim projectId = GetOrCreateProject(connection, projectName, projectVersion, projectSize, projectType, totalProjectHours, resourcesNeeded, resourceHours)
-            Execute(connection, "DELETE FROM dbo.SmaScheduleTasks WHERE ProjectId = @ProjectId", New Dictionary(Of String, Object) From {{"@ProjectId", projectId}})
-            Execute(connection, "DELETE FROM dbo.TaskAssignment WHERE ProjectId = @ProjectId", New Dictionary(Of String, Object) From {{"@ProjectId", projectId}})
+            Execute(connection,
+                    "DELETE FROM dbo.SmaScheduleTasks WHERE ProjectId = @ProjectId AND ISNULL(VersionNumber, '') = @VersionNumber",
+                    New Dictionary(Of String, Object) From {
+                        {"@ProjectId", projectId},
+                        {"@VersionNumber", normalizedVersion}
+                    })
+            Execute(connection,
+                    "DELETE FROM dbo.TaskAssignment WHERE ProjectId = @ProjectId AND ISNULL(VersionNumber, '') = @VersionNumber",
+                    New Dictionary(Of String, Object) From {
+                        {"@ProjectId", projectId},
+                        {"@VersionNumber", normalizedVersion}
+                    })
 
             For Each task In tasks
                 Execute(connection,
-                        "INSERT INTO dbo.SmaScheduleTasks (ProjectId, TaskId, DatabaseTaskId, TaskName, StartDate, DurationDays, FinishDate, PercentComplete, Predecessors, DependencyType, AssignedTo, AssignmentDate, ResourceNames, ResourceAllocations, DailyResourceAllocations, ResourceHours, ModuleId, PlannerTaskId) VALUES (@ProjectId, @TaskId, @DatabaseTaskId, @TaskName, @StartDate, @DurationDays, @FinishDate, @PercentComplete, @Predecessors, @DependencyType, @AssignedTo, @AssignmentDate, @ResourceNames, @ResourceAllocations, @DailyResourceAllocations, @ResourceHours, @ModuleId, @PlannerTaskId)",
+                        "INSERT INTO dbo.SmaScheduleTasks (ProjectId, VersionNumber, TaskId, DatabaseTaskId, TaskName, StartDate, DurationDays, FinishDate, PercentComplete, Predecessors, DependencyType, AssignedTo, AssignmentDate, ResourceNames, ResourceAllocations, DailyResourceAllocations, ResourceHours, ModuleId, PlannerTaskId) VALUES (@ProjectId, @VersionNumber, @TaskId, @DatabaseTaskId, @TaskName, @StartDate, @DurationDays, @FinishDate, @PercentComplete, @Predecessors, @DependencyType, @AssignedTo, @AssignmentDate, @ResourceNames, @ResourceAllocations, @DailyResourceAllocations, @ResourceHours, @ModuleId, @PlannerTaskId)",
                         New Dictionary(Of String, Object) From {
                             {"@ProjectId", projectId},
+                            {"@VersionNumber", normalizedVersion},
                             {"@TaskId", task.TaskId},
                             {"@DatabaseTaskId", task.DatabaseTaskId},
                             {"@TaskName", task.TaskName},
@@ -50,7 +62,7 @@ Public Class SqlProjectRepository
                         })
             Next
 
-            SaveTaskAssignments(connection, projectId, projectName, projectVersion, projectSize, projectType, tasks)
+            SaveTaskAssignments(connection, projectId, projectName, normalizedVersion, projectSize, projectType, tasks)
         End Using
     End Sub
 
@@ -136,10 +148,10 @@ Public Class SqlProjectRepository
                     Return New SqlProjectPlanningInfo With {
                         .ProjectIdAtSma = Convert.ToString(reader("Project ID at SMA"), CultureInfo.InvariantCulture),
                         .ProjectName = Convert.ToString(reader("Project Name"), CultureInfo.InvariantCulture),
-                        .VersionNumber = SqlVersionText(reader("Version")),
+                        .VersionNumber = RequiredSqlVersionText(reader("Version")),
                         .IsActive = SqlBoolean(reader("Active")),
                         .IsPlanned = SqlNullableBoolean(reader("IsPlanned")),
-                        .ProjectSize = ProjectSizeName(If(reader("Project Size") Is DBNull.Value, 1, CInt(reader("Project Size")))),
+                        .ProjectSize = ProjectSizeNameFromSql(reader("Project Size")),
                         .ProjectType = ProjectTypeFromVersion(reader("Version")),
                         .ReportType = BuildReportTypeDisplay(reader("Report BRE"), reader("Report ROL"), reader("Report Within")),
                         .FinalCompletionDate = SqlNullableDate(reader("Final Completion Date")),
@@ -218,10 +230,10 @@ Public Class SqlProjectRepository
         Return projects
     End Function
 
-    Public Function LoadProjectSnapshot(projectId As Integer) As ProjectSnapshot
-        Dim assignmentSnapshot = LoadProjectSnapshotFromAssignments(projectId)
-        If assignmentSnapshot IsNot Nothing Then
-            Return assignmentSnapshot
+    Public Function LoadSavedProjectSchedule(projectId As Integer) As SavedProjectSchedule
+        Dim assignmentSavedSchedule = LoadSavedProjectScheduleFromAssignments(projectId)
+        If assignmentSavedSchedule IsNot Nothing Then
+            Return assignmentSavedSchedule
         End If
 
         Using connection = CreateConnection()
@@ -239,7 +251,7 @@ Public Class SqlProjectRepository
                         Return Nothing
                     End If
 
-                    Dim snapshot As New ProjectSnapshot With {
+                    Dim savedSchedule As New SavedProjectSchedule With {
                         .ProjectName = CStr(reader("ProjectName")),
                         .VersionNumber = If(reader("ProjectVersion") Is DBNull.Value, "1.0", CStr(reader("ProjectVersion"))),
                         .ProjectSize = If(reader("ProjectSize") Is DBNull.Value OrElse String.IsNullOrWhiteSpace(CStr(reader("ProjectSize"))), "Small", CStr(reader("ProjectSize"))),
@@ -251,14 +263,14 @@ Public Class SqlProjectRepository
                     }
 
                     reader.Close()
-                    snapshot.Tasks = LoadTasksByProjectId(connection, projectId).ToList()
-                    Return snapshot
+                    savedSchedule.Tasks = LoadTasksByProjectId(connection, projectId).ToList()
+                    Return savedSchedule
                 End Using
             End Using
         End Using
     End Function
 
-    Public Function LoadProjectSnapshotByProjectCode(projectIdAtSma As String) As ProjectSnapshot
+    Public Function LoadSavedProjectScheduleByProjectCode(projectIdAtSma As String) As SavedProjectSchedule
         Dim projectCode = If(projectIdAtSma, "").Trim()
         If projectCode.Length = 0 Then
             Return Nothing
@@ -277,7 +289,7 @@ Public Class SqlProjectRepository
             End If
 
             Dim employeeNames = LoadEmployeeNameLookupFromMaster(connection)
-            Dim rows As New List(Of AssignmentSnapshotRow)()
+            Dim rows As New List(Of AssignmentSavedScheduleRow)()
 
             Using command = connection.CreateCommand()
                 command.CommandText =
@@ -294,7 +306,7 @@ Public Class SqlProjectRepository
                         End If
 
                         Dim employeeId = If(reader("Employee ID") Is DBNull.Value, 0, CInt(reader("Employee ID")))
-                        rows.Add(New AssignmentSnapshotRow With {
+                        rows.Add(New AssignmentSavedScheduleRow With {
                             .ProjectId = 0,
                             .ProjectName = projectInfo.ProjectName,
                             .VersionNumber = projectInfo.VersionNumber,
@@ -320,7 +332,7 @@ Public Class SqlProjectRepository
                 Return Nothing
             End If
 
-            Dim snapshot As New ProjectSnapshot With {
+            Dim savedSchedule As New SavedProjectSchedule With {
                 .ProjectName = projectInfo.ProjectName,
                 .VersionNumber = projectInfo.VersionNumber,
                 .ProjectSize = projectInfo.ProjectSize,
@@ -358,7 +370,7 @@ Public Class SqlProjectRepository
                 Dim finishDate = taskRows.Max(Function(row) row.WorkDate)
                 Dim resourceHours = taskRows.Sum(Function(row) row.AssignedHours)
 
-                snapshot.Tasks.Add(New ScheduleTask With {
+                savedSchedule.Tasks.Add(New ScheduleTask With {
                     .TaskId = taskGroup.Key,
                     .DatabaseTaskId = taskGroup.Key,
                     .TaskName = taskRows(0).TaskName,
@@ -378,16 +390,16 @@ Public Class SqlProjectRepository
                 })
             Next
 
-            snapshot.TotalProjectHours = snapshot.Tasks.Sum(Function(task) task.ResourceHours)
-            snapshot.ResourcesNeeded = rows.Select(Function(row) row.EmployeeId).Distinct().Count()
-            Return snapshot
+            savedSchedule.TotalProjectHours = savedSchedule.Tasks.Sum(Function(task) task.ResourceHours)
+            savedSchedule.ResourcesNeeded = rows.Select(Function(row) row.EmployeeId).Distinct().Count()
+            Return savedSchedule
         End Using
     End Function
 
     Public Function LoadProject(projectName As String) As BindingList(Of ScheduleTask)
-        Dim snapshotFromAssignments = LoadProjectSnapshotByNameFromAssignments(projectName)
-        If snapshotFromAssignments IsNot Nothing AndAlso snapshotFromAssignments.Tasks IsNot Nothing Then
-            Return New BindingList(Of ScheduleTask)(snapshotFromAssignments.Tasks.OrderBy(Function(task) task.TaskId).ToList())
+        Dim savedScheduleFromAssignments = LoadSavedProjectScheduleByNameFromAssignments(projectName)
+        If savedScheduleFromAssignments IsNot Nothing AndAlso savedScheduleFromAssignments.Tasks IsNot Nothing Then
+            Return New BindingList(Of ScheduleTask)(savedScheduleFromAssignments.Tasks.OrderBy(Function(task) task.TaskId).ToList())
         End If
 
         Using connection = CreateConnection()
@@ -808,7 +820,7 @@ Public Class SqlProjectRepository
                 "IF OBJECT_ID('dbo.SmaScheduleProjects', 'U') IS NULL CREATE TABLE dbo.SmaScheduleProjects (ProjectId INT IDENTITY(1,1) NOT NULL PRIMARY KEY, ProjectName NVARCHAR(200) NOT NULL UNIQUE, ProjectVersion NVARCHAR(50) NOT NULL DEFAULT '1.0', ProjectSize NVARCHAR(50) NULL, ProjectType NVARCHAR(50) NULL, TotalProjectHours DECIMAL(12,2) NOT NULL DEFAULT 0, ResourcesNeeded INT NOT NULL DEFAULT 0, ResourceHours DECIMAL(12,2) NOT NULL DEFAULT 0, CreatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(), UpdatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME())",
                 Nothing)
         Execute(connection,
-                "IF OBJECT_ID('dbo.SmaScheduleTasks', 'U') IS NULL CREATE TABLE dbo.SmaScheduleTasks (Id INT IDENTITY(1,1) NOT NULL PRIMARY KEY, ProjectId INT NOT NULL, TaskId INT NOT NULL, DatabaseTaskId INT NULL, TaskName NVARCHAR(300) NOT NULL, StartDate DATE NOT NULL, DurationDays DECIMAL(12,3) NOT NULL, FinishDate DATE NOT NULL, PercentComplete INT NOT NULL, Predecessors NVARCHAR(200) NULL, DependencyType NVARCHAR(2) NOT NULL DEFAULT 'FS', AssignedTo NVARCHAR(200) NULL, AssignmentDate DATE NULL, ResourceNames NVARCHAR(500) NULL, ResourceAllocations NVARCHAR(1000) NULL, DailyResourceAllocations NVARCHAR(MAX) NULL, ResourceHours DECIMAL(12,2) NOT NULL DEFAULT 0, ModuleId INT NULL, PlannerTaskId NVARCHAR(200) NULL, CONSTRAINT FK_SmaScheduleTasks_Project FOREIGN KEY(ProjectId) REFERENCES dbo.SmaScheduleProjects(ProjectId), CONSTRAINT UQ_SmaScheduleTasks_Project_Task UNIQUE(ProjectId, TaskId))",
+                "IF OBJECT_ID('dbo.SmaScheduleTasks', 'U') IS NULL CREATE TABLE dbo.SmaScheduleTasks (Id INT IDENTITY(1,1) NOT NULL PRIMARY KEY, ProjectId INT NOT NULL, VersionNumber NVARCHAR(50) NULL, TaskId INT NOT NULL, DatabaseTaskId INT NULL, TaskName NVARCHAR(300) NOT NULL, StartDate DATE NOT NULL, DurationDays DECIMAL(12,3) NOT NULL, FinishDate DATE NOT NULL, PercentComplete INT NOT NULL, Predecessors NVARCHAR(200) NULL, DependencyType NVARCHAR(2) NOT NULL DEFAULT 'FS', AssignedTo NVARCHAR(200) NULL, AssignmentDate DATE NULL, ResourceNames NVARCHAR(500) NULL, ResourceAllocations NVARCHAR(1000) NULL, DailyResourceAllocations NVARCHAR(MAX) NULL, ResourceHours DECIMAL(12,2) NOT NULL DEFAULT 0, ModuleId INT NULL, PlannerTaskId NVARCHAR(200) NULL, CONSTRAINT FK_SmaScheduleTasks_Project FOREIGN KEY(ProjectId) REFERENCES dbo.SmaScheduleProjects(ProjectId), CONSTRAINT UQ_SmaScheduleTasks_Project_Version_Task UNIQUE(ProjectId, VersionNumber, TaskId))",
                 Nothing)
         Execute(connection,
                 "IF OBJECT_ID('dbo.SmaScheduleProjects', 'U') IS NOT NULL AND COL_LENGTH('dbo.SmaScheduleProjects', 'ProjectSize') IS NULL ALTER TABLE dbo.SmaScheduleProjects ADD ProjectSize NVARCHAR(50) NULL",
@@ -818,6 +830,18 @@ Public Class SqlProjectRepository
                 Nothing)
         Execute(connection,
                 "IF OBJECT_ID('dbo.SmaScheduleTasks', 'U') IS NOT NULL AND COL_LENGTH('dbo.SmaScheduleTasks', 'DependencyType') IS NULL ALTER TABLE dbo.SmaScheduleTasks ADD DependencyType NVARCHAR(2) NOT NULL CONSTRAINT DF_SmaScheduleTasks_DependencyType DEFAULT 'FS'",
+                Nothing)
+        Execute(connection,
+                "IF OBJECT_ID('dbo.SmaScheduleTasks', 'U') IS NOT NULL AND COL_LENGTH('dbo.SmaScheduleTasks', 'VersionNumber') IS NULL ALTER TABLE dbo.SmaScheduleTasks ADD VersionNumber NVARCHAR(50) NULL",
+                Nothing)
+        Execute(connection,
+                "IF OBJECT_ID('dbo.SmaScheduleTasks', 'U') IS NOT NULL UPDATE t SET VersionNumber = ISNULL(NULLIF(t.VersionNumber, ''), p.ProjectVersion) FROM dbo.SmaScheduleTasks t INNER JOIN dbo.SmaScheduleProjects p ON p.ProjectId = t.ProjectId WHERE t.VersionNumber IS NULL OR t.VersionNumber = ''",
+                Nothing)
+        Execute(connection,
+                "IF OBJECT_ID('dbo.SmaScheduleTasks', 'U') IS NOT NULL AND OBJECT_ID('dbo.UQ_SmaScheduleTasks_Project_Task', 'UQ') IS NOT NULL ALTER TABLE dbo.SmaScheduleTasks DROP CONSTRAINT UQ_SmaScheduleTasks_Project_Task",
+                Nothing)
+        Execute(connection,
+                "IF OBJECT_ID('dbo.SmaScheduleTasks', 'U') IS NOT NULL AND OBJECT_ID('dbo.UQ_SmaScheduleTasks_Project_Version_Task', 'UQ') IS NULL ALTER TABLE dbo.SmaScheduleTasks ADD CONSTRAINT UQ_SmaScheduleTasks_Project_Version_Task UNIQUE(ProjectId, VersionNumber, TaskId)",
                 Nothing)
         Execute(connection,
                 "IF OBJECT_ID('dbo.SmaScheduleTasks', 'U') IS NOT NULL AND COL_LENGTH('dbo.SmaScheduleTasks', 'DailyResourceAllocations') IS NULL ALTER TABLE dbo.SmaScheduleTasks ADD DailyResourceAllocations NVARCHAR(MAX) NULL",
@@ -897,7 +921,7 @@ Public Class SqlProjectRepository
         Return projects
     End Function
 
-    Private Function LoadProjectSnapshotFromAssignments(projectId As Integer) As ProjectSnapshot
+    Private Function LoadSavedProjectScheduleFromAssignments(projectId As Integer) As SavedProjectSchedule
         Using connection = CreateConnection()
             connection.Open()
             EnsureSchema(connection)
@@ -906,11 +930,11 @@ Public Class SqlProjectRepository
                 Return Nothing
             End If
 
-            Return LoadProjectSnapshotFromAssignments(connection, projectId)
+            Return LoadSavedProjectScheduleFromAssignments(connection, projectId)
         End Using
     End Function
 
-    Private Function LoadProjectSnapshotByNameFromAssignments(projectName As String) As ProjectSnapshot
+    Private Function LoadSavedProjectScheduleByNameFromAssignments(projectName As String) As SavedProjectSchedule
         Using connection = CreateConnection()
             connection.Open()
             EnsureSchema(connection)
@@ -927,12 +951,12 @@ Public Class SqlProjectRepository
                     Return Nothing
                 End If
 
-                Return LoadProjectSnapshotFromAssignments(connection, CInt(value))
+                Return LoadSavedProjectScheduleFromAssignments(connection, CInt(value))
             End Using
         End Using
     End Function
 
-    Private Function LoadProjectSnapshotFromAssignments(connection As IDbConnection, projectId As Integer) As ProjectSnapshot
+    Private Function LoadSavedProjectScheduleFromAssignments(connection As IDbConnection, projectId As Integer) As SavedProjectSchedule
         Using command = connection.CreateCommand()
             command.CommandText =
                 "SELECT ProjectId, ProjectName, ISNULL(VersionNumber, '1.0') AS VersionNumber, ISNULL(ProjectSize, 'Small') AS ProjectSize, ISNULL(ProjectType, 'New') AS ProjectType, " &
@@ -940,10 +964,10 @@ Public Class SqlProjectRepository
                 "FROM dbo.TaskAssignment WHERE ProjectId = @ProjectId ORDER BY TaskOrder, WorkDate, EmployeeId"
             AddParameter(command, "@ProjectId", projectId)
 
-            Dim rows As New List(Of AssignmentSnapshotRow)()
+            Dim rows As New List(Of AssignmentSavedScheduleRow)()
             Using reader = command.ExecuteReader()
                 While reader.Read()
-                    rows.Add(New AssignmentSnapshotRow With {
+                    rows.Add(New AssignmentSavedScheduleRow With {
                         .ProjectId = CInt(reader("ProjectId")),
                         .ProjectName = CStr(reader("ProjectName")),
                         .VersionNumber = If(reader("VersionNumber") Is DBNull.Value, "1.0", CStr(reader("VersionNumber"))),
@@ -970,7 +994,7 @@ Public Class SqlProjectRepository
 
             Dim employeeNames = LoadEmployeeNameLookup(connection)
             Dim firstRow = rows(0)
-            Dim snapshot As New ProjectSnapshot With {
+            Dim savedSchedule As New SavedProjectSchedule With {
                 .ProjectName = firstRow.ProjectName,
                 .VersionNumber = firstRow.VersionNumber,
                 .ProjectSize = firstRow.ProjectSize,
@@ -1010,7 +1034,7 @@ Public Class SqlProjectRepository
                     Distinct().
                     ToList()
 
-                snapshot.Tasks.Add(New ScheduleTask With {
+                savedSchedule.Tasks.Add(New ScheduleTask With {
                     .TaskId = taskGroup.Key,
                     .DatabaseTaskId = taskGroup.Key,
                     .TaskName = taskRows(0).TaskName,
@@ -1030,12 +1054,12 @@ Public Class SqlProjectRepository
                 })
             Next
 
-            If snapshot.Tasks.Count > 0 Then
-                snapshot.TotalProjectHours = snapshot.Tasks.Sum(Function(task) task.ResourceHours)
-                snapshot.ResourcesNeeded = rows.Select(Function(row) row.EmployeeId).Distinct().Count()
+            If savedSchedule.Tasks.Count > 0 Then
+                savedSchedule.TotalProjectHours = savedSchedule.Tasks.Sum(Function(task) task.ResourceHours)
+                savedSchedule.ResourcesNeeded = rows.Select(Function(row) row.EmployeeId).Distinct().Count()
             End If
 
-            Return snapshot
+            Return savedSchedule
         End Using
     End Function
 
@@ -1452,6 +1476,19 @@ Public Class SqlProjectRepository
         Return If(String.IsNullOrWhiteSpace(text), "1.0", text.Trim())
     End Function
 
+    Private Shared Function RequiredSqlVersionText(value As Object) As String
+        If value Is Nothing OrElse value Is DBNull.Value Then
+            Return ""
+        End If
+
+        Dim decimalValue As Decimal
+        If Decimal.TryParse(Convert.ToString(value, CultureInfo.InvariantCulture), NumberStyles.Number, CultureInfo.InvariantCulture, decimalValue) Then
+            Return decimalValue.ToString("0.0##", CultureInfo.InvariantCulture)
+        End If
+
+        Return SqlText(value)
+    End Function
+
     Private Shared Function ProjectTypeFromVersion(value As Object) As String
         Dim versionText = SqlVersionText(value)
         Dim versionValue As Decimal
@@ -1482,6 +1519,24 @@ Public Class SqlProjectRepository
                 Return "Very Large"
             Case Else
                 Return "Small"
+        End Select
+    End Function
+
+    Private Shared Function ProjectSizeNameFromSql(value As Object) As String
+        If value Is Nothing OrElse value Is DBNull.Value Then
+            Return ""
+        End If
+
+        Dim sizeValue As Integer
+        If Not Integer.TryParse(Convert.ToString(value, CultureInfo.InvariantCulture), sizeValue) Then
+            Return ""
+        End If
+
+        Select Case sizeValue
+            Case 1, 2, 3, 4
+                Return ProjectSizeName(sizeValue)
+            Case Else
+                Return ""
         End Select
     End Function
 
@@ -1695,10 +1750,10 @@ End Class
 Public Class SqlProjectPlanningInfo
     Public Property ProjectIdAtSma As String = ""
     Public Property ProjectName As String = ""
-    Public Property VersionNumber As String = "1.0"
+    Public Property VersionNumber As String = ""
     Public Property IsActive As Boolean
     Public Property IsPlanned As Boolean?
-    Public Property ProjectSize As String = "Small"
+    Public Property ProjectSize As String = ""
     Public Property ProjectType As String = "New"
     Public Property ReportType As String = ""
     Public Property FinalCompletionDate As Date?
@@ -1747,7 +1802,7 @@ Friend Class AssignmentPersistRow
     Public Property AssignedHours As Decimal
 End Class
 
-Friend Class AssignmentSnapshotRow
+Friend Class AssignmentSavedScheduleRow
     Public Property ProjectId As Integer
     Public Property ProjectName As String = ""
     Public Property VersionNumber As String = "1.0"
@@ -1765,3 +1820,5 @@ Friend Class AssignmentSnapshotRow
     Public Property DependencyType As String = "FS"
     Public Property UpdatedOn As Date
 End Class
+
+

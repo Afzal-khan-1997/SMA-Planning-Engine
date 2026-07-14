@@ -6,7 +6,7 @@ Imports System.Globalization
 Imports System.IO
 
 Public Class SMASchedulerForm
-    Private ReadOnly _tasks As New BindingList(Of ScheduleTask)
+    Private WithEvents _tasks As New BindingList(Of ScheduleTask)
     Private ReadOnly _engine As New ScheduleEngine()
     Private ReadOnly _sqlRepository As SqlProjectRepository = CreateSqlRepository()
     Private ReadOnly _taskCatalogService As TaskCatalogService
@@ -69,7 +69,6 @@ Public Class SMASchedulerForm
         If IsInDesignerHost() Then
             SeedSchedulerDesignerData()
         End If
-        AddHandler _tasks.ListChanged, AddressOf TasksChanged
         RecalculateAndRefresh("Ready")
         If Not IsInDesignerHost() Then
             ClearPlanningInputDisplays()
@@ -112,10 +111,22 @@ Public Class SMASchedulerForm
             Return
         End If
 
+        If String.IsNullOrWhiteSpace(liveProject.ProjectName) Then
+            Throw New InvalidOperationException("Project name is missing in SQL for this Project ID.")
+        End If
+
+        If String.IsNullOrWhiteSpace(liveProject.VersionNumber) Then
+            Throw New InvalidOperationException("Project version is missing in SQL for this Project ID.")
+        End If
+
+        If String.IsNullOrWhiteSpace(liveProject.ProjectSize) Then
+            Throw New InvalidOperationException("Project size is missing in SQL for this Project ID.")
+        End If
+
         ' Scheduler handoff from SMA Planning Engine: populate project fields first.
         ClearProjectForNewSchedule()
-        _projectName.Text = If(String.IsNullOrWhiteSpace(liveProject.ProjectName), "SMA Scheduler", liveProject.ProjectName.Trim())
-        _versionNumber.Text = If(String.IsNullOrWhiteSpace(liveProject.VersionNumber), "1.0", liveProject.VersionNumber.Trim())
+        _projectName.Text = liveProject.ProjectName.Trim()
+        _versionNumber.Text = liveProject.VersionNumber.Trim()
         _projectType = If(String.IsNullOrWhiteSpace(liveProject.ProjectType), ProjectTypeFromTemplate(liveProject.TemplateName, liveProject.ProjectName), liveProject.ProjectType)
         _projectDetailsText = liveProject.ProjectDetailsText
         _projectReportType = If(String.IsNullOrWhiteSpace(liveProject.ReportType), liveProject.TaskReportFilter, liveProject.ReportType)
@@ -135,27 +146,28 @@ Public Class SMASchedulerForm
         LoadTemplateTasks(_projectType, projectSize, taskReportFilter)
         If _tasks.Count = 0 Then
             ClearPlanningInputDisplays()
+            Throw New InvalidOperationException("No tasks available for this project.")
         End If
         RecalculateAndRefresh(liveProject.TemplateName & " template loaded for " & projectSize & " project")
     End Sub
 
-    Public Sub LoadProjectSnapshot(snapshot As ProjectSnapshot)
-        If snapshot Is Nothing Then
+    Public Sub LoadSavedProjectSchedule(savedSchedule As SavedProjectSchedule)
+        If savedSchedule Is Nothing Then
             Return
         End If
 
         ResetWorkspaceTransientState()
         _tasks.Clear()
-        _projectName.Text = snapshot.ProjectName
-        _versionNumber.Text = If(String.IsNullOrWhiteSpace(snapshot.VersionNumber), "1.0", snapshot.VersionNumber)
-        _projectType = If(String.IsNullOrWhiteSpace(snapshot.ProjectType), ProjectTypeFromTemplate("", snapshot.ProjectName), snapshot.ProjectType)
+        _projectName.Text = savedSchedule.ProjectName
+        _versionNumber.Text = If(String.IsNullOrWhiteSpace(savedSchedule.VersionNumber), "1.0", savedSchedule.VersionNumber)
+        _projectType = If(String.IsNullOrWhiteSpace(savedSchedule.ProjectType), ProjectTypeFromTemplate("", savedSchedule.ProjectName), savedSchedule.ProjectType)
         _projectDetailsText = ""
         ResetProjectFlagState()
-        SelectProjectSize(snapshot.ProjectSize)
-        _totalProjectHours.Value = ClampDecimal(snapshot.TotalProjectHours, _totalProjectHours.Minimum, _totalProjectHours.Maximum)
+        SelectProjectSize(savedSchedule.ProjectSize)
+        _totalProjectHours.Value = ClampDecimal(savedSchedule.TotalProjectHours, _totalProjectHours.Minimum, _totalProjectHours.Maximum)
         UpdateProjectMetadataDisplay()
-        If snapshot.Tasks IsNot Nothing Then
-            For Each task In snapshot.Tasks
+        If savedSchedule.Tasks IsNot Nothing Then
+            For Each task In savedSchedule.Tasks
                 _tasks.Add(task)
             Next
         End If
@@ -245,9 +257,12 @@ Public Class SMASchedulerForm
         If _projectDetailsValueLabel Is Nothing Then
             _projectDetailsValueLabel = New Label With {
                 .Name = "_projectDetailsValueLabel",
-                .AutoEllipsis = True,
-                .BackColor = Color.Transparent,
-                .TextAlign = ContentAlignment.MiddleLeft,
+                .AutoEllipsis = False,
+                .BackColor = Color.FromArgb(255, 255, 255),
+                .BorderStyle = BorderStyle.FixedSingle,
+                .Font = New Font("Segoe UI", 8.8F),
+                .Padding = New Padding(8, 5, 8, 5),
+                .TextAlign = ContentAlignment.TopLeft,
                 .Anchor = AnchorStyles.Top Or AnchorStyles.Right
             }
         End If
@@ -273,13 +288,14 @@ Public Class SMASchedulerForm
         End If
 
         Dim rightMargin = 28
-        Dim buttonWidth = 178
-        Dim buttonLeft = Math.Max(20, headerPanel.ClientSize.Width - buttonWidth - rightMargin)
+        Dim detailsWidth = Math.Max(300, Math.Min(540, headerPanel.ClientSize.Width - 720))
+        Dim detailsLeft = Math.Max(690, headerPanel.ClientSize.Width - detailsWidth - rightMargin)
 
-        _scheduleProjectButton.Location = New Point(buttonLeft, 74)
-        _projectDetailsCaptionLabel.Location = New Point(buttonLeft, 24)
-        _projectDetailsValueLabel.Location = New Point(buttonLeft, 44)
-        _projectDetailsValueLabel.Size = New Size(Math.Max(buttonWidth + 90, 230), 22)
+        _projectDetailsCaptionLabel.Location = New Point(detailsLeft, 18)
+        _projectDetailsValueLabel.Location = New Point(detailsLeft, 42)
+        _projectDetailsValueLabel.Size = New Size(detailsWidth, 112)
+        _scheduleProjectButton.Size = New Size(Math.Min(220, detailsWidth), 40)
+        _scheduleProjectButton.Location = New Point(detailsLeft, 168)
     End Sub
 
     Private Sub UpdateProjectMetadataDisplay()
@@ -291,9 +307,22 @@ Public Class SMASchedulerForm
             "Small",
             Convert.ToString(_projectSizeSelector.SelectedItem, CultureInfo.InvariantCulture))
 
-        Dim baseText = "Type: " & If(String.IsNullOrWhiteSpace(_projectType), "New", _projectType) &
-            " | Size: " & projectSize
-        _projectDetailsValueLabel.Text = If(String.IsNullOrWhiteSpace(_projectDetailsText), baseText, baseText & " | " & _projectDetailsText)
+        Dim details = New List(Of String) From {
+            "Type: " & If(String.IsNullOrWhiteSpace(_projectType), "New", _projectType),
+            "Size: " & projectSize
+        }
+
+        If Not String.IsNullOrWhiteSpace(_projectReportType) Then
+            details.Add("Report: " & _projectReportType)
+        End If
+
+        If Not String.IsNullOrWhiteSpace(_projectDetailsText) Then
+            details.AddRange(_projectDetailsText.Split({" | "}, StringSplitOptions.RemoveEmptyEntries).
+                Select(Function(item) item.Trim()).
+                Where(Function(item) item.Length > 0))
+        End If
+
+        _projectDetailsValueLabel.Text = String.Join(Environment.NewLine, details.Take(6))
     End Sub
 
     Private Sub _scheduleProjectButton_Click(sender As Object, e As EventArgs) Handles _scheduleProjectButton.Click
@@ -505,11 +534,15 @@ Public Class SMASchedulerForm
         grid.ColumnHeadersDefaultCellStyle.BackColor = theme.GridHeader
         grid.ColumnHeadersDefaultCellStyle.ForeColor = Color.White
         grid.ColumnHeadersDefaultCellStyle.Font = New Font("Segoe UI Semibold", 9.0F)
+        grid.ColumnHeadersDefaultCellStyle.WrapMode = DataGridViewTriState.True
         grid.DefaultCellStyle.BackColor = theme.PanelBack
         grid.DefaultCellStyle.ForeColor = theme.Text
+        grid.DefaultCellStyle.Font = New Font("Segoe UI", 9.0F)
+        grid.DefaultCellStyle.Padding = New Padding(4, 2, 4, 2)
         grid.DefaultCellStyle.SelectionBackColor = theme.Selection
         grid.DefaultCellStyle.SelectionForeColor = theme.Text
         grid.AlternatingRowsDefaultCellStyle.BackColor = theme.AlternatingRow
+        grid.RowTemplate.Height = Math.Max(grid.RowTemplate.Height, 32)
         grid.EnableHeadersVisualStyles = False
     End Sub
 
@@ -518,13 +551,7 @@ Public Class SMASchedulerForm
         _taskCatalog.Clear()
         _employees.Clear()
         If IsInDesignerHost() Then
-            For Each item In DesignerTaskCatalog()
-                _taskCatalog.Add(item)
-            Next
-
-            For Each employeeName In {"Devarajan", "Mahaboob Basha", "Aashiq Aliuddin", "Mohammed Bilal"}
-                _employees.Add(employeeName)
-            Next
+            ' Keep designer view empty; production task data comes only from SQL.
         Else
             For Each item In _taskCatalogService.LoadAvailableTasks()
                 _taskCatalog.Add(item)
@@ -546,14 +573,6 @@ Public Class SMASchedulerForm
         UpdateAllocationHoursFromSelectedCatalog()
         RecalculateAndRefresh("Working days updated")
     End Sub
-
-    Private Shared Function DesignerTaskCatalog() As IEnumerable(Of TaskCatalogItem)
-        Return New List(Of TaskCatalogItem) From {
-            New TaskCatalogItem With {.DatabaseTaskId = 1, .Title = "Scope", .DependencyType = "FS", .SmallHours = 4D, .Assignee = "Devarajan", .ModuleId = 1},
-            New TaskCatalogItem With {.DatabaseTaskId = 2, .Title = "Gathering of Inputs", .DependencyType = "FS", .SmallHours = 8D, .Assignee = "Mahaboob Basha", .ModuleId = 1},
-            New TaskCatalogItem With {.DatabaseTaskId = 3, .Title = "3D Modelling", .DependencyType = "FS", .SmallHours = 12D, .Assignee = "Aashiq Aliuddin", .ModuleId = 4}
-        }
-    End Function
 
     Private Sub SchedulerHeaderSizeChanged(sender As Object, e As EventArgs) Handles headerPanel.SizeChanged
         LayoutSchedulerHeaderActions()
@@ -602,17 +621,32 @@ Public Class SMASchedulerForm
         _grid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(35, 46, 66)
         _grid.ColumnHeadersDefaultCellStyle.ForeColor = Color.White
         _grid.ColumnHeadersDefaultCellStyle.Font = New Font("Segoe UI Semibold", 9.0F)
+        _grid.ColumnHeadersDefaultCellStyle.WrapMode = DataGridViewTriState.True
         _grid.DefaultCellStyle.SelectionBackColor = Color.FromArgb(219, 235, 255)
         _grid.DefaultCellStyle.SelectionForeColor = Color.FromArgb(24, 31, 42)
+        _grid.DefaultCellStyle.Font = New Font("Segoe UI", 9.0F)
+        _grid.DefaultCellStyle.Padding = New Padding(4, 2, 4, 2)
         _grid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(250, 252, 255)
         _grid.DefaultCellStyle.BackColor = Color.White
         _grid.DefaultCellStyle.ForeColor = Color.FromArgb(37, 47, 63)
+        _grid.RowTemplate.Height = 34
     End Sub
 
     Private Sub ConfigureWorkspaceTabs()
         If contentSplit Is Nothing OrElse _workspaceTabs Is Nothing OrElse mainSplit Is Nothing Then
             Return
         End If
+
+        taskAllocationTab.Text = "Task Allocation"
+        taskUsageTab.Text = "Task Calendar"
+        resourceUsageTab.Text = "Resource Calendar"
+        capacityPlanningTab.Text = "Capacity Planning"
+        resourceUtilizationTab.Text = "Resource Utilization"
+        employeeCapacityTab.Text = "Employee Capacity"
+        allocationPreviewTitle.Text = "Allocation Summary"
+        taskUsagePreviewTitle.Text = "Task Load Summary"
+        resourceUsagePreviewTitle.Text = "Resource Contribution"
+        ConfigurePreviewBadgeLabels()
 
         contentSplit.Panel2Collapsed = True
         contentSplit.Panel1.Padding = New Padding(0)
@@ -639,30 +673,35 @@ Public Class SMASchedulerForm
         If _resourceUtilizationColorSelector.Items.Count > 0 AndAlso _resourceUtilizationColorSelector.SelectedIndex < 0 Then
             _resourceUtilizationColorSelector.SelectedIndex = 0
         End If
-        AddHandler _taskUsageGrid.CellParsing, AddressOf CalendarGridCellParsing
-        AddHandler _taskUsageGrid.CellEndEdit, AddressOf TaskViewGridCellEndEdit
-        AddHandler _taskUsageGrid.DataError, AddressOf CalendarGridDataError
-
-        AddHandler _resourceUsageGrid.CellParsing, AddressOf CalendarGridCellParsing
-        AddHandler _resourceUsageGrid.CellEndEdit, AddressOf ResourceUsageGridCellEndEdit
-        AddHandler _resourceUsageGrid.DataError, AddressOf CalendarGridDataError
-
-        AddHandler _resourceUtilizationGrid.CellParsing, AddressOf ResourceUtilizationGridCellParsing
-        AddHandler _resourceUtilizationGrid.CellEndEdit, AddressOf ResourceUtilizationGridCellEndEdit
-        AddHandler _resourceUtilizationGrid.DataError, AddressOf CalendarGridDataError
-
-        AddHandler _employeeCapacityGrid.CellParsing, AddressOf EmployeeCapacityGridCellParsing
-        AddHandler _employeeCapacityGrid.CellEndEdit, AddressOf EmployeeCapacityGridCellEndEdit
-        AddHandler _employeeCapacityGrid.CellFormatting, AddressOf EmployeeCapacityGridCellFormatting
-        AddHandler _employeeCapacityGrid.DataError, AddressOf CalendarGridDataError
-
-        AddHandler mainSplit.SizeChanged, Sub() ApplyResponsiveSplitter(mainSplit, 620, 380, 0.62R)
-        AddHandler taskUsageSplit.SizeChanged, Sub() ApplyResponsiveSplitter(taskUsageSplit, 700, 360, 0.68R)
-        AddHandler resourceUsageSplit.SizeChanged, Sub() ApplyResponsiveSplitter(resourceUsageSplit, 700, 360, 0.68R)
-
         RefreshWorkspaceTabs()
         ApplyResponsiveSplitter(mainSplit, 620, 380, 0.62R)
         ApplyResponsiveSplitter(taskUsageSplit, 700, 360, 0.68R)
+        ApplyResponsiveSplitter(resourceUsageSplit, 700, 360, 0.68R)
+    End Sub
+
+    Private Sub ConfigurePreviewBadgeLabels()
+        For Each label In New Label() {allocationPrimaryLabel, allocationSecondaryLabel, taskUsagePrimaryLabel, taskUsageSecondaryLabel, resourceUsagePrimaryLabel, resourceUsageSecondaryLabel}
+            If label Is Nothing Then
+                Continue For
+            End If
+
+            label.AutoEllipsis = True
+            label.Font = New Font("Segoe UI Semibold", 8.8F)
+            label.Margin = New Padding(3, 3, 6, 3)
+            label.Padding = New Padding(6, 0, 6, 0)
+            label.Size = New Size(178, 28)
+        Next
+    End Sub
+
+    Private Sub MainSplitSizeChanged(sender As Object, e As EventArgs) Handles mainSplit.SizeChanged
+        ApplyResponsiveSplitter(mainSplit, 620, 380, 0.62R)
+    End Sub
+
+    Private Sub TaskUsageSplitSizeChanged(sender As Object, e As EventArgs) Handles taskUsageSplit.SizeChanged
+        ApplyResponsiveSplitter(taskUsageSplit, 700, 360, 0.68R)
+    End Sub
+
+    Private Sub ResourceUsageSplitSizeChanged(sender As Object, e As EventArgs) Handles resourceUsageSplit.SizeChanged
         ApplyResponsiveSplitter(resourceUsageSplit, 700, 360, 0.68R)
     End Sub
 
@@ -684,11 +723,15 @@ Public Class SMASchedulerForm
         grid.MultiSelect = multiSelectValue
         grid.ReadOnly = readOnlyValue
         grid.RowHeadersVisible = False
+        grid.RowTemplate.Height = 32
         grid.ScrollBars = ScrollBars.Both
         grid.SelectionMode = selectionMode
         grid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(35, 46, 66)
         grid.ColumnHeadersDefaultCellStyle.ForeColor = Color.White
         grid.ColumnHeadersDefaultCellStyle.Font = New Font("Segoe UI Semibold", 9.0F)
+        grid.ColumnHeadersDefaultCellStyle.WrapMode = DataGridViewTriState.True
+        grid.DefaultCellStyle.Font = New Font("Segoe UI", 9.0F)
+        grid.DefaultCellStyle.Padding = New Padding(4, 2, 4, 2)
         grid.DefaultCellStyle.SelectionBackColor = Color.FromArgb(219, 235, 255)
         grid.DefaultCellStyle.SelectionForeColor = Color.FromArgb(24, 31, 42)
     End Sub
@@ -1525,24 +1568,24 @@ Public Class SMASchedulerForm
     End Function
 
     Private Sub AddGridColumns()
-        _grid.Columns.Add(New DataGridViewTextBoxColumn With {.DataPropertyName = NameOf(ScheduleTask.TaskId), .HeaderText = "ID", .Width = 46, .ReadOnly = True})
-        _grid.Columns.Add(New DataGridViewTextBoxColumn With {.DataPropertyName = NameOf(ScheduleTask.TaskName), .HeaderText = "Task Name", .Width = 303})
-        _grid.Columns.Add(New DataGridViewTextBoxColumn With {.DataPropertyName = NameOf(ScheduleTask.DurationDays), .HeaderText = "Duration (Days)", .Width = 104, .ValueType = GetType(Decimal), .DefaultCellStyle = New DataGridViewCellStyle With {.Format = "0.###"}})
-        _grid.Columns.Add(New CalendarColumn With {.DataPropertyName = NameOf(ScheduleTask.StartDate), .HeaderText = "Start", .Width = 104})
-        _grid.Columns.Add(New CalendarColumn With {.DataPropertyName = NameOf(ScheduleTask.FinishDate), .HeaderText = "Finish", .Width = 104})
+        _grid.Columns.Add(New DataGridViewTextBoxColumn With {.DataPropertyName = NameOf(ScheduleTask.TaskId), .HeaderText = "ID", .Width = 52, .ReadOnly = True, .Frozen = True})
+        _grid.Columns.Add(New DataGridViewTextBoxColumn With {.DataPropertyName = NameOf(ScheduleTask.TaskName), .HeaderText = "Task Name", .Width = 360, .MinimumWidth = 260, .Frozen = True, .DefaultCellStyle = New DataGridViewCellStyle With {.WrapMode = DataGridViewTriState.True}})
+        _grid.Columns.Add(New DataGridViewTextBoxColumn With {.DataPropertyName = NameOf(ScheduleTask.DurationDays), .HeaderText = "Duration Days", .Width = 110, .ValueType = GetType(Decimal), .DefaultCellStyle = New DataGridViewCellStyle With {.Format = "0.###", .Alignment = DataGridViewContentAlignment.MiddleRight}})
+        _grid.Columns.Add(New CalendarColumn With {.DataPropertyName = NameOf(ScheduleTask.StartDate), .HeaderText = "Start Date", .Width = 112})
+        _grid.Columns.Add(New CalendarColumn With {.DataPropertyName = NameOf(ScheduleTask.FinishDate), .HeaderText = "Finish Date", .Width = 112})
         Dim predecessorColumn As New DataGridViewComboBoxColumn With {
             .DataPropertyName = NameOf(ScheduleTask.PredecessorLink),
-            .HeaderText = "Predecessors",
-            .Width = 108,
+            .HeaderText = "Dependency",
+            .Width = 112,
             .FlatStyle = FlatStyle.Flat,
             .DisplayStyle = DataGridViewComboBoxDisplayStyle.ComboBox,
             .ValueType = GetType(String)
         }
         predecessorColumn.Items.AddRange("", "FS", "SS", "FF", "SF")
         _grid.Columns.Add(predecessorColumn)
-        _grid.Columns.Add(New ResourceChecklistColumn(_employees) With {.DataPropertyName = NameOf(ScheduleTask.AssignedTo), .HeaderText = "Assigned To", .Width = 210})
-        _grid.Columns.Add(New CalendarColumn With {.DataPropertyName = NameOf(ScheduleTask.AssignmentDate), .HeaderText = "Assign Date", .Width = 104})
-        _grid.Columns.Add(New DataGridViewTextBoxColumn With {.DataPropertyName = NameOf(ScheduleTask.ResourceHours), .HeaderText = "Resource Hours", .Width = 108, .ValueType = GetType(Decimal), .DefaultCellStyle = New DataGridViewCellStyle With {.Format = "0.##"}})
+        _grid.Columns.Add(New ResourceChecklistColumn(_employees) With {.DataPropertyName = NameOf(ScheduleTask.AssignedTo), .HeaderText = "Assigned Resources", .Width = 250, .MinimumWidth = 210})
+        _grid.Columns.Add(New CalendarColumn With {.DataPropertyName = NameOf(ScheduleTask.AssignmentDate), .HeaderText = "Assign Date", .Width = 112})
+        _grid.Columns.Add(New DataGridViewTextBoxColumn With {.DataPropertyName = NameOf(ScheduleTask.ResourceHours), .HeaderText = "Resource Hours", .Width = 118, .ValueType = GetType(Decimal), .DefaultCellStyle = New DataGridViewCellStyle With {.Format = "0.##", .Alignment = DataGridViewContentAlignment.MiddleRight}})
     End Sub
 
     Private Sub SeedSchedulerDesignerData()
@@ -1952,7 +1995,7 @@ Public Class SMASchedulerForm
         SetStatus("Please enter a valid value")
     End Sub
 
-    Private Sub TasksChanged(sender As Object, e As ListChangedEventArgs)
+    Private Sub TasksChanged(sender As Object, e As ListChangedEventArgs) Handles _tasks.ListChanged
         If _suspendTaskEvents Then
             Return
         End If
@@ -3042,7 +3085,7 @@ Public Class SMASchedulerForm
         Return True
     End Function
 
-    Private Sub CalendarGridCellParsing(sender As Object, e As DataGridViewCellParsingEventArgs)
+    Private Sub CalendarGridCellParsing(sender As Object, e As DataGridViewCellParsingEventArgs) Handles _taskUsageGrid.CellParsing, _resourceUsageGrid.CellParsing
         If e.RowIndex < 0 OrElse e.ColumnIndex < 0 Then
             Return
         End If
@@ -3067,7 +3110,7 @@ Public Class SMASchedulerForm
         End If
     End Sub
 
-    Private Sub TaskViewGridCellEndEdit(sender As Object, e As DataGridViewCellEventArgs)
+    Private Sub TaskViewGridCellEndEdit(sender As Object, e As DataGridViewCellEventArgs) Handles _taskUsageGrid.CellEndEdit
         If _isLoadingTaskViewGrid OrElse e.RowIndex < 0 OrElse e.ColumnIndex < 0 Then
             Return
         End If
@@ -3119,7 +3162,7 @@ Public Class SMASchedulerForm
         RecalculateAndRefresh("Task usage updated")
     End Sub
 
-    Private Sub ResourceUsageGridCellEndEdit(sender As Object, e As DataGridViewCellEventArgs)
+    Private Sub ResourceUsageGridCellEndEdit(sender As Object, e As DataGridViewCellEventArgs) Handles _resourceUsageGrid.CellEndEdit
         If _isLoadingResourceUsageGrid OrElse e.RowIndex < 0 OrElse e.ColumnIndex < 0 Then
             Return
         End If
@@ -3201,7 +3244,7 @@ Public Class SMASchedulerForm
         MessageBox.Show(Me, message, "Hours Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning)
     End Sub
 
-    Private Sub ResourceUtilizationGridCellParsing(sender As Object, e As DataGridViewCellParsingEventArgs)
+    Private Sub ResourceUtilizationGridCellParsing(sender As Object, e As DataGridViewCellParsingEventArgs) Handles _resourceUtilizationGrid.CellParsing
         If _isLoadingResourceUtilizationGrid OrElse e.RowIndex < 0 OrElse e.ColumnIndex <= 0 Then
             Return
         End If
@@ -3214,7 +3257,7 @@ Public Class SMASchedulerForm
         End If
     End Sub
 
-    Private Sub ResourceUtilizationGridCellEndEdit(sender As Object, e As DataGridViewCellEventArgs)
+    Private Sub ResourceUtilizationGridCellEndEdit(sender As Object, e As DataGridViewCellEventArgs) Handles _resourceUtilizationGrid.CellEndEdit
         If _isLoadingResourceUtilizationGrid OrElse e.RowIndex < 0 OrElse e.ColumnIndex <= 0 Then
             Return
         End If
@@ -3285,7 +3328,7 @@ Public Class SMASchedulerForm
         SetStatus("Employee capacity has been refreshed")
     End Sub
 
-    Private Sub EmployeeCapacityGridCellParsing(sender As Object, e As DataGridViewCellParsingEventArgs)
+    Private Sub EmployeeCapacityGridCellParsing(sender As Object, e As DataGridViewCellParsingEventArgs) Handles _employeeCapacityGrid.CellParsing
         If e.RowIndex < 0 OrElse e.ColumnIndex < 0 Then
             Return
         End If
@@ -3309,7 +3352,7 @@ Public Class SMASchedulerForm
         End If
     End Sub
 
-    Private Sub EmployeeCapacityGridCellEndEdit(sender As Object, e As DataGridViewCellEventArgs)
+    Private Sub EmployeeCapacityGridCellEndEdit(sender As Object, e As DataGridViewCellEventArgs) Handles _employeeCapacityGrid.CellEndEdit
         If e.RowIndex < 0 OrElse _employeeCapacityGrid Is Nothing Then
             Return
         End If
@@ -3328,7 +3371,7 @@ Public Class SMASchedulerForm
         SetStatus("Employee capacity updated")
     End Sub
 
-    Private Sub EmployeeCapacityGridCellFormatting(sender As Object, e As DataGridViewCellFormattingEventArgs)
+    Private Sub EmployeeCapacityGridCellFormatting(sender As Object, e As DataGridViewCellFormattingEventArgs) Handles _employeeCapacityGrid.CellFormatting
         If e.RowIndex < 0 OrElse e.ColumnIndex < 0 Then
             Return
         End If
@@ -3497,7 +3540,7 @@ Public Class SMASchedulerForm
         Return filePath
     End Function
 
-    Private Sub CalendarGridDataError(sender As Object, e As DataGridViewDataErrorEventArgs)
+    Private Sub CalendarGridDataError(sender As Object, e As DataGridViewDataErrorEventArgs) Handles _taskUsageGrid.DataError, _resourceUsageGrid.DataError, _resourceUtilizationGrid.DataError, _employeeCapacityGrid.DataError
         e.ThrowException = False
         SetStatus("Please enter a valid hour value")
     End Sub
@@ -4247,14 +4290,14 @@ Public NotInheritable Class SchedulerThemePreferences
     End Sub
 End Class
 
-Public Class ProjectSnapshot
-    Public Property ProjectName As String = "SMA Scheduler"
-    Public Property VersionNumber As String = "1.0"
+Public Class SavedProjectSchedule
+    Public Property ProjectName As String = ""
+    Public Property VersionNumber As String = ""
     Public Property PlannerPlan As String = "SMA Planning Engine"
-    Public Property ProjectSize As String = "Small"
+    Public Property ProjectSize As String = ""
     Public Property ProjectType As String = ""
     Public Property TotalProjectHours As Decimal
-    Public Property ResourcesNeeded As Integer = 1
+    Public Property ResourcesNeeded As Integer
     Public Property ResourceHours As Decimal
     Public Property Tasks As New List(Of ScheduleTask)
     Public Property UpdatedOn As Date
@@ -5516,3 +5559,4 @@ Public Class PlannerPreviewRow
     Public Property ValueText As String = ""
     Public Property ToolTipText As String = ""
 End Class
+

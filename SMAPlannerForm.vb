@@ -39,21 +39,25 @@ Public Class SMAPlannerForm
         _grid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(35, 46, 66)
         _grid.ColumnHeadersDefaultCellStyle.ForeColor = Color.White
         _grid.ColumnHeadersDefaultCellStyle.Font = New Font("Segoe UI Semibold", 9.0F)
+        _grid.ColumnHeadersDefaultCellStyle.WrapMode = DataGridViewTriState.True
+        _grid.RowTemplate.Height = 32
+        _grid.DefaultCellStyle.Font = New Font("Segoe UI", 9.0F)
+        _grid.DefaultCellStyle.Padding = New Padding(4, 2, 4, 2)
         _grid.DefaultCellStyle.SelectionBackColor = Color.FromArgb(219, 235, 255)
         _grid.DefaultCellStyle.SelectionForeColor = Color.FromArgb(24, 31, 42)
 
     End Sub
 
     Private Sub AddProjectGridColumns()
-        _grid.Columns.Add(New DataGridViewTextBoxColumn With {.DataPropertyName = NameOf(ProjectLibraryItem.DisplayProjectId), .HeaderText = "ProjectId", .Width = 110, .ReadOnly = True})
-        _grid.Columns.Add(New DataGridViewTextBoxColumn With {.DataPropertyName = NameOf(ProjectLibraryItem.ProjectName), .HeaderText = "ProjectName", .Width = 180, .ReadOnly = True})
-        _grid.Columns.Add(New DataGridViewTextBoxColumn With {.DataPropertyName = NameOf(ProjectLibraryItem.VersionNumber), .HeaderText = "VersionNumber", .Width = 108, .ReadOnly = True})
-        _grid.Columns.Add(New DataGridViewTextBoxColumn With {.DataPropertyName = NameOf(ProjectLibraryItem.ProjectSize), .HeaderText = "ProjectSize", .Width = 108, .ReadOnly = True})
-        _grid.Columns.Add(New DataGridViewTextBoxColumn With {.DataPropertyName = NameOf(ProjectLibraryItem.ProjectType), .HeaderText = "ProjectType", .Width = 110, .ReadOnly = True})
-        _grid.Columns.Add(New DataGridViewTextBoxColumn With {.DataPropertyName = NameOf(ProjectLibraryItem.TaskCount), .HeaderText = "TaskCount", .Width = 94, .ReadOnly = True})
-        _grid.Columns.Add(New DataGridViewTextBoxColumn With {.DataPropertyName = NameOf(ProjectLibraryItem.ResourceHours), .HeaderText = "ResourceHours", .Width = 116, .ReadOnly = True, .DefaultCellStyle = New DataGridViewCellStyle With {.Format = "0.##"}})
-        _grid.Columns.Add(New DataGridViewTextBoxColumn With {.DataPropertyName = NameOf(ProjectLibraryItem.StartDate), .HeaderText = "StartDate", .Width = 108, .ReadOnly = True, .DefaultCellStyle = New DataGridViewCellStyle With {.Format = "dd-MMM-yyyy"}})
-        _grid.Columns.Add(New DataGridViewTextBoxColumn With {.DataPropertyName = NameOf(ProjectLibraryItem.FinishDate), .HeaderText = "FinishDate", .Width = 108, .ReadOnly = True, .DefaultCellStyle = New DataGridViewCellStyle With {.Format = "dd-MMM-yyyy"}})
+        _grid.Columns.Add(New DataGridViewTextBoxColumn With {.DataPropertyName = NameOf(ProjectLibraryItem.DisplayProjectId), .HeaderText = "Project ID", .Width = 110, .ReadOnly = True})
+        _grid.Columns.Add(New DataGridViewTextBoxColumn With {.DataPropertyName = NameOf(ProjectLibraryItem.ProjectName), .HeaderText = "Project Name", .Width = 240, .ReadOnly = True, .AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, .MinimumWidth = 220})
+        _grid.Columns.Add(New DataGridViewTextBoxColumn With {.DataPropertyName = NameOf(ProjectLibraryItem.VersionNumber), .HeaderText = "Version", .Width = 88, .ReadOnly = True})
+        _grid.Columns.Add(New DataGridViewTextBoxColumn With {.DataPropertyName = NameOf(ProjectLibraryItem.ProjectSize), .HeaderText = "Size", .Width = 96, .ReadOnly = True})
+        _grid.Columns.Add(New DataGridViewTextBoxColumn With {.DataPropertyName = NameOf(ProjectLibraryItem.ProjectType), .HeaderText = "Type", .Width = 100, .ReadOnly = True})
+        _grid.Columns.Add(New DataGridViewTextBoxColumn With {.DataPropertyName = NameOf(ProjectLibraryItem.TaskCount), .HeaderText = "Tasks", .Width = 76, .ReadOnly = True})
+        _grid.Columns.Add(New DataGridViewTextBoxColumn With {.DataPropertyName = NameOf(ProjectLibraryItem.ResourceHours), .HeaderText = "Resource Hours", .Width = 118, .ReadOnly = True, .DefaultCellStyle = New DataGridViewCellStyle With {.Format = "0.##", .Alignment = DataGridViewContentAlignment.MiddleRight}})
+        _grid.Columns.Add(New DataGridViewTextBoxColumn With {.DataPropertyName = NameOf(ProjectLibraryItem.StartDate), .HeaderText = "Start Date", .Width = 108, .ReadOnly = True, .DefaultCellStyle = New DataGridViewCellStyle With {.Format = "dd-MMM-yyyy"}})
+        _grid.Columns.Add(New DataGridViewTextBoxColumn With {.DataPropertyName = NameOf(ProjectLibraryItem.FinishDate), .HeaderText = "Finish Date", .Width = 108, .ReadOnly = True, .DefaultCellStyle = New DataGridViewCellStyle With {.Format = "dd-MMM-yyyy"}})
     End Sub
 
     Private Shared Function CreateSqlRepository() As SqlProjectRepository
@@ -434,6 +438,12 @@ Public Class SMAPlannerForm
             Return
         End Try
 
+        If sqlProject Is Nothing Then
+            MessageBox.Show(Me, "No project found for this Project ID.", "Schedule Project", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            SetPlannerStatus("No project found for this Project ID.")
+            Return
+        End If
+
         ' Step 2: enforce planning rules before opening the Scheduler form.
         If sqlProject IsNot Nothing AndAlso sqlProject.IsPlanned.HasValue AndAlso sqlProject.IsPlanned.Value Then
             MessageBox.Show(Me, "This project has already been planned. Please search for it in the 'Recent Scheduled Projects' list.", "Schedule Project", MessageBoxButtons.OK, MessageBoxIcon.Warning)
@@ -445,13 +455,32 @@ Public Class SMAPlannerForm
             Return
         End If
 
-        If sqlProject Is Nothing Then
-            MessageBox.Show(Me, "This project is not planned in this application.", "Schedule Project", MessageBoxButtons.OK, MessageBoxIcon.Information)
+        If String.IsNullOrWhiteSpace(sqlProject.ProjectName) Then
+            MessageBox.Show(Me, "Project name is missing in SQL for this Project ID.", "Schedule Project", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            SetPlannerStatus("Project name is missing in SQL.")
+            Return
+        End If
+
+        If String.IsNullOrWhiteSpace(sqlProject.VersionNumber) Then
+            MessageBox.Show(Me, "Project version is missing in SQL for this Project ID.", "Schedule Project", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            SetPlannerStatus("Project version is missing in SQL.")
+            Return
+        End If
+
+        If String.IsNullOrWhiteSpace(sqlProject.ProjectSize) Then
+            MessageBox.Show(Me, "Project size is missing in SQL for this Project ID.", "Schedule Project", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            SetPlannerStatus("Project size is missing in SQL.")
+            Return
+        End If
+
+        If Not IsKnownProjectSize(sqlProject.ProjectSize) Then
+            MessageBox.Show(Me, "Project size from SQL is not valid for this Project ID.", "Schedule Project", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            SetPlannerStatus("Project size from SQL is not valid.")
             Return
         End If
 
         ' Step 3: build the scheduler input model from SQL project metadata and report filters.
-        Dim projectName = FirstNonBlank(sqlProject.ProjectName, projectCode)
+        Dim projectName = sqlProject.ProjectName.Trim()
 
         If String.IsNullOrWhiteSpace(projectName) Then
             MessageBox.Show(Me, "Type or select a live project first.", "Schedule Project", MessageBoxButtons.OK, MessageBoxIcon.Information)
@@ -462,8 +491,8 @@ Public Class SMAPlannerForm
             .ProjectCode = FirstNonBlank(sqlProject.ProjectIdAtSma, projectName),
             .ProjectName = projectName,
             .ClientName = "SQL",
-            .VersionNumber = FirstNonBlank(sqlProject.VersionNumber, "1.0"),
-            .ProjectSize = FirstNonBlank(sqlProject.ProjectSize, "Small"),
+            .VersionNumber = sqlProject.VersionNumber.Trim(),
+            .ProjectSize = sqlProject.ProjectSize.Trim(),
             .TemplateName = FirstNonBlank(sqlProject.ProjectType, "New"),
             .ProjectType = FirstNonBlank(sqlProject.ProjectType, "New"),
             .ReportType = sqlProject.ReportType,
@@ -481,13 +510,33 @@ Public Class SMAPlannerForm
         }
 
         ' Step 4: open SMA Scheduler; SQL task rows are loaded into the task grid.
-        Using scheduler As New SMASchedulerForm()
+        Dim scheduler As SMASchedulerForm = Nothing
+        Try
+            scheduler = New SMASchedulerForm()
             scheduler.LoadLiveProjectTemplate(projectToSchedule)
             FormTransitionService.ShowDialogWithMotion(Me, scheduler)
-        End Using
+        Catch ex As InvalidOperationException
+            MessageBox.Show(Me, ex.Message, "Schedule Project", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            SetPlannerStatus(ex.Message)
+            Return
+        Catch ex As Exception
+            MessageBox.Show(Me, "SQL task details could not be loaded." & Environment.NewLine & ex.Message, "SQL Load Failed", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            SetPlannerStatus("SQL task details could not be loaded.")
+            Return
+        Finally
+            If scheduler IsNot Nothing Then
+                scheduler.Dispose()
+            End If
+        End Try
+
         ApplyCurrentTheme()
         RefreshPlannerLists()
     End Sub
+
+    Private Shared Function IsKnownProjectSize(projectSize As String) As Boolean
+        Return {"Small", "Medium", "Large", "Very Large"}.
+            Any(Function(sizeName) String.Equals(sizeName, If(projectSize, "").Trim(), StringComparison.OrdinalIgnoreCase))
+    End Function
 
     Private Shared Function FirstNonBlank(ParamArray values() As String) As String
         For Each value In values
@@ -578,32 +627,32 @@ Public Class SMAPlannerForm
             Return
         End If
 
-        Dim snapshot As ProjectSnapshot = Nothing
+        Dim savedSchedule As SavedProjectSchedule = Nothing
 
         If _sqlRepository IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(item.ProjectCode) Then
             Try
-                snapshot = _sqlRepository.LoadProjectSnapshotByProjectCode(item.ProjectCode)
+                savedSchedule = _sqlRepository.LoadSavedProjectScheduleByProjectCode(item.ProjectCode)
             Catch ex As Exception
                 SetPlannerStatus("SQL project schedule load failed.")
             End Try
         End If
 
-        If snapshot Is Nothing AndAlso _sqlRepository IsNot Nothing AndAlso item.ProjectId > 0 Then
+        If savedSchedule Is Nothing AndAlso _sqlRepository IsNot Nothing AndAlso item.ProjectId > 0 Then
             Try
-                snapshot = _sqlRepository.LoadProjectSnapshot(item.ProjectId)
+                savedSchedule = _sqlRepository.LoadSavedProjectSchedule(item.ProjectId)
             Catch ex As Exception
                 SetPlannerStatus("SQL project load failed.")
             End Try
         End If
 
-        If snapshot Is Nothing Then
+        If savedSchedule Is Nothing Then
             MessageBox.Show(Me, "This planned project could not be opened from SQL.", "Open Project", MessageBoxButtons.OK, MessageBoxIcon.Warning)
             LoadProjectList()
             Return
         End If
 
         Using scheduler As New SMASchedulerForm()
-            scheduler.LoadProjectSnapshot(snapshot)
+            scheduler.LoadSavedProjectSchedule(savedSchedule)
             FormTransitionService.ShowDialogWithMotion(Me, scheduler)
         End Using
         ApplyCurrentTheme()
@@ -655,3 +704,4 @@ Public Class SMAPlannerForm
 
 
 End Class
+

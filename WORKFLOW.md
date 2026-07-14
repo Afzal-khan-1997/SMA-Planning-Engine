@@ -28,7 +28,7 @@
 
 The Scheduler form has `Small` as the UI default only so the form has a valid initial value. For real Project ID planning, the project size should come from SQL `Table_Project_Tracking.[Project Size]`, and that size controls which resource-hour column is used in the scheduler.
 
-The normal user flow is SQL-only. Project lookup, displayed project metadata, task loading, capacity planning, and schedule saving are handled through SQL. Local `.smaschedule`, `.json`, and `.xlsx` files are not used by the Planning form or Scheduler save path.
+The normal user flow is SQL-only. Project lookup, displayed project metadata, task loading, capacity planning, and schedule saving are handled through SQL. Legacy local file formats are not used by the Planning form or Scheduler save path.
 
 ## Code Locations
 

@@ -13,11 +13,9 @@ SMA Planning Engine is a VB.NET Windows Forms planning tool migrated from the SM
 - FS, SS, FF, and SF task dependencies.
 - Editable task dates, decimal durations, percent complete, multiple resources, assignment dates, and decimal resource hours.
 - Weekend Plan option for scheduling Saturdays and Sundays.
-- Capacity Planning workbook storage with an eight-hour daily limit.
-- Project and monthly capacity Excel exports.
+- SQL-backed Capacity Planning with date range and employee filters.
 - Persistent color themes shared by SMA Planning Engine and SMA Scheduler.
-- Local project library using `.smaschedule` files.
-- SQL-ready repository and schema for a later database connection.
+- SQL-backed project lookup, task loading, capacity loading, and schedule saving.
 
 ## Requirements
 
@@ -51,22 +49,6 @@ Project ID planning uses SQL project tracking as the source of truth. The user e
 
 The Capacity Planning tab also supports SQL-backed filtering by date range and active employees. It shows available hours, planned hours, project names, and task-level planned hours for the selected employees and dates.
 
-## Local Storage
-
-Saved schedules are stored in:
-
-```text
-Documents\SMA Scheduler\Projects
-```
-
-Capacity workbooks are stored in:
-
-```text
-Documents\SMA Scheduler\Capacity Planning
-```
-
-The Save command also lets the user export the project plan and capacity workbook to a selected folder.
-
 ## SQL Server
 
-SQL integration remains disabled until connection details and production table mappings are supplied. The integration boundary is in `SqlProjectRepository.vb`, and the planned schema is available in `schema.sql`.
+SQL is now the intended source of truth. Add the production connection string in `App.config`, and keep table mapping changes inside `SqlProjectRepository.vb`. The planned schema is available in `schema.sql`.

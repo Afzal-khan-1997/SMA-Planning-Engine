@@ -97,6 +97,7 @@ CREATE TABLE dbo.SmaScheduleTasks
 (
     Id INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
     ProjectId INT NOT NULL,
+    VersionNumber NVARCHAR(50) NULL,
     TaskId INT NOT NULL,
     DatabaseTaskId INT NULL,
     TaskName NVARCHAR(300) NOT NULL,
@@ -115,7 +116,7 @@ CREATE TABLE dbo.SmaScheduleTasks
     ModuleId INT NULL,
     PlannerTaskId NVARCHAR(200) NULL,
     CONSTRAINT FK_SmaScheduleTasks_Project FOREIGN KEY(ProjectId) REFERENCES dbo.SmaScheduleProjects(ProjectId),
-    CONSTRAINT UQ_SmaScheduleTasks_Project_Task UNIQUE(ProjectId, TaskId)
+    CONSTRAINT UQ_SmaScheduleTasks_Project_Version_Task UNIQUE(ProjectId, VersionNumber, TaskId)
 );
 
 CREATE TABLE dbo.SmaResourceAvailability

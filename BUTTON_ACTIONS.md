@@ -2,6 +2,8 @@
 
 This project keeps the WinForms frontend controls in the `.Designer.vb` files and the button behavior in the matching form `.vb` code-behind files. Main visible buttons use direct VB.NET `Handles Button.Click` declarations so the action behind each button is easy to find.
 
+The few remaining `AddHandler` lines are only for dynamic UI internals, such as animation timers, chart legend formatting, split-panel resize helpers, and custom dropdown editors. They are not hidden business actions for user buttons.
+
 ## SMA Planning Engine Start Form
 
 | Frontend control | Code-behind handler | Backend action |

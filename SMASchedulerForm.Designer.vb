@@ -1337,7 +1337,7 @@ Partial Class SMASchedulerForm
     Private capacityPlanningTab As TabPage
     Private resourceUtilizationTab As TabPage
     Private employeeCapacityTab As TabPage
-    Private mainSplit As SplitContainer
+    Private WithEvents mainSplit As SplitContainer
     Private ganttPreviewSplit As SplitContainer
     Private allocationPreviewPanel As Panel
     Private allocationPreviewTitle As Label
@@ -1347,8 +1347,8 @@ Partial Class SMASchedulerForm
     Private allocationPreviewBodySplit As SplitContainer
     Private allocationPreviewChart As PlannerPieChartPanel
     Private allocationLegendGrid As DataGridView
-    Private taskUsageSplit As SplitContainer
-    Private _taskUsageGrid As DataGridView
+    Private WithEvents taskUsageSplit As SplitContainer
+    Private WithEvents _taskUsageGrid As DataGridView
     Private taskUsagePreviewPanel As Panel
     Private taskUsagePreviewTitle As Label
     Private taskUsagePreviewBadges As FlowLayoutPanel
@@ -1357,8 +1357,8 @@ Partial Class SMASchedulerForm
     Private taskUsagePreviewBodySplit As SplitContainer
     Private taskUsagePreviewChart As PlannerPieChartPanel
     Private taskUsageLegendGrid As DataGridView
-    Private resourceUsageSplit As SplitContainer
-    Private _resourceUsageGrid As DataGridView
+    Private WithEvents resourceUsageSplit As SplitContainer
+    Private WithEvents _resourceUsageGrid As DataGridView
     Private resourceUsagePreviewPanel As Panel
     Private resourceUsagePreviewTitle As Label
     Private resourceUsagePreviewBadges As FlowLayoutPanel
@@ -1375,13 +1375,13 @@ Partial Class SMASchedulerForm
     Private WithEvents _resourceUtilizationApplyButton As Button
     Private WithEvents _resourceUtilizationClearButton As Button
     Private WithEvents _resourceUtilizationMailButton As Button
-    Private _resourceUtilizationGrid As DataGridView
+    Private WithEvents _resourceUtilizationGrid As DataGridView
     Private employeeCapacityHost As Panel
     Private employeeCapacityToolbar As FlowLayoutPanel
     Private WithEvents _employeeCapacityAddButton As Button
     Private WithEvents _employeeCapacityDeleteButton As Button
     Private WithEvents _employeeCapacityRefreshButton As Button
-    Private _employeeCapacityGrid As DataGridView
+    Private WithEvents _employeeCapacityGrid As DataGridView
     Private projectSizeLabel As Label
     Private taskCatalogLabel As Label
     Private taskWorkspaceTitle As Label
