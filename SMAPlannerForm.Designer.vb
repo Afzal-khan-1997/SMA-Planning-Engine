@@ -17,6 +17,9 @@ Partial Class SMAPlannerForm
 
     <System.Diagnostics.DebuggerStepThrough()>
     Private Sub InitializeComponent()
+        Dim DataGridViewCellStyle1 As System.Windows.Forms.DataGridViewCellStyle = New System.Windows.Forms.DataGridViewCellStyle()
+        Dim DataGridViewCellStyle2 As System.Windows.Forms.DataGridViewCellStyle = New System.Windows.Forms.DataGridViewCellStyle()
+        Dim DataGridViewCellStyle3 As System.Windows.Forms.DataGridViewCellStyle = New System.Windows.Forms.DataGridViewCellStyle()
         Me.headerPanel = New System.Windows.Forms.Panel()
         Me.titleLabel = New System.Windows.Forms.Label()
         Me.searchLabel = New System.Windows.Forms.Label()
@@ -24,6 +27,15 @@ Partial Class SMAPlannerForm
         Me.btnScheduleProject = New System.Windows.Forms.Button()
         Me.gridPanel = New System.Windows.Forms.Panel()
         Me._grid = New System.Windows.Forms.DataGridView()
+        Me.idColumn = New System.Windows.Forms.DataGridViewTextBoxColumn()
+        Me.projectColumn = New System.Windows.Forms.DataGridViewTextBoxColumn()
+        Me.versionColumn = New System.Windows.Forms.DataGridViewTextBoxColumn()
+        Me.sizeColumn = New System.Windows.Forms.DataGridViewTextBoxColumn()
+        Me.typeColumn = New System.Windows.Forms.DataGridViewTextBoxColumn()
+        Me.tasksColumn = New System.Windows.Forms.DataGridViewTextBoxColumn()
+        Me.hoursColumn = New System.Windows.Forms.DataGridViewTextBoxColumn()
+        Me.startColumn = New System.Windows.Forms.DataGridViewTextBoxColumn()
+        Me.finishColumn = New System.Windows.Forms.DataGridViewTextBoxColumn()
         Me.recentFilterPanel = New System.Windows.Forms.Panel()
         Me.recentSearchLabel = New System.Windows.Forms.Label()
         Me._recentProjectSearchBox = New System.Windows.Forms.TextBox()
@@ -132,6 +144,7 @@ Partial Class SMAPlannerForm
         Me._grid.BackgroundColor = System.Drawing.Color.White
         Me._grid.BorderStyle = System.Windows.Forms.BorderStyle.None
         Me._grid.ColumnHeadersHeight = 34
+        Me._grid.Columns.AddRange(New System.Windows.Forms.DataGridViewColumn() {Me.idColumn, Me.projectColumn, Me.versionColumn, Me.sizeColumn, Me.typeColumn, Me.tasksColumn, Me.hoursColumn, Me.startColumn, Me.finishColumn})
         Me._grid.Dock = System.Windows.Forms.DockStyle.Fill
         Me._grid.EnableHeadersVisualStyles = False
         Me._grid.GridColor = System.Drawing.Color.FromArgb(CType(CType(232, Byte), Integer), CType(CType(236, Byte), Integer), CType(CType(242, Byte), Integer))
@@ -144,6 +157,94 @@ Partial Class SMAPlannerForm
         Me._grid.SelectionMode = System.Windows.Forms.DataGridViewSelectionMode.FullRowSelect
         Me._grid.Size = New System.Drawing.Size(1132, 274)
         Me._grid.TabIndex = 1
+        '
+        'idColumn
+        '
+        Me.idColumn.DataPropertyName = "DisplayProjectId"
+        Me.idColumn.HeaderText = "Project ID"
+        Me.idColumn.MinimumWidth = 6
+        Me.idColumn.Name = "idColumn"
+        Me.idColumn.ReadOnly = True
+        Me.idColumn.Width = 110
+        '
+        'projectColumn
+        '
+        Me.projectColumn.AutoSizeMode = System.Windows.Forms.DataGridViewAutoSizeColumnMode.Fill
+        Me.projectColumn.DataPropertyName = "ProjectName"
+        Me.projectColumn.HeaderText = "Project Name"
+        Me.projectColumn.MinimumWidth = 220
+        Me.projectColumn.Name = "projectColumn"
+        Me.projectColumn.ReadOnly = True
+        Me.projectColumn.Width = 240
+        '
+        'versionColumn
+        '
+        Me.versionColumn.DataPropertyName = "VersionNumber"
+        Me.versionColumn.HeaderText = "Version"
+        Me.versionColumn.MinimumWidth = 6
+        Me.versionColumn.Name = "versionColumn"
+        Me.versionColumn.ReadOnly = True
+        Me.versionColumn.Width = 88
+        '
+        'sizeColumn
+        '
+        Me.sizeColumn.DataPropertyName = "ProjectSize"
+        Me.sizeColumn.HeaderText = "Size"
+        Me.sizeColumn.MinimumWidth = 6
+        Me.sizeColumn.Name = "sizeColumn"
+        Me.sizeColumn.ReadOnly = True
+        Me.sizeColumn.Width = 96
+        '
+        'typeColumn
+        '
+        Me.typeColumn.DataPropertyName = "ProjectType"
+        Me.typeColumn.HeaderText = "Type"
+        Me.typeColumn.MinimumWidth = 6
+        Me.typeColumn.Name = "typeColumn"
+        Me.typeColumn.ReadOnly = True
+        '
+        'tasksColumn
+        '
+        Me.tasksColumn.DataPropertyName = "TaskCount"
+        Me.tasksColumn.HeaderText = "Tasks"
+        Me.tasksColumn.MinimumWidth = 6
+        Me.tasksColumn.Name = "tasksColumn"
+        Me.tasksColumn.ReadOnly = True
+        Me.tasksColumn.Width = 76
+        '
+        'hoursColumn
+        '
+        Me.hoursColumn.DataPropertyName = "ResourceHours"
+        DataGridViewCellStyle1.Alignment = System.Windows.Forms.DataGridViewContentAlignment.MiddleRight
+        DataGridViewCellStyle1.Format = "0.##"
+        Me.hoursColumn.DefaultCellStyle = DataGridViewCellStyle1
+        Me.hoursColumn.HeaderText = "Resource Hours"
+        Me.hoursColumn.MinimumWidth = 6
+        Me.hoursColumn.Name = "hoursColumn"
+        Me.hoursColumn.ReadOnly = True
+        Me.hoursColumn.Width = 118
+        '
+        'startColumn
+        '
+        Me.startColumn.DataPropertyName = "StartDate"
+        DataGridViewCellStyle2.Format = "dd-MMM-yyyy"
+        Me.startColumn.DefaultCellStyle = DataGridViewCellStyle2
+        Me.startColumn.HeaderText = "Start Date"
+        Me.startColumn.MinimumWidth = 6
+        Me.startColumn.Name = "startColumn"
+        Me.startColumn.ReadOnly = True
+        Me.startColumn.Width = 108
+        '
+        'finishColumn
+        '
+        Me.finishColumn.DataPropertyName = "FinishDate"
+        DataGridViewCellStyle3.Format = "dd-MMM-yyyy"
+        Me.finishColumn.DefaultCellStyle = DataGridViewCellStyle3
+        Me.finishColumn.HeaderText = "Finish Date"
+        Me.finishColumn.MinimumWidth = 6
+        Me.finishColumn.Name = "finishColumn"
+        Me.finishColumn.ReadOnly = True
+        Me.finishColumn.Width = 108
         '
         'recentFilterPanel
         '
@@ -419,9 +520,9 @@ Partial Class SMAPlannerForm
     Private projectColumn As DataGridViewTextBoxColumn
     Private versionColumn As DataGridViewTextBoxColumn
     Private sizeColumn As DataGridViewTextBoxColumn
+    Private typeColumn As DataGridViewTextBoxColumn
     Private tasksColumn As DataGridViewTextBoxColumn
     Private hoursColumn As DataGridViewTextBoxColumn
     Private startColumn As DataGridViewTextBoxColumn
     Private finishColumn As DataGridViewTextBoxColumn
-    Private updatedColumn As DataGridViewTextBoxColumn
 End Class

@@ -34,4 +34,34 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
+
+  <ItemGroup>
+    <Compile Update="LoginForm.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="LoginForm.Designer.vb">
+      <DependentUpon>LoginForm.vb</DependentUpon>
+    </Compile>
+    <EmbeddedResource Update="LoginForm.resx">
+      <DependentUpon>LoginForm.vb</DependentUpon>
+    </EmbeddedResource>
+    <Compile Update="SMAPlannerForm.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="SMAPlannerForm.Designer.vb">
+      <DependentUpon>SMAPlannerForm.vb</DependentUpon>
+    </Compile>
+    <EmbeddedResource Update="SMAPlannerForm.resx">
+      <DependentUpon>SMAPlannerForm.vb</DependentUpon>
+    </EmbeddedResource>
+    <Compile Update="SMASchedulerForm.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="SMASchedulerForm.Designer.vb">
+      <DependentUpon>SMASchedulerForm.vb</DependentUpon>
+    </Compile>
+    <EmbeddedResource Update="SMASchedulerForm.resx">
+      <DependentUpon>SMASchedulerForm.vb</DependentUpon>
+    </EmbeddedResource>
+  </ItemGroup>
 </Project>

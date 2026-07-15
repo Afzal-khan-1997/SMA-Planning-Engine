@@ -15,9 +15,6 @@ Public Class SMASchedulerForm
     Private ReadOnly _employees As New BindingList(Of String)
 
     Private _plannerLegendGrid As DataGridView
-    Private WithEvents _scheduleProjectButton As Button
-    Private _projectDetailsCaptionLabel As Label
-    Private _projectDetailsValueLabel As Label
     Private ReadOnly _plannerPieCharts As New List(Of PlannerPieChartPanel)
     Private ReadOnly _plannerLegendGrids As New List(Of DataGridView)
     Private ReadOnly _plannerTaskCountLabels As New List(Of Label)
@@ -40,14 +37,6 @@ Public Class SMASchedulerForm
     Private ReadOnly _resourceUtilizationHighlights As New Dictionary(Of String, Color)(StringComparer.OrdinalIgnoreCase)
     Private ReadOnly _employeeCapacityEntries As New BindingList(Of EmployeeCapacityEntry)()
     Private ReadOnly _explicitTaskUsageEdits As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
-    Private _capacityFilterPanel As FlowLayoutPanel
-    Private WithEvents _capacityStartPicker As DateTimePicker
-    Private WithEvents _capacityFinishPicker As DateTimePicker
-    Private _capacityEmployeeList As CheckedListBox
-    Private WithEvents _capacityApplyButton As Button
-    Private WithEvents _capacitySelectAllButton As Button
-    Private WithEvents _capacityClearButton As Button
-    Private _capacityFilterStatusLabel As Label
     Private _capacitySqlData As SqlCapacityPlanningData
     Private _isUpdatingCapacityFilters As Boolean
     Private _isRecalculating As Boolean
@@ -159,7 +148,14 @@ Public Class SMASchedulerForm
         ResetWorkspaceTransientState()
         _tasks.Clear()
         _projectName.Text = savedSchedule.ProjectName
-        _versionNumber.Text = If(String.IsNullOrWhiteSpace(savedSchedule.VersionNumber), "1.0", savedSchedule.VersionNumber)
+        If String.IsNullOrWhiteSpace(savedSchedule.VersionNumber) Then
+            Throw New InvalidOperationException("Saved schedule version is missing in SQL.")
+        End If
+        If String.IsNullOrWhiteSpace(savedSchedule.ProjectSize) Then
+            Throw New InvalidOperationException("Saved schedule project size is missing in SQL.")
+        End If
+
+        _versionNumber.Text = savedSchedule.VersionNumber.Trim()
         _projectType = If(String.IsNullOrWhiteSpace(savedSchedule.ProjectType), ProjectTypeFromTemplate("", savedSchedule.ProjectName), savedSchedule.ProjectType)
         _projectDetailsText = ""
         ResetProjectFlagState()
@@ -181,7 +177,12 @@ Public Class SMASchedulerForm
             Return
         End If
 
-        Dim normalizedSize = If(String.IsNullOrWhiteSpace(sizeName), "Small", sizeName.Trim())
+        If String.IsNullOrWhiteSpace(sizeName) Then
+            _projectSizeSelector.SelectedIndex = -1
+            Return
+        End If
+
+        Dim normalizedSize = sizeName.Trim()
         For i = 0 To _projectSizeSelector.Items.Count - 1
             If String.Equals(Convert.ToString(_projectSizeSelector.Items(i), CultureInfo.InvariantCulture), normalizedSize, StringComparison.OrdinalIgnoreCase) Then
                 _projectSizeSelector.SelectedIndex = i
@@ -189,7 +190,7 @@ Public Class SMASchedulerForm
             End If
         Next
 
-        _projectSizeSelector.SelectedIndex = 0
+        _projectSizeSelector.SelectedIndex = -1
     End Sub
 
     Private Shared Function ProjectTypeFromTemplate(templateName As String, projectName As String) As String
@@ -232,51 +233,6 @@ Public Class SMASchedulerForm
     End Sub
 
     Private Sub EnsureSchedulerHeaderActions()
-        If _scheduleProjectButton Is Nothing Then
-            _scheduleProjectButton = New Button With {
-                .Name = "_scheduleProjectButton",
-                .Text = "Schedule Project",
-                .FlatStyle = FlatStyle.Flat,
-                .Size = New Size(178, 38),
-                .Anchor = AnchorStyles.Top Or AnchorStyles.Right,
-                .TabStop = True
-            }
-            _scheduleProjectButton.FlatAppearance.BorderSize = 0
-        End If
-
-        If _projectDetailsCaptionLabel Is Nothing Then
-            _projectDetailsCaptionLabel = New Label With {
-                .Name = "_projectDetailsCaptionLabel",
-                .Text = "Project Details",
-                .AutoSize = True,
-                .BackColor = Color.Transparent,
-                .Anchor = AnchorStyles.Top Or AnchorStyles.Right
-            }
-        End If
-
-        If _projectDetailsValueLabel Is Nothing Then
-            _projectDetailsValueLabel = New Label With {
-                .Name = "_projectDetailsValueLabel",
-                .AutoEllipsis = False,
-                .BackColor = Color.FromArgb(255, 255, 255),
-                .BorderStyle = BorderStyle.FixedSingle,
-                .Font = New Font("Segoe UI", 8.8F),
-                .Padding = New Padding(8, 5, 8, 5),
-                .TextAlign = ContentAlignment.TopLeft,
-                .Anchor = AnchorStyles.Top Or AnchorStyles.Right
-            }
-        End If
-
-        If Not headerPanel.Controls.Contains(_scheduleProjectButton) Then
-            headerPanel.Controls.Add(_scheduleProjectButton)
-        End If
-        If Not headerPanel.Controls.Contains(_projectDetailsCaptionLabel) Then
-            headerPanel.Controls.Add(_projectDetailsCaptionLabel)
-        End If
-        If Not headerPanel.Controls.Contains(_projectDetailsValueLabel) Then
-            headerPanel.Controls.Add(_projectDetailsValueLabel)
-        End If
-
         _scheduleProjectButton.BringToFront()
         _projectDetailsCaptionLabel.BringToFront()
         _projectDetailsValueLabel.BringToFront()
@@ -304,7 +260,7 @@ Public Class SMASchedulerForm
         End If
 
         Dim projectSize = If(_projectSizeSelector Is Nothing OrElse _projectSizeSelector.SelectedItem Is Nothing,
-            "Small",
+            "",
             Convert.ToString(_projectSizeSelector.SelectedItem, CultureInfo.InvariantCulture))
 
         Dim details = New List(Of String) From {
@@ -789,11 +745,7 @@ Public Class SMASchedulerForm
     End Sub
 
     Private Sub EnsureCapacityPlanningFilters()
-        If capacityPlanningTab Is Nothing OrElse _capacityGrid Is Nothing Then
-            Return
-        End If
-
-        If _capacityFilterPanel IsNot Nothing Then
+        If capacityPlanningTab Is Nothing OrElse _capacityGrid Is Nothing OrElse _capacityFilterPanel Is Nothing Then
             Return
         End If
 
@@ -804,87 +756,17 @@ Public Class SMASchedulerForm
             defaultFinish = Date.Today.AddDays(14)
         End If
 
-        _capacityFilterPanel = New FlowLayoutPanel With {
-            .Name = "_capacityFilterPanel",
-            .Dock = DockStyle.Top,
-            .Height = 104,
-            .Padding = New Padding(10, 8, 10, 6),
-            .BackColor = Color.White,
-            .WrapContents = False,
-            .AutoScroll = True
-        }
+        _isUpdatingCapacityFilters = True
+        Try
+            _capacityStartPicker.Value = defaultStart.Date
+            _capacityFinishPicker.Value = defaultFinish.Date
+        Finally
+            _isUpdatingCapacityFilters = False
+        End Try
 
-        _capacityStartPicker = New DateTimePicker With {
-            .Name = "_capacityStartPicker",
-            .Format = DateTimePickerFormat.Custom,
-            .CustomFormat = "dd-MM-yyyy",
-            .Width = 118,
-            .Value = defaultStart.Date
-        }
-        _capacityFinishPicker = New DateTimePicker With {
-            .Name = "_capacityFinishPicker",
-            .Format = DateTimePickerFormat.Custom,
-            .CustomFormat = "dd-MM-yyyy",
-            .Width = 118,
-            .Value = defaultFinish.Date
-        }
-        _capacityEmployeeList = New CheckedListBox With {
-            .Name = "_capacityEmployeeList",
-            .CheckOnClick = True,
-            .Width = 260,
-            .Height = 82,
-            .IntegralHeight = False
-        }
-        _capacityApplyButton = CapacityFilterButton("Apply", Color.FromArgb(42, 95, 160), Color.White)
-        _capacitySelectAllButton = CapacityFilterButton("Select All", Color.FromArgb(35, 46, 66), Color.White)
-        _capacityClearButton = CapacityFilterButton("Clear", Color.FromArgb(234, 238, 245), Color.FromArgb(35, 46, 66))
-        _capacityFilterStatusLabel = New Label With {
-            .AutoSize = False,
-            .Width = 300,
-            .Height = 42,
-            .TextAlign = ContentAlignment.MiddleLeft,
-            .ForeColor = Color.FromArgb(75, 85, 99)
-        }
-
-        _capacityFilterPanel.Controls.Add(CapacityFilterLabel("From"))
-        _capacityFilterPanel.Controls.Add(_capacityStartPicker)
-        _capacityFilterPanel.Controls.Add(CapacityFilterLabel("To"))
-        _capacityFilterPanel.Controls.Add(_capacityFinishPicker)
-        _capacityFilterPanel.Controls.Add(CapacityFilterLabel("Employees"))
-        _capacityFilterPanel.Controls.Add(_capacityEmployeeList)
-        _capacityFilterPanel.Controls.Add(_capacityApplyButton)
-        _capacityFilterPanel.Controls.Add(_capacitySelectAllButton)
-        _capacityFilterPanel.Controls.Add(_capacityClearButton)
-        _capacityFilterPanel.Controls.Add(_capacityFilterStatusLabel)
-
-        capacityPlanningTab.Controls.Add(_capacityFilterPanel)
         _capacityFilterPanel.BringToFront()
         PopulateCapacityEmployeeChecklist(_employees.Cast(Of String)(), checkAll:=True)
     End Sub
-
-    Private Shared Function CapacityFilterLabel(text As String) As Label
-        Return New Label With {
-            .Text = text,
-            .AutoSize = True,
-            .TextAlign = ContentAlignment.MiddleLeft,
-            .Margin = New Padding(0, 8, 6, 0),
-            .ForeColor = Color.FromArgb(75, 85, 99)
-        }
-    End Function
-
-    Private Shared Function CapacityFilterButton(text As String, backColor As Color, foreColor As Color) As Button
-        Dim button As New Button With {
-            .Text = text,
-            .Width = 92,
-            .Height = 30,
-            .FlatStyle = FlatStyle.Flat,
-            .BackColor = backColor,
-            .ForeColor = foreColor,
-            .Margin = New Padding(8, 5, 0, 0)
-        }
-        button.FlatAppearance.BorderSize = 0
-        Return button
-    End Function
 
     Private Sub PopulateCapacityEmployeeChecklist(employeeNames As IEnumerable(Of String), checkAll As Boolean)
         If _capacityEmployeeList Is Nothing OrElse employeeNames Is Nothing Then
@@ -1595,10 +1477,10 @@ Public Class SMASchedulerForm
 
         ResetWorkspaceTransientState()
         _projectName.Text = "SMA Scheduler"
-        _versionNumber.Text = "1.0"
+        _versionNumber.Text = ""
         _projectType = "New"
         ResetProjectFlagState()
-        SelectProjectSize("Small")
+        SelectProjectSize("")
         ClearPlanningInputDisplays()
     End Sub
 
@@ -1620,7 +1502,8 @@ Public Class SMASchedulerForm
         _projectType = "New"
         ResetProjectFlagState()
         _projectName.Text = "SMA Scheduler"
-        _versionNumber.Text = "1.0"
+        _versionNumber.Text = ""
+        SelectProjectSize("")
         _totalProjectHours.Value = 0
         UpdateProjectMetadataDisplay()
         RecalculateAndRefresh("New project created")
@@ -1682,7 +1565,7 @@ Public Class SMASchedulerForm
                    .ResourceNames = "",
                    .ResourceAllocations = "",
                    .DailyResourceAllocations = "",
-                   .ResourceHours = 0D,
+                   .ResourceHours = requestedHours,
                    .ModuleId = selectedCatalogTask.ModuleId})
 
         SelectTask(nextId)
@@ -1736,7 +1619,7 @@ Public Class SMASchedulerForm
             .ResourceNames = "",
             .ResourceAllocations = "",
             .DailyResourceAllocations = "",
-            .ResourceHours = 0D,
+            .ResourceHours = requestedHours,
             .ModuleId = catalogTask.ModuleId
         }
     End Function
@@ -1863,8 +1746,18 @@ Public Class SMASchedulerForm
 
         Try
             Dim projectName = If(String.IsNullOrWhiteSpace(_projectName.Text), "SMA Scheduler", _projectName.Text.Trim())
-            Dim version = If(String.IsNullOrWhiteSpace(_versionNumber.Text), "1.0", _versionNumber.Text.Trim())
-            Dim projectSize = If(_projectSizeSelector.SelectedItem Is Nothing, "Small", Convert.ToString(_projectSizeSelector.SelectedItem, CultureInfo.InvariantCulture))
+            If String.IsNullOrWhiteSpace(_versionNumber.Text) Then
+                MessageBox.Show(Me, "Project version is required before saving.", "Missing Version", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+                Return False
+            End If
+
+            If _projectSizeSelector.SelectedItem Is Nothing Then
+                MessageBox.Show(Me, "Project size is required before saving.", "Missing Project Size", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+                Return False
+            End If
+
+            Dim version = _versionNumber.Text.Trim()
+            Dim projectSize = Convert.ToString(_projectSizeSelector.SelectedItem, CultureInfo.InvariantCulture)
             Dim totalAssignedHours = _tasks.Sum(Function(task) task.ResourceHours)
 
             _sqlRepository.SaveProject(projectName, _tasks, version, projectSize, _projectType, _totalProjectHours.Value, AssignedResourceCount(), totalAssignedHours)
@@ -1919,7 +1812,7 @@ Public Class SMASchedulerForm
         Return String.Join("||", {
             _projectName.Text.Trim(),
             _versionNumber.Text.Trim(),
-            Convert.ToString(If(_projectSizeSelector.SelectedItem, "Small"), CultureInfo.InvariantCulture),
+            Convert.ToString(If(_projectSizeSelector.SelectedItem, ""), CultureInfo.InvariantCulture),
             _projectType,
             _totalProjectHours.Value.ToString("0.##", CultureInfo.InvariantCulture),
             AssignedResourceCount().ToString(CultureInfo.InvariantCulture),

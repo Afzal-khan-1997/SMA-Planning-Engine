@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "SMA Planning Engine": {
+      "commandName": "Project",
+      "commandLineArgs": "--scheduler"
+    }
+  }
+}

@@ -17,1298 +17,1496 @@ Partial Class SMASchedulerForm
 
     <System.Diagnostics.DebuggerStepThrough()>
     Private Sub InitializeComponent()
-        Me.commandBar = New System.Windows.Forms.ToolStrip()
-        Me.btnSave = New System.Windows.Forms.ToolStripButton()
-        Me.btnRefreshCapacity = New System.Windows.Forms.ToolStripButton()
-        Me.sepFile = New System.Windows.Forms.ToolStripSeparator()
-        Me.btnAddTask = New System.Windows.Forms.ToolStripButton()
-        Me.btnDelete = New System.Windows.Forms.ToolStripButton()
-        Me.btnMoveUp = New System.Windows.Forms.ToolStripButton()
-        Me.btnMoveDown = New System.Windows.Forms.ToolStripButton()
-        Me.sepTasks = New System.Windows.Forms.ToolStripSeparator()
-        Me.btnLink = New System.Windows.Forms.ToolStripButton()
-        Me.btnUnlink = New System.Windows.Forms.ToolStripButton()
-        Me.btnMilestone = New System.Windows.Forms.ToolStripButton()
-        Me.headerPanel = New System.Windows.Forms.Panel()
-        Me.appTitle = New System.Windows.Forms.Label()
-        Me.projectLabel = New System.Windows.Forms.Label()
-        Me._projectName = New System.Windows.Forms.TextBox()
-        Me.versionLabel = New System.Windows.Forms.Label()
-        Me._versionNumber = New System.Windows.Forms.TextBox()
-        Me.totalHoursLabel = New System.Windows.Forms.Label()
-        Me._totalProjectHours = New SMAScheduler.BlankNumericUpDown()
-        Me.projectSizeLabel = New System.Windows.Forms.Label()
-        Me._projectSizeSelector = New System.Windows.Forms.ComboBox()
-        Me._includeSaturdays = New System.Windows.Forms.CheckBox()
-        Me._summaryTitle = New System.Windows.Forms.Label()
-        Me._summaryDates = New System.Windows.Forms.Label()
-        Me._summaryResources = New System.Windows.Forms.Label()
-        Me.taskCatalogLabel = New System.Windows.Forms.Label()
-        Me._taskCatalogSelector = New System.Windows.Forms.ComboBox()
-        Me.contentSplit = New System.Windows.Forms.SplitContainer()
-        Me._workspaceTabs = New System.Windows.Forms.TabControl()
-        Me.taskAllocationTab = New System.Windows.Forms.TabPage()
-        Me.mainSplit = New System.Windows.Forms.SplitContainer()
-        Me._grid = New System.Windows.Forms.DataGridView()
-        Me.ganttPreviewSplit = New System.Windows.Forms.SplitContainer()
-        Me._gantt = New SMAScheduler.GanttPanel()
-        Me.allocationPreviewPanel = New System.Windows.Forms.Panel()
-        Me.allocationPreviewBodySplit = New System.Windows.Forms.SplitContainer()
-        Me.allocationPreviewChart = New SMAScheduler.PlannerPieChartPanel()
-        Me.allocationLegendGrid = New System.Windows.Forms.DataGridView()
-        Me.allocationPreviewBadges = New System.Windows.Forms.FlowLayoutPanel()
-        Me.allocationPrimaryLabel = New System.Windows.Forms.Label()
-        Me.allocationSecondaryLabel = New System.Windows.Forms.Label()
-        Me.allocationPreviewTitle = New System.Windows.Forms.Label()
-        Me.taskUsageTab = New System.Windows.Forms.TabPage()
-        Me.taskUsageSplit = New System.Windows.Forms.SplitContainer()
-        Me._taskUsageGrid = New System.Windows.Forms.DataGridView()
-        Me.taskUsagePreviewPanel = New System.Windows.Forms.Panel()
-        Me.taskUsagePreviewBodySplit = New System.Windows.Forms.SplitContainer()
-        Me.taskUsagePreviewChart = New SMAScheduler.PlannerPieChartPanel()
-        Me.taskUsageLegendGrid = New System.Windows.Forms.DataGridView()
-        Me.taskUsagePreviewBadges = New System.Windows.Forms.FlowLayoutPanel()
-        Me.taskUsagePrimaryLabel = New System.Windows.Forms.Label()
-        Me.taskUsageSecondaryLabel = New System.Windows.Forms.Label()
-        Me.taskUsagePreviewTitle = New System.Windows.Forms.Label()
-        Me.resourceUsageTab = New System.Windows.Forms.TabPage()
-        Me.resourceUsageSplit = New System.Windows.Forms.SplitContainer()
-        Me._resourceUsageGrid = New System.Windows.Forms.DataGridView()
-        Me.resourceUsagePreviewPanel = New System.Windows.Forms.Panel()
-        Me.resourceUsagePreviewBodySplit = New System.Windows.Forms.SplitContainer()
-        Me.resourceUsagePreviewChart = New SMAScheduler.PlannerPieChartPanel()
-        Me.resourceUsageLegendGrid = New System.Windows.Forms.DataGridView()
-        Me.resourceUsagePreviewBadges = New System.Windows.Forms.FlowLayoutPanel()
-        Me.resourceUsagePrimaryLabel = New System.Windows.Forms.Label()
-        Me.resourceUsageSecondaryLabel = New System.Windows.Forms.Label()
-        Me.resourceUsagePreviewTitle = New System.Windows.Forms.Label()
-        Me.capacityPlanningTab = New System.Windows.Forms.TabPage()
-        Me._capacityGrid = New System.Windows.Forms.DataGridView()
-        Me.resourceUtilizationTab = New System.Windows.Forms.TabPage()
-        Me.resourceUtilizationHost = New System.Windows.Forms.Panel()
-        Me._resourceUtilizationGrid = New System.Windows.Forms.DataGridView()
-        Me.resourceUtilizationToolbar = New System.Windows.Forms.FlowLayoutPanel()
-        Me._resourceUtilizationRefreshButton = New System.Windows.Forms.Button()
-        Me._resourceUtilizationColorSelector = New System.Windows.Forms.ComboBox()
-        Me._resourceUtilizationApplyButton = New System.Windows.Forms.Button()
-        Me._resourceUtilizationClearButton = New System.Windows.Forms.Button()
-        Me._resourceUtilizationMailButton = New System.Windows.Forms.Button()
-        Me.employeeCapacityTab = New System.Windows.Forms.TabPage()
-        Me.employeeCapacityHost = New System.Windows.Forms.Panel()
-        Me._employeeCapacityGrid = New System.Windows.Forms.DataGridView()
-        Me.employeeCapacityToolbar = New System.Windows.Forms.FlowLayoutPanel()
-        Me._employeeCapacityAddButton = New System.Windows.Forms.Button()
-        Me._employeeCapacityDeleteButton = New System.Windows.Forms.Button()
-        Me._employeeCapacityRefreshButton = New System.Windows.Forms.Button()
-        Me._detailsPanel = New System.Windows.Forms.Panel()
-        Me.taskWorkspaceTitle = New System.Windows.Forms.Label()
-        Me.statusBar = New System.Windows.Forms.StatusStrip()
-        Me._status = New System.Windows.Forms.ToolStripStatusLabel()
-        Me.commandBar.SuspendLayout()
-        Me.headerPanel.SuspendLayout()
-        CType(Me._totalProjectHours, System.ComponentModel.ISupportInitialize).BeginInit()
-        CType(Me.contentSplit, System.ComponentModel.ISupportInitialize).BeginInit()
-        Me.contentSplit.Panel1.SuspendLayout()
-        Me.contentSplit.Panel2.SuspendLayout()
-        Me.contentSplit.SuspendLayout()
-        Me._workspaceTabs.SuspendLayout()
-        Me.taskAllocationTab.SuspendLayout()
-        CType(Me.mainSplit, System.ComponentModel.ISupportInitialize).BeginInit()
-        Me.mainSplit.Panel1.SuspendLayout()
-        Me.mainSplit.Panel2.SuspendLayout()
-        Me.mainSplit.SuspendLayout()
-        CType(Me._grid, System.ComponentModel.ISupportInitialize).BeginInit()
-        CType(Me.ganttPreviewSplit, System.ComponentModel.ISupportInitialize).BeginInit()
-        Me.ganttPreviewSplit.Panel1.SuspendLayout()
-        Me.ganttPreviewSplit.Panel2.SuspendLayout()
-        Me.ganttPreviewSplit.SuspendLayout()
-        Me.allocationPreviewPanel.SuspendLayout()
-        CType(Me.allocationPreviewBodySplit, System.ComponentModel.ISupportInitialize).BeginInit()
-        Me.allocationPreviewBodySplit.Panel1.SuspendLayout()
-        Me.allocationPreviewBodySplit.Panel2.SuspendLayout()
-        Me.allocationPreviewBodySplit.SuspendLayout()
-        CType(Me.allocationLegendGrid, System.ComponentModel.ISupportInitialize).BeginInit()
-        Me.allocationPreviewBadges.SuspendLayout()
-        Me.taskUsageTab.SuspendLayout()
-        CType(Me.taskUsageSplit, System.ComponentModel.ISupportInitialize).BeginInit()
-        Me.taskUsageSplit.Panel1.SuspendLayout()
-        Me.taskUsageSplit.Panel2.SuspendLayout()
-        Me.taskUsageSplit.SuspendLayout()
-        CType(Me._taskUsageGrid, System.ComponentModel.ISupportInitialize).BeginInit()
-        Me.taskUsagePreviewPanel.SuspendLayout()
-        CType(Me.taskUsagePreviewBodySplit, System.ComponentModel.ISupportInitialize).BeginInit()
-        Me.taskUsagePreviewBodySplit.Panel1.SuspendLayout()
-        Me.taskUsagePreviewBodySplit.Panel2.SuspendLayout()
-        Me.taskUsagePreviewBodySplit.SuspendLayout()
-        CType(Me.taskUsageLegendGrid, System.ComponentModel.ISupportInitialize).BeginInit()
-        Me.taskUsagePreviewBadges.SuspendLayout()
-        Me.resourceUsageTab.SuspendLayout()
-        CType(Me.resourceUsageSplit, System.ComponentModel.ISupportInitialize).BeginInit()
-        Me.resourceUsageSplit.Panel1.SuspendLayout()
-        Me.resourceUsageSplit.Panel2.SuspendLayout()
-        Me.resourceUsageSplit.SuspendLayout()
-        CType(Me._resourceUsageGrid, System.ComponentModel.ISupportInitialize).BeginInit()
-        Me.resourceUsagePreviewPanel.SuspendLayout()
-        CType(Me.resourceUsagePreviewBodySplit, System.ComponentModel.ISupportInitialize).BeginInit()
-        Me.resourceUsagePreviewBodySplit.Panel1.SuspendLayout()
-        Me.resourceUsagePreviewBodySplit.Panel2.SuspendLayout()
-        Me.resourceUsagePreviewBodySplit.SuspendLayout()
-        CType(Me.resourceUsageLegendGrid, System.ComponentModel.ISupportInitialize).BeginInit()
-        Me.resourceUsagePreviewBadges.SuspendLayout()
-        Me.capacityPlanningTab.SuspendLayout()
-        CType(Me._capacityGrid, System.ComponentModel.ISupportInitialize).BeginInit()
-        Me.resourceUtilizationTab.SuspendLayout()
-        Me.resourceUtilizationHost.SuspendLayout()
-        CType(Me._resourceUtilizationGrid, System.ComponentModel.ISupportInitialize).BeginInit()
-        Me.resourceUtilizationToolbar.SuspendLayout()
-        Me.employeeCapacityTab.SuspendLayout()
-        Me.employeeCapacityHost.SuspendLayout()
-        CType(Me._employeeCapacityGrid, System.ComponentModel.ISupportInitialize).BeginInit()
-        Me.employeeCapacityToolbar.SuspendLayout()
-        Me._detailsPanel.SuspendLayout()
-        Me.statusBar.SuspendLayout()
-        Me.SuspendLayout()
-        '
-        'commandBar
-        '
-        Me.commandBar.BackColor = System.Drawing.Color.FromArgb(CType(CType(35, Byte), Integer), CType(CType(46, Byte), Integer), CType(CType(66, Byte), Integer))
-        Me.commandBar.GripStyle = System.Windows.Forms.ToolStripGripStyle.Hidden
-        Me.commandBar.ImageScalingSize = New System.Drawing.Size(18, 18)
-        Me.commandBar.Items.AddRange(New System.Windows.Forms.ToolStripItem() {Me.btnSave, Me.btnRefreshCapacity, Me.sepFile, Me.btnAddTask, Me.btnDelete, Me.btnMoveUp, Me.btnMoveDown, Me.sepTasks, Me.btnLink, Me.btnUnlink, Me.btnMilestone})
-        Me.commandBar.Location = New System.Drawing.Point(0, 0)
-        Me.commandBar.Name = "commandBar"
-        Me.commandBar.Padding = New System.Windows.Forms.Padding(11, 9, 11, 9)
-        Me.commandBar.Size = New System.Drawing.Size(1577, 45)
-        Me.commandBar.TabIndex = 0
-        '
-        'btnSave
-        '
-        Me.btnSave.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Text
-        Me.btnSave.ForeColor = System.Drawing.Color.White
-        Me.btnSave.Name = "btnSave"
-        Me.btnSave.Size = New System.Drawing.Size(44, 24)
-        Me.btnSave.Text = "Save"
-        '
-        'btnRefreshCapacity
-        '
-        Me.btnRefreshCapacity.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Text
-        Me.btnRefreshCapacity.ForeColor = System.Drawing.Color.White
-        Me.btnRefreshCapacity.Name = "btnRefreshCapacity"
-        Me.btnRefreshCapacity.Size = New System.Drawing.Size(184, 24)
-        Me.btnRefreshCapacity.Text = "Refresh Capacity Planning"
-        '
-        'sepFile
-        '
-        Me.sepFile.Name = "sepFile"
-        Me.sepFile.Size = New System.Drawing.Size(6, 27)
-        '
-        'btnAddTask
-        '
-        Me.btnAddTask.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Text
-        Me.btnAddTask.ForeColor = System.Drawing.Color.White
-        Me.btnAddTask.Name = "btnAddTask"
-        Me.btnAddTask.Size = New System.Drawing.Size(72, 24)
-        Me.btnAddTask.Text = "Add Task"
-        '
-        'btnDelete
-        '
-        Me.btnDelete.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Text
-        Me.btnDelete.ForeColor = System.Drawing.Color.White
-        Me.btnDelete.Name = "btnDelete"
-        Me.btnDelete.Size = New System.Drawing.Size(57, 24)
-        Me.btnDelete.Text = "Delete"
-        '
-        'btnMoveUp
-        '
-        Me.btnMoveUp.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Text
-        Me.btnMoveUp.ForeColor = System.Drawing.Color.White
-        Me.btnMoveUp.Name = "btnMoveUp"
-        Me.btnMoveUp.Size = New System.Drawing.Size(73, 24)
-        Me.btnMoveUp.Text = "Move Up"
-        '
-        'btnMoveDown
-        '
-        Me.btnMoveDown.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Text
-        Me.btnMoveDown.ForeColor = System.Drawing.Color.White
-        Me.btnMoveDown.Name = "btnMoveDown"
-        Me.btnMoveDown.Size = New System.Drawing.Size(93, 24)
-        Me.btnMoveDown.Text = "Move Down"
-        '
-        'sepTasks
-        '
-        Me.sepTasks.Name = "sepTasks"
-        Me.sepTasks.Size = New System.Drawing.Size(6, 27)
-        '
-        'btnLink
-        '
-        Me.btnLink.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Text
-        Me.btnLink.ForeColor = System.Drawing.Color.White
-        Me.btnLink.Name = "btnLink"
-        Me.btnLink.Size = New System.Drawing.Size(39, 24)
-        Me.btnLink.Text = "Link"
-        '
-        'btnUnlink
-        '
-        Me.btnUnlink.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Text
-        Me.btnUnlink.ForeColor = System.Drawing.Color.White
-        Me.btnUnlink.Name = "btnUnlink"
-        Me.btnUnlink.Size = New System.Drawing.Size(54, 24)
-        Me.btnUnlink.Text = "Unlink"
-        '
-        'btnMilestone
-        '
-        Me.btnMilestone.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Text
-        Me.btnMilestone.ForeColor = System.Drawing.Color.White
-        Me.btnMilestone.Name = "btnMilestone"
-        Me.btnMilestone.Size = New System.Drawing.Size(78, 24)
-        Me.btnMilestone.Text = "Milestone"
-        '
-        'headerPanel
-        '
-        Me.headerPanel.BackColor = System.Drawing.Color.FromArgb(CType(CType(229, Byte), Integer), CType(CType(241, Byte), Integer), CType(CType(255, Byte), Integer))
-        Me.headerPanel.Controls.Add(Me.appTitle)
-        Me.headerPanel.Controls.Add(Me.projectLabel)
-        Me.headerPanel.Controls.Add(Me._projectName)
-        Me.headerPanel.Controls.Add(Me.versionLabel)
-        Me.headerPanel.Controls.Add(Me._versionNumber)
-        Me.headerPanel.Controls.Add(Me.totalHoursLabel)
-        Me.headerPanel.Controls.Add(Me._totalProjectHours)
-        Me.headerPanel.Controls.Add(Me.projectSizeLabel)
-        Me.headerPanel.Controls.Add(Me._projectSizeSelector)
-        Me.headerPanel.Controls.Add(Me._includeSaturdays)
-        Me.headerPanel.Controls.Add(Me._summaryTitle)
-        Me.headerPanel.Controls.Add(Me._summaryDates)
-        Me.headerPanel.Controls.Add(Me._summaryResources)
-        Me.headerPanel.Dock = System.Windows.Forms.DockStyle.Top
-        Me.headerPanel.Location = New System.Drawing.Point(0, 45)
-        Me.headerPanel.Margin = New System.Windows.Forms.Padding(3, 4, 3, 4)
-        Me.headerPanel.Name = "headerPanel"
-        Me.headerPanel.Padding = New System.Windows.Forms.Padding(18, 16, 18, 16)
-        Me.headerPanel.Size = New System.Drawing.Size(1577, 252)
-        Me.headerPanel.TabIndex = 1
-        '
-        'appTitle
-        '
-        Me.appTitle.AutoSize = True
-        Me.appTitle.Font = New System.Drawing.Font("Segoe UI Semibold", 16.0!)
-        Me.appTitle.ForeColor = System.Drawing.Color.FromArgb(CType(CType(24, Byte), Integer), CType(CType(31, Byte), Integer), CType(CType(42, Byte), Integer))
-        Me.appTitle.Location = New System.Drawing.Point(0, 0)
-        Me.appTitle.Name = "appTitle"
-        Me.appTitle.Size = New System.Drawing.Size(203, 37)
-        Me.appTitle.TabIndex = 0
-        Me.appTitle.Text = "SMA Scheduler"
-        '
-        'projectLabel
-        '
-        Me.projectLabel.AutoSize = True
-        Me.projectLabel.ForeColor = System.Drawing.Color.DimGray
-        Me.projectLabel.Location = New System.Drawing.Point(13, 42)
-        Me.projectLabel.Name = "projectLabel"
-        Me.projectLabel.Size = New System.Drawing.Size(55, 20)
-        Me.projectLabel.TabIndex = 1
-        Me.projectLabel.Text = "Project"
-        '
-        '_projectName
-        '
-        Me._projectName.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle
-        Me._projectName.Location = New System.Drawing.Point(13, 66)
-        Me._projectName.Margin = New System.Windows.Forms.Padding(3, 4, 3, 4)
-        Me._projectName.Name = "_projectName"
-        Me._projectName.Size = New System.Drawing.Size(263, 27)
-        Me._projectName.TabIndex = 2
-        Me._projectName.Text = "SMA Scheduler"
-        '
-        'versionLabel
-        '
-        Me.versionLabel.AutoSize = True
-        Me.versionLabel.ForeColor = System.Drawing.Color.DimGray
-        Me.versionLabel.Location = New System.Drawing.Point(291, 42)
-        Me.versionLabel.Name = "versionLabel"
-        Me.versionLabel.Size = New System.Drawing.Size(57, 20)
-        Me.versionLabel.TabIndex = 15
-        Me.versionLabel.Text = "Version"
-        '
-        '_versionNumber
-        '
-        Me._versionNumber.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle
-        Me._versionNumber.Location = New System.Drawing.Point(291, 66)
-        Me._versionNumber.Margin = New System.Windows.Forms.Padding(3, 4, 3, 4)
-        Me._versionNumber.Name = "_versionNumber"
-        Me._versionNumber.Size = New System.Drawing.Size(86, 27)
-        Me._versionNumber.TabIndex = 16
-        Me._versionNumber.Text = "1.0"
-        '
-        'totalHoursLabel
-        '
-        Me.totalHoursLabel.AutoSize = True
-        Me.totalHoursLabel.ForeColor = System.Drawing.Color.DimGray
-        Me.totalHoursLabel.Location = New System.Drawing.Point(412, 42)
-        Me.totalHoursLabel.Name = "totalHoursLabel"
-        Me.totalHoursLabel.Size = New System.Drawing.Size(135, 20)
-        Me.totalHoursLabel.TabIndex = 9
-        Me.totalHoursLabel.Text = "Total Project Hours"
-        '
-        '_totalProjectHours
-        '
-        Me._totalProjectHours.DecimalPlaces = 1
-        Me._totalProjectHours.Location = New System.Drawing.Point(412, 66)
-        Me._totalProjectHours.Margin = New System.Windows.Forms.Padding(3, 4, 3, 4)
-        Me._totalProjectHours.Maximum = New Decimal(New Integer() {100000, 0, 0, 0})
-        Me._totalProjectHours.Name = "_totalProjectHours"
-        Me._totalProjectHours.Size = New System.Drawing.Size(149, 27)
-        Me._totalProjectHours.TabIndex = 10
-        Me._totalProjectHours.ThousandsSeparator = True
-        '
-        'projectSizeLabel
-        '
-        Me.projectSizeLabel.AutoSize = True
-        Me.projectSizeLabel.ForeColor = System.Drawing.Color.DimGray
-        Me.projectSizeLabel.Location = New System.Drawing.Point(13, 108)
-        Me.projectSizeLabel.Name = "projectSizeLabel"
-        Me.projectSizeLabel.Size = New System.Drawing.Size(86, 20)
-        Me.projectSizeLabel.TabIndex = 3
-        Me.projectSizeLabel.Text = "Project Size"
-        '
-        '_projectSizeSelector
-        '
-        Me._projectSizeSelector.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList
-        Me._projectSizeSelector.FormattingEnabled = True
-        Me._projectSizeSelector.Location = New System.Drawing.Point(13, 132)
-        Me._projectSizeSelector.Margin = New System.Windows.Forms.Padding(3, 4, 3, 4)
-        Me._projectSizeSelector.Name = "_projectSizeSelector"
-        Me._projectSizeSelector.Size = New System.Drawing.Size(134, 28)
-        Me._projectSizeSelector.TabIndex = 4
-        '
-        '_includeSaturdays
-        '
-        Me._includeSaturdays.AutoSize = True
-        Me._includeSaturdays.Location = New System.Drawing.Point(166, 132)
-        Me._includeSaturdays.Name = "_includeSaturdays"
-        Me._includeSaturdays.Size = New System.Drawing.Size(124, 24)
-        Me._includeSaturdays.TabIndex = 20
-        Me._includeSaturdays.Text = "Weekend Plan"
-        Me._includeSaturdays.UseVisualStyleBackColor = True
-        '
-        '_summaryTitle
-        '
-        Me._summaryTitle.BackColor = System.Drawing.Color.FromArgb(CType(CType(223, Byte), Integer), CType(CType(245, Byte), Integer), CType(CType(232, Byte), Integer))
-        Me._summaryTitle.Font = New System.Drawing.Font("Segoe UI Semibold", 10.0!)
-        Me._summaryTitle.ForeColor = System.Drawing.Color.FromArgb(CType(CType(37, Byte), Integer), CType(CType(47, Byte), Integer), CType(CType(63, Byte), Integer))
-        Me._summaryTitle.Location = New System.Drawing.Point(13, 170)
-        Me._summaryTitle.Name = "_summaryTitle"
-        Me._summaryTitle.Size = New System.Drawing.Size(189, 56)
-        Me._summaryTitle.TabIndex = 5
-        Me._summaryTitle.Text = "0 tasks"
-        Me._summaryTitle.TextAlign = System.Drawing.ContentAlignment.MiddleLeft
-        '
-        '_summaryDates
-        '
-        Me._summaryDates.BackColor = System.Drawing.Color.FromArgb(CType(CType(255, Byte), Integer), CType(CType(243, Byte), Integer), CType(CType(205, Byte), Integer))
-        Me._summaryDates.Font = New System.Drawing.Font("Segoe UI Semibold", 10.0!)
-        Me._summaryDates.ForeColor = System.Drawing.Color.FromArgb(CType(CType(37, Byte), Integer), CType(CType(47, Byte), Integer), CType(CType(63, Byte), Integer))
-        Me._summaryDates.Location = New System.Drawing.Point(216, 170)
-        Me._summaryDates.Name = "_summaryDates"
-        Me._summaryDates.Size = New System.Drawing.Size(206, 56)
-        Me._summaryDates.TabIndex = 6
-        Me._summaryDates.Text = "No dates"
-        Me._summaryDates.TextAlign = System.Drawing.ContentAlignment.MiddleLeft
-        '
-        '_summaryResources
-        '
-        Me._summaryResources.BackColor = System.Drawing.Color.FromArgb(CType(CType(248, Byte), Integer), CType(CType(222, Byte), Integer), CType(CType(234, Byte), Integer))
-        Me._summaryResources.Font = New System.Drawing.Font("Segoe UI Semibold", 10.0!)
-        Me._summaryResources.ForeColor = System.Drawing.Color.FromArgb(CType(CType(37, Byte), Integer), CType(CType(47, Byte), Integer), CType(CType(63, Byte), Integer))
-        Me._summaryResources.Location = New System.Drawing.Point(442, 170)
-        Me._summaryResources.Name = "_summaryResources"
-        Me._summaryResources.Size = New System.Drawing.Size(224, 56)
-        Me._summaryResources.TabIndex = 8
-        Me._summaryResources.Text = "No resources"
-        Me._summaryResources.TextAlign = System.Drawing.ContentAlignment.MiddleLeft
-        '
-        'taskCatalogLabel
-        '
-        Me.taskCatalogLabel.AutoSize = True
-        Me.taskCatalogLabel.ForeColor = System.Drawing.Color.DimGray
-        Me.taskCatalogLabel.Location = New System.Drawing.Point(13, 108)
-        Me.taskCatalogLabel.Name = "taskCatalogLabel"
-        Me.taskCatalogLabel.Size = New System.Drawing.Size(147, 20)
-        Me.taskCatalogLabel.TabIndex = 1
-        Me.taskCatalogLabel.Text = "Database Task Name"
-        '
-        '_taskCatalogSelector
-        '
-        Me._taskCatalogSelector.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList
-        Me._taskCatalogSelector.FormattingEnabled = True
-        Me._taskCatalogSelector.Location = New System.Drawing.Point(13, 132)
-        Me._taskCatalogSelector.Margin = New System.Windows.Forms.Padding(3, 4, 3, 4)
-        Me._taskCatalogSelector.Name = "_taskCatalogSelector"
-        Me._taskCatalogSelector.Size = New System.Drawing.Size(427, 24)
-        Me._taskCatalogSelector.TabIndex = 2
-        'contentSplit
-        '
-        Me.contentSplit.BackColor = System.Drawing.Color.FromArgb(CType(CType(224, Byte), Integer), CType(CType(229, Byte), Integer), CType(CType(236, Byte), Integer))
-        Me.contentSplit.Dock = System.Windows.Forms.DockStyle.Fill
-        Me.contentSplit.Location = New System.Drawing.Point(0, 297)
-        Me.contentSplit.Margin = New System.Windows.Forms.Padding(3, 4, 3, 4)
-        Me.contentSplit.Name = "contentSplit"
-        Me.contentSplit.Orientation = System.Windows.Forms.Orientation.Horizontal
-        '
-        'contentSplit.Panel1
-        '
-        Me.contentSplit.Panel1.Controls.Add(Me._workspaceTabs)
-        Me.contentSplit.Panel1MinSize = 430
-        '
-        'contentSplit.Panel2
-        '
-        Me.contentSplit.Panel2.Controls.Add(Me._detailsPanel)
-        Me.contentSplit.Panel2Collapsed = True
-        Me.contentSplit.Panel2MinSize = 130
-        Me.contentSplit.Size = New System.Drawing.Size(1577, 732)
-        Me.contentSplit.SplitterDistance = 430
-        Me.contentSplit.SplitterWidth = 5
-        Me.contentSplit.TabIndex = 2
-        '
-        '_workspaceTabs
-        '
-        Me._workspaceTabs.Controls.Add(Me.taskAllocationTab)
-        Me._workspaceTabs.Controls.Add(Me.taskUsageTab)
-        Me._workspaceTabs.Controls.Add(Me.resourceUsageTab)
-        Me._workspaceTabs.Controls.Add(Me.capacityPlanningTab)
-        Me._workspaceTabs.Controls.Add(Me.resourceUtilizationTab)
-        Me._workspaceTabs.Controls.Add(Me.employeeCapacityTab)
-        Me._workspaceTabs.Dock = System.Windows.Forms.DockStyle.Fill
-        Me._workspaceTabs.Location = New System.Drawing.Point(0, 0)
-        Me._workspaceTabs.Name = "_workspaceTabs"
-        Me._workspaceTabs.Padding = New System.Drawing.Point(18, 6)
-        Me._workspaceTabs.SelectedIndex = 0
-        Me._workspaceTabs.Size = New System.Drawing.Size(1577, 732)
-        Me._workspaceTabs.TabIndex = 0
-        '
-        'taskAllocationTab
-        '
-        Me.taskAllocationTab.BackColor = System.Drawing.Color.White
-        Me.taskAllocationTab.Controls.Add(Me.mainSplit)
-        Me.taskAllocationTab.Location = New System.Drawing.Point(4, 35)
-        Me.taskAllocationTab.Name = "taskAllocationTab"
-        Me.taskAllocationTab.Padding = New System.Windows.Forms.Padding(3)
-        Me.taskAllocationTab.Size = New System.Drawing.Size(1569, 693)
-        Me.taskAllocationTab.TabIndex = 0
-        Me.taskAllocationTab.Text = "Task Allocation"
-        '
-        'mainSplit
-        '
-        Me.mainSplit.BackColor = System.Drawing.Color.FromArgb(CType(CType(224, Byte), Integer), CType(CType(229, Byte), Integer), CType(CType(236, Byte), Integer))
-        Me.mainSplit.Dock = System.Windows.Forms.DockStyle.Fill
-        Me.mainSplit.Location = New System.Drawing.Point(3, 3)
-        Me.mainSplit.Margin = New System.Windows.Forms.Padding(3, 4, 3, 4)
-        Me.mainSplit.Name = "mainSplit"
-        '
-        'mainSplit.Panel1
-        '
-        Me.mainSplit.Panel1.Controls.Add(Me._grid)
-        Me.mainSplit.Panel1MinSize = 620
-        '
-        'mainSplit.Panel2
-        '
-        Me.mainSplit.Panel2.Controls.Add(Me.ganttPreviewSplit)
-        Me.mainSplit.Panel2MinSize = 380
-        Me.mainSplit.Size = New System.Drawing.Size(1563, 687)
-        Me.mainSplit.SplitterDistance = 934
-        Me.mainSplit.SplitterWidth = 5
-        Me.mainSplit.TabIndex = 0
-        '
-        '_grid
-        '
-        Me._grid.AllowUserToAddRows = False
-        Me._grid.AllowUserToDeleteRows = False
-        Me._grid.AutoSizeColumnsMode = System.Windows.Forms.DataGridViewAutoSizeColumnsMode.AllCells
-        Me._grid.AutoSizeRowsMode = System.Windows.Forms.DataGridViewAutoSizeRowsMode.AllCells
-        Me._grid.BackgroundColor = System.Drawing.Color.White
-        Me._grid.BorderStyle = System.Windows.Forms.BorderStyle.None
-        Me._grid.ColumnHeadersHeight = 34
-        Me._grid.Dock = System.Windows.Forms.DockStyle.Fill
-        Me._grid.EnableHeadersVisualStyles = False
-        Me._grid.GridColor = System.Drawing.Color.FromArgb(CType(CType(232, Byte), Integer), CType(CType(236, Byte), Integer), CType(CType(242, Byte), Integer))
-        Me._grid.Location = New System.Drawing.Point(0, 0)
-        Me._grid.Margin = New System.Windows.Forms.Padding(3, 4, 3, 4)
-        Me._grid.MultiSelect = False
-        Me._grid.Name = "_grid"
-        Me._grid.RowHeadersVisible = False
-        Me._grid.RowHeadersWidth = 51
-        Me._grid.RowTemplate.Height = 30
-        Me._grid.SelectionMode = System.Windows.Forms.DataGridViewSelectionMode.FullRowSelect
-        Me._grid.Size = New System.Drawing.Size(934, 687)
-        Me._grid.TabIndex = 0
-        '
-        'ganttPreviewSplit
-        '
-        Me.ganttPreviewSplit.BackColor = System.Drawing.Color.FromArgb(CType(CType(224, Byte), Integer), CType(CType(229, Byte), Integer), CType(CType(236, Byte), Integer))
-        Me.ganttPreviewSplit.Dock = System.Windows.Forms.DockStyle.Fill
-        Me.ganttPreviewSplit.Location = New System.Drawing.Point(0, 0)
-        Me.ganttPreviewSplit.Name = "ganttPreviewSplit"
-        Me.ganttPreviewSplit.Orientation = System.Windows.Forms.Orientation.Horizontal
-        '
-        'ganttPreviewSplit.Panel1
-        '
-        Me.ganttPreviewSplit.Panel1.Controls.Add(Me._gantt)
-        Me.ganttPreviewSplit.Panel1MinSize = 260
-        '
-        'ganttPreviewSplit.Panel2
-        '
-        Me.ganttPreviewSplit.Panel2.Controls.Add(Me.allocationPreviewPanel)
-        Me.ganttPreviewSplit.Panel2MinSize = 200
-        Me.ganttPreviewSplit.Size = New System.Drawing.Size(624, 687)
-        Me.ganttPreviewSplit.SplitterDistance = 418
-        Me.ganttPreviewSplit.SplitterWidth = 5
-        Me.ganttPreviewSplit.TabIndex = 0
-        '
-        '_gantt
-        '
-        Me._gantt.AutoScroll = True
-        Me._gantt.BackColor = System.Drawing.Color.White
-        Me._gantt.Dock = System.Windows.Forms.DockStyle.Fill
-        Me._gantt.Location = New System.Drawing.Point(0, 0)
-        Me._gantt.Margin = New System.Windows.Forms.Padding(3, 4, 3, 4)
-        Me._gantt.Name = "_gantt"
-        Me._gantt.Size = New System.Drawing.Size(624, 418)
-        Me._gantt.TabIndex = 0
-        '
-        'allocationPreviewPanel
-        '
-        Me.allocationPreviewPanel.BackColor = System.Drawing.Color.White
-        Me.allocationPreviewPanel.Controls.Add(Me.allocationPreviewBodySplit)
-        Me.allocationPreviewPanel.Controls.Add(Me.allocationPreviewBadges)
-        Me.allocationPreviewPanel.Controls.Add(Me.allocationPreviewTitle)
-        Me.allocationPreviewPanel.Dock = System.Windows.Forms.DockStyle.Fill
-        Me.allocationPreviewPanel.Location = New System.Drawing.Point(0, 0)
-        Me.allocationPreviewPanel.Name = "allocationPreviewPanel"
-        Me.allocationPreviewPanel.Padding = New System.Windows.Forms.Padding(8)
-        Me.allocationPreviewPanel.Size = New System.Drawing.Size(624, 264)
-        Me.allocationPreviewPanel.TabIndex = 0
-        '
-        'allocationPreviewBodySplit
-        '
-        Me.allocationPreviewBodySplit.Dock = System.Windows.Forms.DockStyle.Fill
-        Me.allocationPreviewBodySplit.Location = New System.Drawing.Point(8, 70)
-        Me.allocationPreviewBodySplit.Name = "allocationPreviewBodySplit"
-        '
-        'allocationPreviewBodySplit.Panel1
-        '
-        Me.allocationPreviewBodySplit.Panel1.Controls.Add(Me.allocationPreviewChart)
-        '
-        'allocationPreviewBodySplit.Panel2
-        '
-        Me.allocationPreviewBodySplit.Panel2.Controls.Add(Me.allocationLegendGrid)
-        Me.allocationPreviewBodySplit.Size = New System.Drawing.Size(608, 186)
-        Me.allocationPreviewBodySplit.SplitterDistance = 260
-        Me.allocationPreviewBodySplit.TabIndex = 2
-        '
-        'allocationPreviewChart
-        '
-        Me.allocationPreviewChart.BackColor = System.Drawing.Color.White
-        Me.allocationPreviewChart.Dock = System.Windows.Forms.DockStyle.Fill
-        Me.allocationPreviewChart.Location = New System.Drawing.Point(0, 0)
-        Me.allocationPreviewChart.Name = "allocationPreviewChart"
-        Me.allocationPreviewChart.PreviewMode = SMAScheduler.PlannerPreviewMode.ResourcesUsed
-        Me.allocationPreviewChart.Size = New System.Drawing.Size(260, 186)
-        Me.allocationPreviewChart.TabIndex = 0
-        '
-        'allocationLegendGrid
-        '
-        Me.allocationLegendGrid.AllowUserToAddRows = False
-        Me.allocationLegendGrid.AllowUserToDeleteRows = False
-        Me.allocationLegendGrid.BackgroundColor = System.Drawing.Color.White
-        Me.allocationLegendGrid.BorderStyle = System.Windows.Forms.BorderStyle.None
-        Me.allocationLegendGrid.ColumnHeadersHeight = 29
-        Me.allocationLegendGrid.Dock = System.Windows.Forms.DockStyle.Fill
-        Me.allocationLegendGrid.Location = New System.Drawing.Point(0, 0)
-        Me.allocationLegendGrid.Name = "allocationLegendGrid"
-        Me.allocationLegendGrid.ReadOnly = True
-        Me.allocationLegendGrid.RowHeadersVisible = False
-        Me.allocationLegendGrid.RowHeadersWidth = 51
-        Me.allocationLegendGrid.Size = New System.Drawing.Size(344, 186)
-        Me.allocationLegendGrid.TabIndex = 0
-        '
-        'allocationPreviewBadges
-        '
-        Me.allocationPreviewBadges.Controls.Add(Me.allocationPrimaryLabel)
-        Me.allocationPreviewBadges.Controls.Add(Me.allocationSecondaryLabel)
-        Me.allocationPreviewBadges.Dock = System.Windows.Forms.DockStyle.Top
-        Me.allocationPreviewBadges.Location = New System.Drawing.Point(8, 36)
-        Me.allocationPreviewBadges.Name = "allocationPreviewBadges"
-        Me.allocationPreviewBadges.Padding = New System.Windows.Forms.Padding(0, 3, 0, 3)
-        Me.allocationPreviewBadges.Size = New System.Drawing.Size(608, 34)
-        Me.allocationPreviewBadges.TabIndex = 1
-        Me.allocationPreviewBadges.WrapContents = False
-        '
-        'allocationPrimaryLabel
-        '
-        Me.allocationPrimaryLabel.BackColor = System.Drawing.Color.FromArgb(CType(CType(222, Byte), Integer), CType(CType(237, Byte), Integer), CType(CType(255, Byte), Integer))
-        Me.allocationPrimaryLabel.Location = New System.Drawing.Point(3, 3)
-        Me.allocationPrimaryLabel.Name = "allocationPrimaryLabel"
-        Me.allocationPrimaryLabel.Size = New System.Drawing.Size(170, 27)
-        Me.allocationPrimaryLabel.TabIndex = 0
-        Me.allocationPrimaryLabel.Text = "Resources Selected: 3"
-        Me.allocationPrimaryLabel.TextAlign = System.Drawing.ContentAlignment.MiddleCenter
-        '
-        'allocationSecondaryLabel
-        '
-        Me.allocationSecondaryLabel.BackColor = System.Drawing.Color.FromArgb(CType(CType(234, Byte), Integer), CType(CType(242, Byte), Integer), CType(CType(252, Byte), Integer))
-        Me.allocationSecondaryLabel.Location = New System.Drawing.Point(179, 3)
-        Me.allocationSecondaryLabel.Name = "allocationSecondaryLabel"
-        Me.allocationSecondaryLabel.Size = New System.Drawing.Size(170, 27)
-        Me.allocationSecondaryLabel.TabIndex = 1
-        Me.allocationSecondaryLabel.Text = "Assigned Hours: 24 hrs"
-        Me.allocationSecondaryLabel.TextAlign = System.Drawing.ContentAlignment.MiddleCenter
-        '
-        'allocationPreviewTitle
-        '
-        Me.allocationPreviewTitle.Dock = System.Windows.Forms.DockStyle.Top
-        Me.allocationPreviewTitle.Font = New System.Drawing.Font("Segoe UI Semibold", 11.0!)
-        Me.allocationPreviewTitle.ForeColor = System.Drawing.Color.FromArgb(CType(CType(24, Byte), Integer), CType(CType(31, Byte), Integer), CType(CType(42, Byte), Integer))
-        Me.allocationPreviewTitle.Location = New System.Drawing.Point(8, 8)
-        Me.allocationPreviewTitle.Name = "allocationPreviewTitle"
-        Me.allocationPreviewTitle.Size = New System.Drawing.Size(608, 28)
-        Me.allocationPreviewTitle.TabIndex = 0
-        Me.allocationPreviewTitle.Text = "Planner Preview - Resources Used"
-        '
-        'taskUsageTab
-        '
-        Me.taskUsageTab.BackColor = System.Drawing.Color.White
-        Me.taskUsageTab.Controls.Add(Me.taskUsageSplit)
-        Me.taskUsageTab.Location = New System.Drawing.Point(4, 31)
-        Me.taskUsageTab.Name = "taskUsageTab"
-        Me.taskUsageTab.Padding = New System.Windows.Forms.Padding(3)
-        Me.taskUsageTab.Size = New System.Drawing.Size(1569, 697)
-        Me.taskUsageTab.TabIndex = 1
-        Me.taskUsageTab.Text = "Task Usage View"
-        '
-        'taskUsageSplit
-        '
-        Me.taskUsageSplit.Dock = System.Windows.Forms.DockStyle.Fill
-        Me.taskUsageSplit.Location = New System.Drawing.Point(3, 3)
-        Me.taskUsageSplit.Name = "taskUsageSplit"
-        '
-        'taskUsageSplit.Panel1
-        '
-        Me.taskUsageSplit.Panel1.Controls.Add(Me._taskUsageGrid)
-        Me.taskUsageSplit.Panel1MinSize = 700
-        '
-        'taskUsageSplit.Panel2
-        '
-        Me.taskUsageSplit.Panel2.Controls.Add(Me.taskUsagePreviewPanel)
-        Me.taskUsageSplit.Panel2MinSize = 360
-        Me.taskUsageSplit.Size = New System.Drawing.Size(1563, 691)
-        Me.taskUsageSplit.SplitterDistance = 1040
-        Me.taskUsageSplit.SplitterWidth = 5
-        Me.taskUsageSplit.TabIndex = 0
-        '
-        '_taskUsageGrid
-        '
-        Me._taskUsageGrid.AllowUserToAddRows = False
-        Me._taskUsageGrid.AllowUserToDeleteRows = False
-        Me._taskUsageGrid.BackgroundColor = System.Drawing.Color.White
-        Me._taskUsageGrid.BorderStyle = System.Windows.Forms.BorderStyle.None
-        Me._taskUsageGrid.ColumnHeadersHeight = 32
-        Me._taskUsageGrid.Dock = System.Windows.Forms.DockStyle.Fill
-        Me._taskUsageGrid.EnableHeadersVisualStyles = False
-        Me._taskUsageGrid.Location = New System.Drawing.Point(0, 0)
-        Me._taskUsageGrid.Name = "_taskUsageGrid"
-        Me._taskUsageGrid.RowHeadersVisible = False
-        Me._taskUsageGrid.RowHeadersWidth = 51
-        Me._taskUsageGrid.SelectionMode = System.Windows.Forms.DataGridViewSelectionMode.CellSelect
-        Me._taskUsageGrid.Size = New System.Drawing.Size(1040, 691)
-        Me._taskUsageGrid.TabIndex = 0
-        '
-        'taskUsagePreviewPanel
-        '
-        Me.taskUsagePreviewPanel.BackColor = System.Drawing.Color.White
-        Me.taskUsagePreviewPanel.Controls.Add(Me.taskUsagePreviewBodySplit)
-        Me.taskUsagePreviewPanel.Controls.Add(Me.taskUsagePreviewBadges)
-        Me.taskUsagePreviewPanel.Controls.Add(Me.taskUsagePreviewTitle)
-        Me.taskUsagePreviewPanel.Dock = System.Windows.Forms.DockStyle.Fill
-        Me.taskUsagePreviewPanel.Location = New System.Drawing.Point(0, 0)
-        Me.taskUsagePreviewPanel.Name = "taskUsagePreviewPanel"
-        Me.taskUsagePreviewPanel.Padding = New System.Windows.Forms.Padding(12)
-        Me.taskUsagePreviewPanel.Size = New System.Drawing.Size(518, 691)
-        Me.taskUsagePreviewPanel.TabIndex = 0
-        '
-        'taskUsagePreviewBodySplit
-        '
-        Me.taskUsagePreviewBodySplit.Dock = System.Windows.Forms.DockStyle.Fill
-        Me.taskUsagePreviewBodySplit.Location = New System.Drawing.Point(12, 84)
-        Me.taskUsagePreviewBodySplit.Name = "taskUsagePreviewBodySplit"
-        Me.taskUsagePreviewBodySplit.Orientation = System.Windows.Forms.Orientation.Horizontal
-        '
-        'taskUsagePreviewBodySplit.Panel1
-        '
-        Me.taskUsagePreviewBodySplit.Panel1.Controls.Add(Me.taskUsagePreviewChart)
-        '
-        'taskUsagePreviewBodySplit.Panel2
-        '
-        Me.taskUsagePreviewBodySplit.Panel2.Controls.Add(Me.taskUsageLegendGrid)
-        Me.taskUsagePreviewBodySplit.Size = New System.Drawing.Size(494, 595)
-        Me.taskUsagePreviewBodySplit.SplitterDistance = 350
-        Me.taskUsagePreviewBodySplit.TabIndex = 2
-        '
-        'taskUsagePreviewChart
-        '
-        Me.taskUsagePreviewChart.BackColor = System.Drawing.Color.White
-        Me.taskUsagePreviewChart.Dock = System.Windows.Forms.DockStyle.Fill
-        Me.taskUsagePreviewChart.Location = New System.Drawing.Point(0, 0)
-        Me.taskUsagePreviewChart.Name = "taskUsagePreviewChart"
-        Me.taskUsagePreviewChart.PreviewMode = SMAScheduler.PlannerPreviewMode.TaskDuration
-        Me.taskUsagePreviewChart.Size = New System.Drawing.Size(494, 350)
-        Me.taskUsagePreviewChart.TabIndex = 0
-        '
-        'taskUsageLegendGrid
-        '
-        Me.taskUsageLegendGrid.AllowUserToAddRows = False
-        Me.taskUsageLegendGrid.AllowUserToDeleteRows = False
-        Me.taskUsageLegendGrid.BackgroundColor = System.Drawing.Color.White
-        Me.taskUsageLegendGrid.BorderStyle = System.Windows.Forms.BorderStyle.None
-        Me.taskUsageLegendGrid.ColumnHeadersHeight = 29
-        Me.taskUsageLegendGrid.Dock = System.Windows.Forms.DockStyle.Fill
-        Me.taskUsageLegendGrid.Location = New System.Drawing.Point(0, 0)
-        Me.taskUsageLegendGrid.Name = "taskUsageLegendGrid"
-        Me.taskUsageLegendGrid.ReadOnly = True
-        Me.taskUsageLegendGrid.RowHeadersVisible = False
-        Me.taskUsageLegendGrid.RowHeadersWidth = 51
-        Me.taskUsageLegendGrid.Size = New System.Drawing.Size(494, 241)
-        Me.taskUsageLegendGrid.TabIndex = 0
-        '
-        'taskUsagePreviewBadges
-        '
-        Me.taskUsagePreviewBadges.Controls.Add(Me.taskUsagePrimaryLabel)
-        Me.taskUsagePreviewBadges.Controls.Add(Me.taskUsageSecondaryLabel)
-        Me.taskUsagePreviewBadges.Dock = System.Windows.Forms.DockStyle.Top
-        Me.taskUsagePreviewBadges.Location = New System.Drawing.Point(12, 44)
-        Me.taskUsagePreviewBadges.Name = "taskUsagePreviewBadges"
-        Me.taskUsagePreviewBadges.Padding = New System.Windows.Forms.Padding(0, 4, 0, 4)
-        Me.taskUsagePreviewBadges.Size = New System.Drawing.Size(494, 40)
-        Me.taskUsagePreviewBadges.TabIndex = 1
-        '
-        'taskUsagePrimaryLabel
-        '
-        Me.taskUsagePrimaryLabel.BackColor = System.Drawing.Color.FromArgb(CType(CType(222, Byte), Integer), CType(CType(237, Byte), Integer), CType(CType(255, Byte), Integer))
-        Me.taskUsagePrimaryLabel.Location = New System.Drawing.Point(3, 4)
-        Me.taskUsagePrimaryLabel.Name = "taskUsagePrimaryLabel"
-        Me.taskUsagePrimaryLabel.Size = New System.Drawing.Size(180, 30)
-        Me.taskUsagePrimaryLabel.TabIndex = 0
-        Me.taskUsagePrimaryLabel.Text = "Scheduled Tasks: 3"
-        Me.taskUsagePrimaryLabel.TextAlign = System.Drawing.ContentAlignment.MiddleCenter
-        '
-        'taskUsageSecondaryLabel
-        '
-        Me.taskUsageSecondaryLabel.BackColor = System.Drawing.Color.FromArgb(CType(CType(234, Byte), Integer), CType(CType(242, Byte), Integer), CType(CType(252, Byte), Integer))
-        Me.taskUsageSecondaryLabel.Location = New System.Drawing.Point(189, 4)
-        Me.taskUsageSecondaryLabel.Name = "taskUsageSecondaryLabel"
-        Me.taskUsageSecondaryLabel.Size = New System.Drawing.Size(190, 30)
-        Me.taskUsageSecondaryLabel.TabIndex = 1
-        Me.taskUsageSecondaryLabel.Text = "Project Duration: 3 days"
-        Me.taskUsageSecondaryLabel.TextAlign = System.Drawing.ContentAlignment.MiddleCenter
-        '
-        'taskUsagePreviewTitle
-        '
-        Me.taskUsagePreviewTitle.Dock = System.Windows.Forms.DockStyle.Top
-        Me.taskUsagePreviewTitle.Font = New System.Drawing.Font("Segoe UI Semibold", 12.0!)
-        Me.taskUsagePreviewTitle.Location = New System.Drawing.Point(12, 12)
-        Me.taskUsagePreviewTitle.Name = "taskUsagePreviewTitle"
-        Me.taskUsagePreviewTitle.Size = New System.Drawing.Size(494, 32)
-        Me.taskUsagePreviewTitle.TabIndex = 0
-        Me.taskUsagePreviewTitle.Text = "Planner Preview - Task Count"
-        '
-        'resourceUsageTab
-        '
-        Me.resourceUsageTab.BackColor = System.Drawing.Color.White
-        Me.resourceUsageTab.Controls.Add(Me.resourceUsageSplit)
-        Me.resourceUsageTab.Location = New System.Drawing.Point(4, 35)
-        Me.resourceUsageTab.Name = "resourceUsageTab"
-        Me.resourceUsageTab.Padding = New System.Windows.Forms.Padding(3)
-        Me.resourceUsageTab.Size = New System.Drawing.Size(1569, 693)
-        Me.resourceUsageTab.TabIndex = 2
-        Me.resourceUsageTab.Text = "Resource Usage View"
-        '
-        'resourceUsageSplit
-        '
-        Me.resourceUsageSplit.Dock = System.Windows.Forms.DockStyle.Fill
-        Me.resourceUsageSplit.Location = New System.Drawing.Point(3, 3)
-        Me.resourceUsageSplit.Name = "resourceUsageSplit"
-        '
-        'resourceUsageSplit.Panel1
-        '
-        Me.resourceUsageSplit.Panel1.Controls.Add(Me._resourceUsageGrid)
-        Me.resourceUsageSplit.Panel1MinSize = 700
-        '
-        'resourceUsageSplit.Panel2
-        '
-        Me.resourceUsageSplit.Panel2.Controls.Add(Me.resourceUsagePreviewPanel)
-        Me.resourceUsageSplit.Panel2MinSize = 360
-        Me.resourceUsageSplit.Size = New System.Drawing.Size(1563, 687)
-        Me.resourceUsageSplit.SplitterDistance = 1040
-        Me.resourceUsageSplit.SplitterWidth = 5
-        Me.resourceUsageSplit.TabIndex = 0
-        '
-        '_resourceUsageGrid
-        '
-        Me._resourceUsageGrid.AllowUserToAddRows = False
-        Me._resourceUsageGrid.AllowUserToDeleteRows = False
-        Me._resourceUsageGrid.BackgroundColor = System.Drawing.Color.White
-        Me._resourceUsageGrid.BorderStyle = System.Windows.Forms.BorderStyle.None
-        Me._resourceUsageGrid.ColumnHeadersHeight = 32
-        Me._resourceUsageGrid.Dock = System.Windows.Forms.DockStyle.Fill
-        Me._resourceUsageGrid.EnableHeadersVisualStyles = False
-        Me._resourceUsageGrid.Location = New System.Drawing.Point(0, 0)
-        Me._resourceUsageGrid.Name = "_resourceUsageGrid"
-        Me._resourceUsageGrid.RowHeadersVisible = False
-        Me._resourceUsageGrid.RowHeadersWidth = 51
-        Me._resourceUsageGrid.SelectionMode = System.Windows.Forms.DataGridViewSelectionMode.CellSelect
-        Me._resourceUsageGrid.Size = New System.Drawing.Size(1040, 687)
-        Me._resourceUsageGrid.TabIndex = 0
-        '
-        'resourceUsagePreviewPanel
-        '
-        Me.resourceUsagePreviewPanel.BackColor = System.Drawing.Color.White
-        Me.resourceUsagePreviewPanel.Controls.Add(Me.resourceUsagePreviewBodySplit)
-        Me.resourceUsagePreviewPanel.Controls.Add(Me.resourceUsagePreviewBadges)
-        Me.resourceUsagePreviewPanel.Controls.Add(Me.resourceUsagePreviewTitle)
-        Me.resourceUsagePreviewPanel.Dock = System.Windows.Forms.DockStyle.Fill
-        Me.resourceUsagePreviewPanel.Location = New System.Drawing.Point(0, 0)
-        Me.resourceUsagePreviewPanel.Name = "resourceUsagePreviewPanel"
-        Me.resourceUsagePreviewPanel.Padding = New System.Windows.Forms.Padding(12)
-        Me.resourceUsagePreviewPanel.Size = New System.Drawing.Size(518, 687)
-        Me.resourceUsagePreviewPanel.TabIndex = 0
-        '
-        'resourceUsagePreviewBodySplit
-        '
-        Me.resourceUsagePreviewBodySplit.Dock = System.Windows.Forms.DockStyle.Fill
-        Me.resourceUsagePreviewBodySplit.Location = New System.Drawing.Point(12, 84)
-        Me.resourceUsagePreviewBodySplit.Name = "resourceUsagePreviewBodySplit"
-        Me.resourceUsagePreviewBodySplit.Orientation = System.Windows.Forms.Orientation.Horizontal
-        '
-        'resourceUsagePreviewBodySplit.Panel1
-        '
-        Me.resourceUsagePreviewBodySplit.Panel1.Controls.Add(Me.resourceUsagePreviewChart)
-        '
-        'resourceUsagePreviewBodySplit.Panel2
-        '
-        Me.resourceUsagePreviewBodySplit.Panel2.Controls.Add(Me.resourceUsageLegendGrid)
-        Me.resourceUsagePreviewBodySplit.Size = New System.Drawing.Size(494, 591)
-        Me.resourceUsagePreviewBodySplit.SplitterDistance = 348
-        Me.resourceUsagePreviewBodySplit.TabIndex = 2
-        '
-        'resourceUsagePreviewChart
-        '
-        Me.resourceUsagePreviewChart.BackColor = System.Drawing.Color.White
-        Me.resourceUsagePreviewChart.Dock = System.Windows.Forms.DockStyle.Fill
-        Me.resourceUsagePreviewChart.Location = New System.Drawing.Point(0, 0)
-        Me.resourceUsagePreviewChart.Name = "resourceUsagePreviewChart"
-        Me.resourceUsagePreviewChart.PreviewMode = SMAScheduler.PlannerPreviewMode.ResourceContribution
-        Me.resourceUsagePreviewChart.Size = New System.Drawing.Size(494, 348)
-        Me.resourceUsagePreviewChart.TabIndex = 0
-        '
-        'resourceUsageLegendGrid
-        '
-        Me.resourceUsageLegendGrid.AllowUserToAddRows = False
-        Me.resourceUsageLegendGrid.AllowUserToDeleteRows = False
-        Me.resourceUsageLegendGrid.BackgroundColor = System.Drawing.Color.White
-        Me.resourceUsageLegendGrid.BorderStyle = System.Windows.Forms.BorderStyle.None
-        Me.resourceUsageLegendGrid.ColumnHeadersHeight = 29
-        Me.resourceUsageLegendGrid.Dock = System.Windows.Forms.DockStyle.Fill
-        Me.resourceUsageLegendGrid.Location = New System.Drawing.Point(0, 0)
-        Me.resourceUsageLegendGrid.Name = "resourceUsageLegendGrid"
-        Me.resourceUsageLegendGrid.ReadOnly = True
-        Me.resourceUsageLegendGrid.RowHeadersVisible = False
-        Me.resourceUsageLegendGrid.RowHeadersWidth = 51
-        Me.resourceUsageLegendGrid.Size = New System.Drawing.Size(494, 239)
-        Me.resourceUsageLegendGrid.TabIndex = 0
-        '
-        'resourceUsagePreviewBadges
-        '
-        Me.resourceUsagePreviewBadges.Controls.Add(Me.resourceUsagePrimaryLabel)
-        Me.resourceUsagePreviewBadges.Controls.Add(Me.resourceUsageSecondaryLabel)
-        Me.resourceUsagePreviewBadges.Dock = System.Windows.Forms.DockStyle.Top
-        Me.resourceUsagePreviewBadges.Location = New System.Drawing.Point(12, 44)
-        Me.resourceUsagePreviewBadges.Name = "resourceUsagePreviewBadges"
-        Me.resourceUsagePreviewBadges.Padding = New System.Windows.Forms.Padding(0, 4, 0, 4)
-        Me.resourceUsagePreviewBadges.Size = New System.Drawing.Size(494, 40)
-        Me.resourceUsagePreviewBadges.TabIndex = 1
-        '
-        'resourceUsagePrimaryLabel
-        '
-        Me.resourceUsagePrimaryLabel.BackColor = System.Drawing.Color.FromArgb(CType(CType(222, Byte), Integer), CType(CType(237, Byte), Integer), CType(CType(255, Byte), Integer))
-        Me.resourceUsagePrimaryLabel.Location = New System.Drawing.Point(3, 4)
-        Me.resourceUsagePrimaryLabel.Name = "resourceUsagePrimaryLabel"
-        Me.resourceUsagePrimaryLabel.Size = New System.Drawing.Size(180, 30)
-        Me.resourceUsagePrimaryLabel.TabIndex = 0
-        Me.resourceUsagePrimaryLabel.Text = "Contributors: 3"
-        Me.resourceUsagePrimaryLabel.TextAlign = System.Drawing.ContentAlignment.MiddleCenter
-        '
-        'resourceUsageSecondaryLabel
-        '
-        Me.resourceUsageSecondaryLabel.BackColor = System.Drawing.Color.FromArgb(CType(CType(234, Byte), Integer), CType(CType(242, Byte), Integer), CType(CType(252, Byte), Integer))
-        Me.resourceUsageSecondaryLabel.Location = New System.Drawing.Point(189, 4)
-        Me.resourceUsageSecondaryLabel.Name = "resourceUsageSecondaryLabel"
-        Me.resourceUsageSecondaryLabel.Size = New System.Drawing.Size(190, 30)
-        Me.resourceUsageSecondaryLabel.TabIndex = 1
-        Me.resourceUsageSecondaryLabel.Text = "Assigned Hours: 24 hrs"
-        Me.resourceUsageSecondaryLabel.TextAlign = System.Drawing.ContentAlignment.MiddleCenter
-        '
-        'resourceUsagePreviewTitle
-        '
-        Me.resourceUsagePreviewTitle.Dock = System.Windows.Forms.DockStyle.Top
-        Me.resourceUsagePreviewTitle.Font = New System.Drawing.Font("Segoe UI Semibold", 12.0!)
-        Me.resourceUsagePreviewTitle.Location = New System.Drawing.Point(12, 12)
-        Me.resourceUsagePreviewTitle.Name = "resourceUsagePreviewTitle"
-        Me.resourceUsagePreviewTitle.Size = New System.Drawing.Size(494, 32)
-        Me.resourceUsagePreviewTitle.TabIndex = 0
-        Me.resourceUsagePreviewTitle.Text = "Planner Preview - Resource Contribution"
-        '
-        'capacityPlanningTab
-        '
-        Me.capacityPlanningTab.BackColor = System.Drawing.Color.White
-        Me.capacityPlanningTab.Controls.Add(Me._capacityGrid)
-        Me.capacityPlanningTab.Location = New System.Drawing.Point(4, 35)
-        Me.capacityPlanningTab.Name = "capacityPlanningTab"
-        Me.capacityPlanningTab.Padding = New System.Windows.Forms.Padding(3)
-        Me.capacityPlanningTab.Size = New System.Drawing.Size(1569, 693)
-        Me.capacityPlanningTab.TabIndex = 3
-        Me.capacityPlanningTab.Text = "Capacity Planning"
-        '
-        '_capacityGrid
-        '
-        Me._capacityGrid.AllowUserToAddRows = False
-        Me._capacityGrid.AllowUserToDeleteRows = False
-        Me._capacityGrid.BackgroundColor = System.Drawing.Color.White
-        Me._capacityGrid.BorderStyle = System.Windows.Forms.BorderStyle.None
-        Me._capacityGrid.ColumnHeadersHeight = 32
-        Me._capacityGrid.Dock = System.Windows.Forms.DockStyle.Fill
-        Me._capacityGrid.EnableHeadersVisualStyles = False
-        Me._capacityGrid.Location = New System.Drawing.Point(3, 3)
-        Me._capacityGrid.Name = "_capacityGrid"
-        Me._capacityGrid.ReadOnly = True
-        Me._capacityGrid.RowHeadersVisible = False
-        Me._capacityGrid.RowHeadersWidth = 51
-        Me._capacityGrid.Size = New System.Drawing.Size(1563, 687)
-        Me._capacityGrid.TabIndex = 0
-        '
-        'resourceUtilizationTab
-        '
-        Me.resourceUtilizationTab.BackColor = System.Drawing.Color.White
-        Me.resourceUtilizationTab.Controls.Add(Me.resourceUtilizationHost)
-        Me.resourceUtilizationTab.Location = New System.Drawing.Point(4, 35)
-        Me.resourceUtilizationTab.Name = "resourceUtilizationTab"
-        Me.resourceUtilizationTab.Padding = New System.Windows.Forms.Padding(3)
-        Me.resourceUtilizationTab.Size = New System.Drawing.Size(1569, 693)
-        Me.resourceUtilizationTab.TabIndex = 4
-        Me.resourceUtilizationTab.Text = "Resource Utilization"
-        '
-        'resourceUtilizationHost
-        '
-        Me.resourceUtilizationHost.Controls.Add(Me._resourceUtilizationGrid)
-        Me.resourceUtilizationHost.Controls.Add(Me.resourceUtilizationToolbar)
-        Me.resourceUtilizationHost.Dock = System.Windows.Forms.DockStyle.Fill
-        Me.resourceUtilizationHost.Location = New System.Drawing.Point(3, 3)
-        Me.resourceUtilizationHost.Name = "resourceUtilizationHost"
-        Me.resourceUtilizationHost.Size = New System.Drawing.Size(1563, 687)
-        Me.resourceUtilizationHost.TabIndex = 0
-        '
-        '_resourceUtilizationGrid
-        '
-        Me._resourceUtilizationGrid.AllowUserToAddRows = False
-        Me._resourceUtilizationGrid.AllowUserToDeleteRows = False
-        Me._resourceUtilizationGrid.BackgroundColor = System.Drawing.Color.White
-        Me._resourceUtilizationGrid.BorderStyle = System.Windows.Forms.BorderStyle.None
-        Me._resourceUtilizationGrid.ColumnHeadersHeight = 32
-        Me._resourceUtilizationGrid.Dock = System.Windows.Forms.DockStyle.Fill
-        Me._resourceUtilizationGrid.EnableHeadersVisualStyles = False
-        Me._resourceUtilizationGrid.Location = New System.Drawing.Point(0, 48)
-        Me._resourceUtilizationGrid.Name = "_resourceUtilizationGrid"
-        Me._resourceUtilizationGrid.RowHeadersVisible = False
-        Me._resourceUtilizationGrid.RowHeadersWidth = 51
-        Me._resourceUtilizationGrid.SelectionMode = System.Windows.Forms.DataGridViewSelectionMode.CellSelect
-        Me._resourceUtilizationGrid.Size = New System.Drawing.Size(1563, 639)
-        Me._resourceUtilizationGrid.TabIndex = 1
-        '
-        'resourceUtilizationToolbar
-        '
-        Me.resourceUtilizationToolbar.BackColor = System.Drawing.Color.White
-        Me.resourceUtilizationToolbar.Controls.Add(Me._resourceUtilizationRefreshButton)
-        Me.resourceUtilizationToolbar.Controls.Add(Me._resourceUtilizationColorSelector)
-        Me.resourceUtilizationToolbar.Controls.Add(Me._resourceUtilizationApplyButton)
-        Me.resourceUtilizationToolbar.Controls.Add(Me._resourceUtilizationClearButton)
-        Me.resourceUtilizationToolbar.Controls.Add(Me._resourceUtilizationMailButton)
-        Me.resourceUtilizationToolbar.Dock = System.Windows.Forms.DockStyle.Top
-        Me.resourceUtilizationToolbar.Location = New System.Drawing.Point(0, 0)
-        Me.resourceUtilizationToolbar.Name = "resourceUtilizationToolbar"
-        Me.resourceUtilizationToolbar.Padding = New System.Windows.Forms.Padding(10, 8, 10, 6)
-        Me.resourceUtilizationToolbar.Size = New System.Drawing.Size(1563, 48)
-        Me.resourceUtilizationToolbar.TabIndex = 0
-        Me.resourceUtilizationToolbar.WrapContents = False
-        '
-        '_resourceUtilizationRefreshButton
-        '
-        Me._resourceUtilizationRefreshButton.BackColor = System.Drawing.Color.FromArgb(CType(CType(42, Byte), Integer), CType(CType(95, Byte), Integer), CType(CType(160, Byte), Integer))
-        Me._resourceUtilizationRefreshButton.FlatStyle = System.Windows.Forms.FlatStyle.Flat
-        Me._resourceUtilizationRefreshButton.ForeColor = System.Drawing.Color.White
-        Me._resourceUtilizationRefreshButton.Location = New System.Drawing.Point(13, 11)
-        Me._resourceUtilizationRefreshButton.Name = "_resourceUtilizationRefreshButton"
-        Me._resourceUtilizationRefreshButton.Size = New System.Drawing.Size(130, 28)
-        Me._resourceUtilizationRefreshButton.TabIndex = 0
-        Me._resourceUtilizationRefreshButton.Text = "Refresh SQL Hours"
-        Me._resourceUtilizationRefreshButton.UseVisualStyleBackColor = False
-        '
-        '_resourceUtilizationColorSelector
-        '
-        Me._resourceUtilizationColorSelector.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList
-        Me._resourceUtilizationColorSelector.FormattingEnabled = True
-        Me._resourceUtilizationColorSelector.Items.AddRange(New Object() {"Blue - Planned Leave", "Dark Blue - Unplanned Leave", "Yellow - Training", "Green - Weekend Work", "Orange - Pending Work", "Red - Unassigned Hours"})
-        Me._resourceUtilizationColorSelector.Location = New System.Drawing.Point(149, 11)
-        Me._resourceUtilizationColorSelector.Name = "_resourceUtilizationColorSelector"
-        Me._resourceUtilizationColorSelector.Size = New System.Drawing.Size(180, 28)
-        Me._resourceUtilizationColorSelector.TabIndex = 1
-        '
-        '_resourceUtilizationApplyButton
-        '
-        Me._resourceUtilizationApplyButton.FlatStyle = System.Windows.Forms.FlatStyle.Flat
-        Me._resourceUtilizationApplyButton.Location = New System.Drawing.Point(335, 11)
-        Me._resourceUtilizationApplyButton.Name = "_resourceUtilizationApplyButton"
-        Me._resourceUtilizationApplyButton.Size = New System.Drawing.Size(120, 28)
-        Me._resourceUtilizationApplyButton.TabIndex = 2
-        Me._resourceUtilizationApplyButton.Text = "Apply Highlight"
-        '
-        '_resourceUtilizationClearButton
-        '
-        Me._resourceUtilizationClearButton.FlatStyle = System.Windows.Forms.FlatStyle.Flat
-        Me._resourceUtilizationClearButton.Location = New System.Drawing.Point(461, 11)
-        Me._resourceUtilizationClearButton.Name = "_resourceUtilizationClearButton"
-        Me._resourceUtilizationClearButton.Size = New System.Drawing.Size(120, 28)
-        Me._resourceUtilizationClearButton.TabIndex = 3
-        Me._resourceUtilizationClearButton.Text = "Clear Highlight"
-        '
-        '_resourceUtilizationMailButton
-        '
-        Me._resourceUtilizationMailButton.BackColor = System.Drawing.Color.FromArgb(CType(CType(34, Byte), Integer), CType(CType(169, Byte), Integer), CType(CType(105, Byte), Integer))
-        Me._resourceUtilizationMailButton.FlatStyle = System.Windows.Forms.FlatStyle.Flat
-        Me._resourceUtilizationMailButton.ForeColor = System.Drawing.Color.White
-        Me._resourceUtilizationMailButton.Location = New System.Drawing.Point(587, 11)
-        Me._resourceUtilizationMailButton.Name = "_resourceUtilizationMailButton"
-        Me._resourceUtilizationMailButton.Size = New System.Drawing.Size(170, 28)
-        Me._resourceUtilizationMailButton.TabIndex = 4
-        Me._resourceUtilizationMailButton.Text = "Send Availability Snip"
-        Me._resourceUtilizationMailButton.UseVisualStyleBackColor = False
-        '
-        'employeeCapacityTab
-        '
-        Me.employeeCapacityTab.BackColor = System.Drawing.Color.White
-        Me.employeeCapacityTab.Controls.Add(Me.employeeCapacityHost)
-        Me.employeeCapacityTab.Location = New System.Drawing.Point(4, 35)
-        Me.employeeCapacityTab.Name = "employeeCapacityTab"
-        Me.employeeCapacityTab.Padding = New System.Windows.Forms.Padding(3)
-        Me.employeeCapacityTab.Size = New System.Drawing.Size(1569, 693)
-        Me.employeeCapacityTab.TabIndex = 5
-        Me.employeeCapacityTab.Text = "Employee Capacity"
-        '
-        'employeeCapacityHost
-        '
-        Me.employeeCapacityHost.Controls.Add(Me._employeeCapacityGrid)
-        Me.employeeCapacityHost.Controls.Add(Me.employeeCapacityToolbar)
-        Me.employeeCapacityHost.Dock = System.Windows.Forms.DockStyle.Fill
-        Me.employeeCapacityHost.Location = New System.Drawing.Point(3, 3)
-        Me.employeeCapacityHost.Name = "employeeCapacityHost"
-        Me.employeeCapacityHost.Size = New System.Drawing.Size(1563, 687)
-        Me.employeeCapacityHost.TabIndex = 0
-        '
-        '_employeeCapacityGrid
-        '
-        Me._employeeCapacityGrid.AllowUserToAddRows = False
-        Me._employeeCapacityGrid.AllowUserToDeleteRows = False
-        Me._employeeCapacityGrid.BackgroundColor = System.Drawing.Color.White
-        Me._employeeCapacityGrid.BorderStyle = System.Windows.Forms.BorderStyle.None
-        Me._employeeCapacityGrid.ColumnHeadersHeight = 32
-        Me._employeeCapacityGrid.Dock = System.Windows.Forms.DockStyle.Fill
-        Me._employeeCapacityGrid.EnableHeadersVisualStyles = False
-        Me._employeeCapacityGrid.Location = New System.Drawing.Point(0, 48)
-        Me._employeeCapacityGrid.Name = "_employeeCapacityGrid"
-        Me._employeeCapacityGrid.RowHeadersVisible = False
-        Me._employeeCapacityGrid.RowHeadersWidth = 51
-        Me._employeeCapacityGrid.SelectionMode = System.Windows.Forms.DataGridViewSelectionMode.FullRowSelect
-        Me._employeeCapacityGrid.Size = New System.Drawing.Size(1563, 639)
-        Me._employeeCapacityGrid.TabIndex = 1
-        '
-        'employeeCapacityToolbar
-        '
-        Me.employeeCapacityToolbar.BackColor = System.Drawing.Color.White
-        Me.employeeCapacityToolbar.Controls.Add(Me._employeeCapacityAddButton)
-        Me.employeeCapacityToolbar.Controls.Add(Me._employeeCapacityDeleteButton)
-        Me.employeeCapacityToolbar.Controls.Add(Me._employeeCapacityRefreshButton)
-        Me.employeeCapacityToolbar.Dock = System.Windows.Forms.DockStyle.Top
-        Me.employeeCapacityToolbar.Location = New System.Drawing.Point(0, 0)
-        Me.employeeCapacityToolbar.Name = "employeeCapacityToolbar"
-        Me.employeeCapacityToolbar.Padding = New System.Windows.Forms.Padding(10, 8, 10, 6)
-        Me.employeeCapacityToolbar.Size = New System.Drawing.Size(1563, 48)
-        Me.employeeCapacityToolbar.TabIndex = 0
-        Me.employeeCapacityToolbar.WrapContents = False
-        '
-        '_employeeCapacityAddButton
-        '
-        Me._employeeCapacityAddButton.BackColor = System.Drawing.Color.FromArgb(CType(CType(34, Byte), Integer), CType(CType(169, Byte), Integer), CType(CType(105, Byte), Integer))
-        Me._employeeCapacityAddButton.FlatStyle = System.Windows.Forms.FlatStyle.Flat
-        Me._employeeCapacityAddButton.ForeColor = System.Drawing.Color.White
-        Me._employeeCapacityAddButton.Location = New System.Drawing.Point(13, 11)
-        Me._employeeCapacityAddButton.Name = "_employeeCapacityAddButton"
-        Me._employeeCapacityAddButton.Size = New System.Drawing.Size(130, 28)
-        Me._employeeCapacityAddButton.TabIndex = 0
-        Me._employeeCapacityAddButton.Text = "Add Capacity"
-        Me._employeeCapacityAddButton.UseVisualStyleBackColor = False
-        '
-        '_employeeCapacityDeleteButton
-        '
-        Me._employeeCapacityDeleteButton.BackColor = System.Drawing.Color.FromArgb(CType(CType(35, Byte), Integer), CType(CType(46, Byte), Integer), CType(CType(66, Byte), Integer))
-        Me._employeeCapacityDeleteButton.FlatStyle = System.Windows.Forms.FlatStyle.Flat
-        Me._employeeCapacityDeleteButton.ForeColor = System.Drawing.Color.White
-        Me._employeeCapacityDeleteButton.Location = New System.Drawing.Point(149, 11)
-        Me._employeeCapacityDeleteButton.Name = "_employeeCapacityDeleteButton"
-        Me._employeeCapacityDeleteButton.Size = New System.Drawing.Size(130, 28)
-        Me._employeeCapacityDeleteButton.TabIndex = 1
-        Me._employeeCapacityDeleteButton.Text = "Delete Entry"
-        Me._employeeCapacityDeleteButton.UseVisualStyleBackColor = False
-        '
-        '_employeeCapacityRefreshButton
-        '
-        Me._employeeCapacityRefreshButton.BackColor = System.Drawing.Color.FromArgb(CType(CType(42, Byte), Integer), CType(CType(95, Byte), Integer), CType(CType(160, Byte), Integer))
-        Me._employeeCapacityRefreshButton.FlatStyle = System.Windows.Forms.FlatStyle.Flat
-        Me._employeeCapacityRefreshButton.ForeColor = System.Drawing.Color.White
-        Me._employeeCapacityRefreshButton.Location = New System.Drawing.Point(285, 11)
-        Me._employeeCapacityRefreshButton.Name = "_employeeCapacityRefreshButton"
-        Me._employeeCapacityRefreshButton.Size = New System.Drawing.Size(150, 28)
-        Me._employeeCapacityRefreshButton.TabIndex = 2
-        Me._employeeCapacityRefreshButton.Text = "Refresh Capacity"
-        Me._employeeCapacityRefreshButton.UseVisualStyleBackColor = False
-        '
-        '_detailsPanel
-        '
-        Me._detailsPanel.BackColor = System.Drawing.Color.White
-        Me._detailsPanel.Controls.Add(Me.taskWorkspaceTitle)
-        Me._detailsPanel.Dock = System.Windows.Forms.DockStyle.Fill
-        Me._detailsPanel.Location = New System.Drawing.Point(0, 0)
-        Me._detailsPanel.Margin = New System.Windows.Forms.Padding(3, 4, 3, 4)
-        Me._detailsPanel.Name = "_detailsPanel"
-        Me._detailsPanel.Padding = New System.Windows.Forms.Padding(16, 19, 16, 19)
-        Me._detailsPanel.Size = New System.Drawing.Size(150, 46)
-        Me._detailsPanel.TabIndex = 0
-        '
-        'taskWorkspaceTitle
-        '
-        Me.taskWorkspaceTitle.Dock = System.Windows.Forms.DockStyle.Top
-        Me.taskWorkspaceTitle.Font = New System.Drawing.Font("Segoe UI Semibold", 10.5!)
-        Me.taskWorkspaceTitle.ForeColor = System.Drawing.Color.FromArgb(CType(CType(24, Byte), Integer), CType(CType(31, Byte), Integer), CType(CType(42, Byte), Integer))
-        Me.taskWorkspaceTitle.Location = New System.Drawing.Point(16, 19)
-        Me.taskWorkspaceTitle.Name = "taskWorkspaceTitle"
-        Me.taskWorkspaceTitle.Size = New System.Drawing.Size(118, 37)
-        Me.taskWorkspaceTitle.TabIndex = 0
-        Me.taskWorkspaceTitle.Text = "Task allocation"
-        '
-        'statusBar
-        '
-        Me.statusBar.BackColor = System.Drawing.Color.White
-        Me.statusBar.ImageScalingSize = New System.Drawing.Size(20, 20)
-        Me.statusBar.Items.AddRange(New System.Windows.Forms.ToolStripItem() {Me._status})
-        Me.statusBar.Location = New System.Drawing.Point(0, 1029)
-        Me.statusBar.Name = "statusBar"
-        Me.statusBar.Padding = New System.Windows.Forms.Padding(1, 0, 16, 0)
-        Me.statusBar.Size = New System.Drawing.Size(1577, 26)
-        Me.statusBar.TabIndex = 3
-        '
-        '_status
-        '
-        Me._status.Name = "_status"
-        Me._status.Size = New System.Drawing.Size(50, 20)
-        Me._status.Text = "Ready"
-        '
-        'SMASchedulerForm
-        '
-        Me.AutoScaleDimensions = New System.Drawing.SizeF(8.0!, 20.0!)
-        Me.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font
-        Me.BackColor = System.Drawing.Color.FromArgb(CType(CType(244, Byte), Integer), CType(CType(246, Byte), Integer), CType(CType(249, Byte), Integer))
-        Me.ClientSize = New System.Drawing.Size(1577, 1055)
-        Me.Controls.Add(Me.contentSplit)
-        Me.Controls.Add(Me.statusBar)
-        Me.Controls.Add(Me.headerPanel)
-        Me.Controls.Add(Me.commandBar)
-        Me.Font = New System.Drawing.Font("Segoe UI", 9.0!)
-        Me.Margin = New System.Windows.Forms.Padding(3, 4, 3, 4)
-        Me.MinimumSize = New System.Drawing.Size(1323, 891)
-        Me.Name = "SMASchedulerForm"
-        Me.Text = "SMA Scheduler"
-        Me.commandBar.ResumeLayout(False)
-        Me.commandBar.PerformLayout()
-        Me.headerPanel.ResumeLayout(False)
-        Me.headerPanel.PerformLayout()
-        CType(Me._totalProjectHours, System.ComponentModel.ISupportInitialize).EndInit()
-        Me.contentSplit.Panel1.ResumeLayout(False)
-        Me.contentSplit.Panel2.ResumeLayout(False)
-        CType(Me.contentSplit, System.ComponentModel.ISupportInitialize).EndInit()
-        Me.contentSplit.ResumeLayout(False)
-        Me._workspaceTabs.ResumeLayout(False)
-        Me.taskAllocationTab.ResumeLayout(False)
-        Me.mainSplit.Panel1.ResumeLayout(False)
-        Me.mainSplit.Panel2.ResumeLayout(False)
-        CType(Me.mainSplit, System.ComponentModel.ISupportInitialize).EndInit()
-        Me.mainSplit.ResumeLayout(False)
-        CType(Me._grid, System.ComponentModel.ISupportInitialize).EndInit()
-        Me.ganttPreviewSplit.Panel1.ResumeLayout(False)
-        Me.ganttPreviewSplit.Panel2.ResumeLayout(False)
-        CType(Me.ganttPreviewSplit, System.ComponentModel.ISupportInitialize).EndInit()
-        Me.ganttPreviewSplit.ResumeLayout(False)
-        Me.allocationPreviewPanel.ResumeLayout(False)
-        Me.allocationPreviewBodySplit.Panel1.ResumeLayout(False)
-        Me.allocationPreviewBodySplit.Panel2.ResumeLayout(False)
-        CType(Me.allocationPreviewBodySplit, System.ComponentModel.ISupportInitialize).EndInit()
-        Me.allocationPreviewBodySplit.ResumeLayout(False)
-        CType(Me.allocationLegendGrid, System.ComponentModel.ISupportInitialize).EndInit()
-        Me.allocationPreviewBadges.ResumeLayout(False)
-        Me.taskUsageTab.ResumeLayout(False)
-        Me.taskUsageSplit.Panel1.ResumeLayout(False)
-        Me.taskUsageSplit.Panel2.ResumeLayout(False)
-        CType(Me.taskUsageSplit, System.ComponentModel.ISupportInitialize).EndInit()
-        Me.taskUsageSplit.ResumeLayout(False)
-        CType(Me._taskUsageGrid, System.ComponentModel.ISupportInitialize).EndInit()
-        Me.taskUsagePreviewPanel.ResumeLayout(False)
-        Me.taskUsagePreviewBodySplit.Panel1.ResumeLayout(False)
-        Me.taskUsagePreviewBodySplit.Panel2.ResumeLayout(False)
-        CType(Me.taskUsagePreviewBodySplit, System.ComponentModel.ISupportInitialize).EndInit()
-        Me.taskUsagePreviewBodySplit.ResumeLayout(False)
-        CType(Me.taskUsageLegendGrid, System.ComponentModel.ISupportInitialize).EndInit()
-        Me.taskUsagePreviewBadges.ResumeLayout(False)
-        Me.resourceUsageTab.ResumeLayout(False)
-        Me.resourceUsageSplit.Panel1.ResumeLayout(False)
-        Me.resourceUsageSplit.Panel2.ResumeLayout(False)
-        CType(Me.resourceUsageSplit, System.ComponentModel.ISupportInitialize).EndInit()
-        Me.resourceUsageSplit.ResumeLayout(False)
-        CType(Me._resourceUsageGrid, System.ComponentModel.ISupportInitialize).EndInit()
-        Me.resourceUsagePreviewPanel.ResumeLayout(False)
-        Me.resourceUsagePreviewBodySplit.Panel1.ResumeLayout(False)
-        Me.resourceUsagePreviewBodySplit.Panel2.ResumeLayout(False)
-        CType(Me.resourceUsagePreviewBodySplit, System.ComponentModel.ISupportInitialize).EndInit()
-        Me.resourceUsagePreviewBodySplit.ResumeLayout(False)
-        CType(Me.resourceUsageLegendGrid, System.ComponentModel.ISupportInitialize).EndInit()
-        Me.resourceUsagePreviewBadges.ResumeLayout(False)
-        Me.capacityPlanningTab.ResumeLayout(False)
-        CType(Me._capacityGrid, System.ComponentModel.ISupportInitialize).EndInit()
-        Me.resourceUtilizationTab.ResumeLayout(False)
-        Me.resourceUtilizationHost.ResumeLayout(False)
-        CType(Me._resourceUtilizationGrid, System.ComponentModel.ISupportInitialize).EndInit()
-        Me.resourceUtilizationToolbar.ResumeLayout(False)
-        Me.employeeCapacityTab.ResumeLayout(False)
-        Me.employeeCapacityHost.ResumeLayout(False)
-        CType(Me._employeeCapacityGrid, System.ComponentModel.ISupportInitialize).EndInit()
-        Me.employeeCapacityToolbar.ResumeLayout(False)
-        Me._detailsPanel.ResumeLayout(False)
-        Me.statusBar.ResumeLayout(False)
-        Me.statusBar.PerformLayout()
-        Me.ResumeLayout(False)
-        Me.PerformLayout()
+        commandBar = New ToolStrip()
+        btnSave = New ToolStripButton()
+        btnRefreshCapacity = New ToolStripButton()
+        sepFile = New ToolStripSeparator()
+        btnAddTask = New ToolStripButton()
+        btnDelete = New ToolStripButton()
+        btnMoveUp = New ToolStripButton()
+        btnMoveDown = New ToolStripButton()
+        sepTasks = New ToolStripSeparator()
+        btnLink = New ToolStripButton()
+        btnUnlink = New ToolStripButton()
+        btnMilestone = New ToolStripButton()
+        headerPanel = New Panel()
+        appTitle = New Label()
+        projectLabel = New Label()
+        _projectName = New TextBox()
+        versionLabel = New Label()
+        _versionNumber = New TextBox()
+        totalHoursLabel = New Label()
+        _totalProjectHours = New BlankNumericUpDown()
+        projectSizeLabel = New Label()
+        _projectSizeSelector = New ComboBox()
+        _includeSaturdays = New CheckBox()
+        _summaryTitle = New Label()
+        _summaryDates = New Label()
+        _summaryResources = New Label()
+        _projectDetailsCaptionLabel = New Label()
+        _projectDetailsValueLabel = New Label()
+        _scheduleProjectButton = New Button()
+        taskCatalogLabel = New Label()
+        _taskCatalogSelector = New ComboBox()
+        contentSplit = New SplitContainer()
+        _workspaceTabs = New TabControl()
+        taskAllocationTab = New TabPage()
+        mainSplit = New SplitContainer()
+        _grid = New DataGridView()
+        ganttPreviewSplit = New SplitContainer()
+        _gantt = New GanttPanel()
+        allocationPreviewPanel = New Panel()
+        allocationPreviewBodySplit = New SplitContainer()
+        allocationPreviewChart = New PlannerPieChartPanel()
+        allocationLegendGrid = New DataGridView()
+        allocationPreviewBadges = New FlowLayoutPanel()
+        allocationPrimaryLabel = New Label()
+        allocationSecondaryLabel = New Label()
+        allocationPreviewTitle = New Label()
+        taskUsageTab = New TabPage()
+        taskUsageSplit = New SplitContainer()
+        _taskUsageGrid = New DataGridView()
+        taskUsagePreviewPanel = New Panel()
+        taskUsagePreviewBodySplit = New SplitContainer()
+        taskUsagePreviewChart = New PlannerPieChartPanel()
+        taskUsageLegendGrid = New DataGridView()
+        taskUsagePreviewBadges = New FlowLayoutPanel()
+        taskUsagePrimaryLabel = New Label()
+        taskUsageSecondaryLabel = New Label()
+        taskUsagePreviewTitle = New Label()
+        resourceUsageTab = New TabPage()
+        resourceUsageSplit = New SplitContainer()
+        _resourceUsageGrid = New DataGridView()
+        resourceUsagePreviewPanel = New Panel()
+        resourceUsagePreviewBodySplit = New SplitContainer()
+        resourceUsagePreviewChart = New PlannerPieChartPanel()
+        resourceUsageLegendGrid = New DataGridView()
+        resourceUsagePreviewBadges = New FlowLayoutPanel()
+        resourceUsagePrimaryLabel = New Label()
+        resourceUsageSecondaryLabel = New Label()
+        resourceUsagePreviewTitle = New Label()
+        capacityPlanningTab = New TabPage()
+        _capacityFilterPanel = New FlowLayoutPanel()
+        _capacityFromLabel = New Label()
+        _capacityStartPicker = New DateTimePicker()
+        _capacityToLabel = New Label()
+        _capacityFinishPicker = New DateTimePicker()
+        _capacityEmployeesLabel = New Label()
+        _capacityEmployeeList = New CheckedListBox()
+        _capacityApplyButton = New Button()
+        _capacitySelectAllButton = New Button()
+        _capacityClearButton = New Button()
+        _capacityFilterStatusLabel = New Label()
+        _capacityGrid = New DataGridView()
+        resourceUtilizationTab = New TabPage()
+        resourceUtilizationHost = New Panel()
+        _resourceUtilizationGrid = New DataGridView()
+        resourceUtilizationToolbar = New FlowLayoutPanel()
+        _resourceUtilizationRefreshButton = New Button()
+        _resourceUtilizationColorSelector = New ComboBox()
+        _resourceUtilizationApplyButton = New Button()
+        _resourceUtilizationClearButton = New Button()
+        _resourceUtilizationMailButton = New Button()
+        employeeCapacityTab = New TabPage()
+        employeeCapacityHost = New Panel()
+        _employeeCapacityGrid = New DataGridView()
+        employeeCapacityToolbar = New FlowLayoutPanel()
+        _employeeCapacityAddButton = New Button()
+        _employeeCapacityDeleteButton = New Button()
+        _employeeCapacityRefreshButton = New Button()
+        _detailsPanel = New Panel()
+        taskWorkspaceTitle = New Label()
+        statusBar = New StatusStrip()
+        _status = New ToolStripStatusLabel()
+        commandBar.SuspendLayout()
+        headerPanel.SuspendLayout()
+        CType(_totalProjectHours, ComponentModel.ISupportInitialize).BeginInit()
+        CType(contentSplit, ComponentModel.ISupportInitialize).BeginInit()
+        contentSplit.Panel1.SuspendLayout()
+        contentSplit.Panel2.SuspendLayout()
+        contentSplit.SuspendLayout()
+        _workspaceTabs.SuspendLayout()
+        taskAllocationTab.SuspendLayout()
+        CType(mainSplit, ComponentModel.ISupportInitialize).BeginInit()
+        mainSplit.Panel1.SuspendLayout()
+        mainSplit.Panel2.SuspendLayout()
+        mainSplit.SuspendLayout()
+        CType(_grid, ComponentModel.ISupportInitialize).BeginInit()
+        CType(ganttPreviewSplit, ComponentModel.ISupportInitialize).BeginInit()
+        ganttPreviewSplit.Panel1.SuspendLayout()
+        ganttPreviewSplit.Panel2.SuspendLayout()
+        ganttPreviewSplit.SuspendLayout()
+        allocationPreviewPanel.SuspendLayout()
+        CType(allocationPreviewBodySplit, ComponentModel.ISupportInitialize).BeginInit()
+        allocationPreviewBodySplit.Panel1.SuspendLayout()
+        allocationPreviewBodySplit.Panel2.SuspendLayout()
+        allocationPreviewBodySplit.SuspendLayout()
+        CType(allocationLegendGrid, ComponentModel.ISupportInitialize).BeginInit()
+        allocationPreviewBadges.SuspendLayout()
+        taskUsageTab.SuspendLayout()
+        CType(taskUsageSplit, ComponentModel.ISupportInitialize).BeginInit()
+        taskUsageSplit.Panel1.SuspendLayout()
+        taskUsageSplit.Panel2.SuspendLayout()
+        taskUsageSplit.SuspendLayout()
+        CType(_taskUsageGrid, ComponentModel.ISupportInitialize).BeginInit()
+        taskUsagePreviewPanel.SuspendLayout()
+        CType(taskUsagePreviewBodySplit, ComponentModel.ISupportInitialize).BeginInit()
+        taskUsagePreviewBodySplit.Panel1.SuspendLayout()
+        taskUsagePreviewBodySplit.Panel2.SuspendLayout()
+        taskUsagePreviewBodySplit.SuspendLayout()
+        CType(taskUsageLegendGrid, ComponentModel.ISupportInitialize).BeginInit()
+        taskUsagePreviewBadges.SuspendLayout()
+        resourceUsageTab.SuspendLayout()
+        CType(resourceUsageSplit, ComponentModel.ISupportInitialize).BeginInit()
+        resourceUsageSplit.Panel1.SuspendLayout()
+        resourceUsageSplit.Panel2.SuspendLayout()
+        resourceUsageSplit.SuspendLayout()
+        CType(_resourceUsageGrid, ComponentModel.ISupportInitialize).BeginInit()
+        resourceUsagePreviewPanel.SuspendLayout()
+        CType(resourceUsagePreviewBodySplit, ComponentModel.ISupportInitialize).BeginInit()
+        resourceUsagePreviewBodySplit.Panel1.SuspendLayout()
+        resourceUsagePreviewBodySplit.Panel2.SuspendLayout()
+        resourceUsagePreviewBodySplit.SuspendLayout()
+        CType(resourceUsageLegendGrid, ComponentModel.ISupportInitialize).BeginInit()
+        resourceUsagePreviewBadges.SuspendLayout()
+        capacityPlanningTab.SuspendLayout()
+        _capacityFilterPanel.SuspendLayout()
+        CType(_capacityGrid, ComponentModel.ISupportInitialize).BeginInit()
+        resourceUtilizationTab.SuspendLayout()
+        resourceUtilizationHost.SuspendLayout()
+        CType(_resourceUtilizationGrid, ComponentModel.ISupportInitialize).BeginInit()
+        resourceUtilizationToolbar.SuspendLayout()
+        employeeCapacityTab.SuspendLayout()
+        employeeCapacityHost.SuspendLayout()
+        CType(_employeeCapacityGrid, ComponentModel.ISupportInitialize).BeginInit()
+        employeeCapacityToolbar.SuspendLayout()
+        _detailsPanel.SuspendLayout()
+        statusBar.SuspendLayout()
+        SuspendLayout()
+        ' 
+        ' commandBar
+        ' 
+        commandBar.BackColor = Color.FromArgb(CByte(35), CByte(46), CByte(66))
+        commandBar.GripStyle = ToolStripGripStyle.Hidden
+        commandBar.ImageScalingSize = New Size(18, 18)
+        commandBar.Items.AddRange(New ToolStripItem() {btnSave, btnRefreshCapacity, sepFile, btnAddTask, btnDelete, btnMoveUp, btnMoveDown, sepTasks, btnLink, btnUnlink, btnMilestone})
+        commandBar.Location = New Point(0, 0)
+        commandBar.Name = "commandBar"
+        commandBar.Padding = New Padding(11, 9, 11, 9)
+        commandBar.Size = New Size(1577, 45)
+        commandBar.TabIndex = 0
+        ' 
+        ' btnSave
+        ' 
+        btnSave.DisplayStyle = ToolStripItemDisplayStyle.Text
+        btnSave.ForeColor = Color.White
+        btnSave.Name = "btnSave"
+        btnSave.Size = New Size(44, 24)
+        btnSave.Text = "Save"
+        ' 
+        ' btnRefreshCapacity
+        ' 
+        btnRefreshCapacity.DisplayStyle = ToolStripItemDisplayStyle.Text
+        btnRefreshCapacity.ForeColor = Color.White
+        btnRefreshCapacity.Name = "btnRefreshCapacity"
+        btnRefreshCapacity.Size = New Size(184, 24)
+        btnRefreshCapacity.Text = "Refresh Capacity Planning"
+        ' 
+        ' sepFile
+        ' 
+        sepFile.Name = "sepFile"
+        sepFile.Size = New Size(6, 27)
+        ' 
+        ' btnAddTask
+        ' 
+        btnAddTask.DisplayStyle = ToolStripItemDisplayStyle.Text
+        btnAddTask.ForeColor = Color.White
+        btnAddTask.Name = "btnAddTask"
+        btnAddTask.Size = New Size(72, 24)
+        btnAddTask.Text = "Add Task"
+        ' 
+        ' btnDelete
+        ' 
+        btnDelete.DisplayStyle = ToolStripItemDisplayStyle.Text
+        btnDelete.ForeColor = Color.White
+        btnDelete.Name = "btnDelete"
+        btnDelete.Size = New Size(57, 24)
+        btnDelete.Text = "Delete"
+        ' 
+        ' btnMoveUp
+        ' 
+        btnMoveUp.DisplayStyle = ToolStripItemDisplayStyle.Text
+        btnMoveUp.ForeColor = Color.White
+        btnMoveUp.Name = "btnMoveUp"
+        btnMoveUp.Size = New Size(73, 24)
+        btnMoveUp.Text = "Move Up"
+        ' 
+        ' btnMoveDown
+        ' 
+        btnMoveDown.DisplayStyle = ToolStripItemDisplayStyle.Text
+        btnMoveDown.ForeColor = Color.White
+        btnMoveDown.Name = "btnMoveDown"
+        btnMoveDown.Size = New Size(93, 24)
+        btnMoveDown.Text = "Move Down"
+        ' 
+        ' sepTasks
+        ' 
+        sepTasks.Name = "sepTasks"
+        sepTasks.Size = New Size(6, 27)
+        ' 
+        ' btnLink
+        ' 
+        btnLink.DisplayStyle = ToolStripItemDisplayStyle.Text
+        btnLink.ForeColor = Color.White
+        btnLink.Name = "btnLink"
+        btnLink.Size = New Size(39, 24)
+        btnLink.Text = "Link"
+        ' 
+        ' btnUnlink
+        ' 
+        btnUnlink.DisplayStyle = ToolStripItemDisplayStyle.Text
+        btnUnlink.ForeColor = Color.White
+        btnUnlink.Name = "btnUnlink"
+        btnUnlink.Size = New Size(54, 24)
+        btnUnlink.Text = "Unlink"
+        ' 
+        ' btnMilestone
+        ' 
+        btnMilestone.DisplayStyle = ToolStripItemDisplayStyle.Text
+        btnMilestone.ForeColor = Color.White
+        btnMilestone.Name = "btnMilestone"
+        btnMilestone.Size = New Size(78, 24)
+        btnMilestone.Text = "Milestone"
+        ' 
+        ' headerPanel
+        ' 
+        headerPanel.BackColor = Color.FromArgb(CByte(229), CByte(241), CByte(255))
+        headerPanel.Controls.Add(appTitle)
+        headerPanel.Controls.Add(projectLabel)
+        headerPanel.Controls.Add(_projectName)
+        headerPanel.Controls.Add(versionLabel)
+        headerPanel.Controls.Add(_versionNumber)
+        headerPanel.Controls.Add(totalHoursLabel)
+        headerPanel.Controls.Add(_totalProjectHours)
+        headerPanel.Controls.Add(projectSizeLabel)
+        headerPanel.Controls.Add(_projectSizeSelector)
+        headerPanel.Controls.Add(_includeSaturdays)
+        headerPanel.Controls.Add(_summaryTitle)
+        headerPanel.Controls.Add(_summaryDates)
+        headerPanel.Controls.Add(_summaryResources)
+        headerPanel.Controls.Add(_projectDetailsCaptionLabel)
+        headerPanel.Controls.Add(_projectDetailsValueLabel)
+        headerPanel.Controls.Add(_scheduleProjectButton)
+        headerPanel.Dock = DockStyle.Top
+        headerPanel.Location = New Point(0, 45)
+        headerPanel.Margin = New Padding(3, 4, 3, 4)
+        headerPanel.Name = "headerPanel"
+        headerPanel.Padding = New Padding(18, 16, 18, 16)
+        headerPanel.Size = New Size(1577, 252)
+        headerPanel.TabIndex = 1
+        ' 
+        ' appTitle
+        ' 
+        appTitle.AutoSize = True
+        appTitle.Font = New Font("Segoe UI Semibold", 16F)
+        appTitle.ForeColor = Color.FromArgb(CByte(24), CByte(31), CByte(42))
+        appTitle.Location = New Point(0, 0)
+        appTitle.Name = "appTitle"
+        appTitle.Size = New Size(203, 37)
+        appTitle.TabIndex = 0
+        appTitle.Text = "SMA Scheduler"
+        ' 
+        ' projectLabel
+        ' 
+        projectLabel.AutoSize = True
+        projectLabel.ForeColor = Color.DimGray
+        projectLabel.Location = New Point(13, 42)
+        projectLabel.Name = "projectLabel"
+        projectLabel.Size = New Size(55, 20)
+        projectLabel.TabIndex = 1
+        projectLabel.Text = "Project"
+        ' 
+        ' _projectName
+        ' 
+        _projectName.BorderStyle = BorderStyle.FixedSingle
+        _projectName.Location = New Point(13, 66)
+        _projectName.Margin = New Padding(3, 4, 3, 4)
+        _projectName.Name = "_projectName"
+        _projectName.Size = New Size(263, 27)
+        _projectName.TabIndex = 2
+        _projectName.Text = "SMA Scheduler"
+        ' 
+        ' versionLabel
+        ' 
+        versionLabel.AutoSize = True
+        versionLabel.ForeColor = Color.DimGray
+        versionLabel.Location = New Point(291, 42)
+        versionLabel.Name = "versionLabel"
+        versionLabel.Size = New Size(57, 20)
+        versionLabel.TabIndex = 15
+        versionLabel.Text = "Version"
+        ' 
+        ' _versionNumber
+        ' 
+        _versionNumber.BorderStyle = BorderStyle.FixedSingle
+        _versionNumber.Location = New Point(291, 66)
+        _versionNumber.Margin = New Padding(3, 4, 3, 4)
+        _versionNumber.Name = "_versionNumber"
+        _versionNumber.Size = New Size(86, 27)
+        _versionNumber.TabIndex = 16
+        _versionNumber.Text = ""
+        ' 
+        ' totalHoursLabel
+        ' 
+        totalHoursLabel.AutoSize = True
+        totalHoursLabel.ForeColor = Color.DimGray
+        totalHoursLabel.Location = New Point(412, 42)
+        totalHoursLabel.Name = "totalHoursLabel"
+        totalHoursLabel.Size = New Size(135, 20)
+        totalHoursLabel.TabIndex = 9
+        totalHoursLabel.Text = "Total Project Hours"
+        ' 
+        ' _totalProjectHours
+        ' 
+        _totalProjectHours.DecimalPlaces = 1
+        _totalProjectHours.Location = New Point(412, 66)
+        _totalProjectHours.Margin = New Padding(3, 4, 3, 4)
+        _totalProjectHours.Maximum = New Decimal(New Integer() {100000, 0, 0, 0})
+        _totalProjectHours.Name = "_totalProjectHours"
+        _totalProjectHours.Size = New Size(149, 27)
+        _totalProjectHours.TabIndex = 10
+        _totalProjectHours.ThousandsSeparator = True
+        ' 
+        ' projectSizeLabel
+        ' 
+        projectSizeLabel.AutoSize = True
+        projectSizeLabel.ForeColor = Color.DimGray
+        projectSizeLabel.Location = New Point(13, 108)
+        projectSizeLabel.Name = "projectSizeLabel"
+        projectSizeLabel.Size = New Size(86, 20)
+        projectSizeLabel.TabIndex = 3
+        projectSizeLabel.Text = "Project Size"
+        ' 
+        ' _projectSizeSelector
+        ' 
+        _projectSizeSelector.DropDownStyle = ComboBoxStyle.DropDownList
+        _projectSizeSelector.FormattingEnabled = True
+        _projectSizeSelector.Location = New Point(13, 132)
+        _projectSizeSelector.Margin = New Padding(3, 4, 3, 4)
+        _projectSizeSelector.Name = "_projectSizeSelector"
+        _projectSizeSelector.Size = New Size(134, 28)
+        _projectSizeSelector.TabIndex = 4
+        ' 
+        ' _includeSaturdays
+        ' 
+        _includeSaturdays.AutoSize = True
+        _includeSaturdays.Location = New Point(166, 132)
+        _includeSaturdays.Name = "_includeSaturdays"
+        _includeSaturdays.Size = New Size(124, 24)
+        _includeSaturdays.TabIndex = 20
+        _includeSaturdays.Text = "Weekend Plan"
+        _includeSaturdays.UseVisualStyleBackColor = True
+        ' 
+        ' _summaryTitle
+        ' 
+        _summaryTitle.BackColor = Color.FromArgb(CByte(223), CByte(245), CByte(232))
+        _summaryTitle.Font = New Font("Segoe UI Semibold", 10F)
+        _summaryTitle.ForeColor = Color.FromArgb(CByte(37), CByte(47), CByte(63))
+        _summaryTitle.Location = New Point(13, 170)
+        _summaryTitle.Name = "_summaryTitle"
+        _summaryTitle.Size = New Size(189, 56)
+        _summaryTitle.TabIndex = 5
+        _summaryTitle.Text = "0 tasks"
+        _summaryTitle.TextAlign = ContentAlignment.MiddleLeft
+        ' 
+        ' _summaryDates
+        ' 
+        _summaryDates.BackColor = Color.FromArgb(CByte(255), CByte(243), CByte(205))
+        _summaryDates.Font = New Font("Segoe UI Semibold", 10F)
+        _summaryDates.ForeColor = Color.FromArgb(CByte(37), CByte(47), CByte(63))
+        _summaryDates.Location = New Point(216, 170)
+        _summaryDates.Name = "_summaryDates"
+        _summaryDates.Size = New Size(206, 56)
+        _summaryDates.TabIndex = 6
+        _summaryDates.Text = "No dates"
+        _summaryDates.TextAlign = ContentAlignment.MiddleLeft
+        ' 
+        ' _summaryResources
+        ' 
+        _summaryResources.BackColor = Color.FromArgb(CByte(248), CByte(222), CByte(234))
+        _summaryResources.Font = New Font("Segoe UI Semibold", 10F)
+        _summaryResources.ForeColor = Color.FromArgb(CByte(37), CByte(47), CByte(63))
+        _summaryResources.Location = New Point(442, 170)
+        _summaryResources.Name = "_summaryResources"
+        _summaryResources.Size = New Size(224, 56)
+        _summaryResources.TabIndex = 8
+        _summaryResources.Text = "No resources"
+        _summaryResources.TextAlign = ContentAlignment.MiddleLeft
+        ' 
+        ' _projectDetailsCaptionLabel
+        ' 
+        _projectDetailsCaptionLabel.Anchor = AnchorStyles.Top Or AnchorStyles.Right
+        _projectDetailsCaptionLabel.AutoSize = True
+        _projectDetailsCaptionLabel.BackColor = Color.Transparent
+        _projectDetailsCaptionLabel.ForeColor = Color.FromArgb(CByte(55), CByte(65), CByte(81))
+        _projectDetailsCaptionLabel.Location = New Point(1010, 18)
+        _projectDetailsCaptionLabel.Name = "_projectDetailsCaptionLabel"
+        _projectDetailsCaptionLabel.Size = New Size(101, 20)
+        _projectDetailsCaptionLabel.TabIndex = 21
+        _projectDetailsCaptionLabel.Text = "Project Details"
+        ' 
+        ' _projectDetailsValueLabel
+        ' 
+        _projectDetailsValueLabel.Anchor = AnchorStyles.Top Or AnchorStyles.Right
+        _projectDetailsValueLabel.BackColor = Color.White
+        _projectDetailsValueLabel.BorderStyle = BorderStyle.FixedSingle
+        _projectDetailsValueLabel.Font = New Font("Segoe UI", 8.8F)
+        _projectDetailsValueLabel.Location = New Point(1010, 42)
+        _projectDetailsValueLabel.Name = "_projectDetailsValueLabel"
+        _projectDetailsValueLabel.Padding = New Padding(8, 5, 8, 5)
+        _projectDetailsValueLabel.Size = New Size(540, 112)
+        _projectDetailsValueLabel.TabIndex = 22
+        _projectDetailsValueLabel.TextAlign = ContentAlignment.TopLeft
+        ' 
+        ' _scheduleProjectButton
+        ' 
+        _scheduleProjectButton.Anchor = AnchorStyles.Top Or AnchorStyles.Right
+        _scheduleProjectButton.BackColor = Color.FromArgb(CByte(34), CByte(169), CByte(105))
+        _scheduleProjectButton.FlatAppearance.BorderSize = 0
+        _scheduleProjectButton.FlatStyle = FlatStyle.Flat
+        _scheduleProjectButton.ForeColor = Color.White
+        _scheduleProjectButton.Location = New Point(1010, 168)
+        _scheduleProjectButton.Name = "_scheduleProjectButton"
+        _scheduleProjectButton.Size = New Size(220, 40)
+        _scheduleProjectButton.TabIndex = 23
+        _scheduleProjectButton.Text = "Schedule Project"
+        _scheduleProjectButton.UseVisualStyleBackColor = False
+        ' 
+        ' taskCatalogLabel
+        ' 
+        taskCatalogLabel.AutoSize = True
+        taskCatalogLabel.ForeColor = Color.DimGray
+        taskCatalogLabel.Location = New Point(13, 108)
+        taskCatalogLabel.Name = "taskCatalogLabel"
+        taskCatalogLabel.Size = New Size(147, 20)
+        taskCatalogLabel.TabIndex = 1
+        taskCatalogLabel.Text = "Database Task Name"
+        ' 
+        ' _taskCatalogSelector
+        ' 
+        _taskCatalogSelector.DropDownStyle = ComboBoxStyle.DropDownList
+        _taskCatalogSelector.FormattingEnabled = True
+        _taskCatalogSelector.Location = New Point(13, 132)
+        _taskCatalogSelector.Margin = New Padding(3, 4, 3, 4)
+        _taskCatalogSelector.Name = "_taskCatalogSelector"
+        _taskCatalogSelector.Size = New Size(427, 28)
+        _taskCatalogSelector.TabIndex = 2
+        ' 
+        ' contentSplit
+        ' 
+        contentSplit.BackColor = Color.FromArgb(CByte(224), CByte(229), CByte(236))
+        contentSplit.Dock = DockStyle.Fill
+        contentSplit.Location = New Point(0, 297)
+        contentSplit.Margin = New Padding(3, 4, 3, 4)
+        contentSplit.Name = "contentSplit"
+        contentSplit.Orientation = Orientation.Horizontal
+        ' 
+        ' contentSplit.Panel1
+        ' 
+        contentSplit.Panel1.Controls.Add(_workspaceTabs)
+        contentSplit.Panel1MinSize = 430
+        ' 
+        ' contentSplit.Panel2
+        ' 
+        contentSplit.Panel2.Controls.Add(_detailsPanel)
+        contentSplit.Panel2Collapsed = True
+        contentSplit.Panel2MinSize = 130
+        contentSplit.Size = New Size(1577, 732)
+        contentSplit.SplitterDistance = 430
+        contentSplit.SplitterWidth = 5
+        contentSplit.TabIndex = 2
+        ' 
+        ' _workspaceTabs
+        ' 
+        _workspaceTabs.Controls.Add(taskAllocationTab)
+        _workspaceTabs.Controls.Add(taskUsageTab)
+        _workspaceTabs.Controls.Add(resourceUsageTab)
+        _workspaceTabs.Controls.Add(capacityPlanningTab)
+        _workspaceTabs.Controls.Add(resourceUtilizationTab)
+        _workspaceTabs.Controls.Add(employeeCapacityTab)
+        _workspaceTabs.Dock = DockStyle.Fill
+        _workspaceTabs.Location = New Point(0, 0)
+        _workspaceTabs.Name = "_workspaceTabs"
+        _workspaceTabs.Padding = New Point(18, 6)
+        _workspaceTabs.SelectedIndex = 0
+        _workspaceTabs.Size = New Size(1577, 732)
+        _workspaceTabs.TabIndex = 0
+        ' 
+        ' taskAllocationTab
+        ' 
+        taskAllocationTab.BackColor = Color.White
+        taskAllocationTab.Controls.Add(mainSplit)
+        taskAllocationTab.Location = New Point(4, 35)
+        taskAllocationTab.Name = "taskAllocationTab"
+        taskAllocationTab.Padding = New Padding(3)
+        taskAllocationTab.Size = New Size(1569, 693)
+        taskAllocationTab.TabIndex = 0
+        taskAllocationTab.Text = "Task Allocation"
+        ' 
+        ' mainSplit
+        ' 
+        mainSplit.BackColor = Color.FromArgb(CByte(224), CByte(229), CByte(236))
+        mainSplit.Dock = DockStyle.Fill
+        mainSplit.Location = New Point(3, 3)
+        mainSplit.Margin = New Padding(3, 4, 3, 4)
+        mainSplit.Name = "mainSplit"
+        ' 
+        ' mainSplit.Panel1
+        ' 
+        mainSplit.Panel1.Controls.Add(_grid)
+        mainSplit.Panel1MinSize = 620
+        ' 
+        ' mainSplit.Panel2
+        ' 
+        mainSplit.Panel2.Controls.Add(ganttPreviewSplit)
+        mainSplit.Panel2MinSize = 380
+        mainSplit.Size = New Size(1563, 687)
+        mainSplit.SplitterDistance = 934
+        mainSplit.SplitterWidth = 5
+        mainSplit.TabIndex = 0
+        ' 
+        ' _grid
+        ' 
+        _grid.AllowUserToAddRows = False
+        _grid.AllowUserToDeleteRows = False
+        _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.AllCells
+        _grid.AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.AllCells
+        _grid.BackgroundColor = Color.White
+        _grid.BorderStyle = BorderStyle.None
+        _grid.ColumnHeadersHeight = 34
+        _grid.Dock = DockStyle.Fill
+        _grid.EnableHeadersVisualStyles = False
+        _grid.GridColor = Color.FromArgb(CByte(232), CByte(236), CByte(242))
+        _grid.Location = New Point(0, 0)
+        _grid.Margin = New Padding(3, 4, 3, 4)
+        _grid.MultiSelect = False
+        _grid.Name = "_grid"
+        _grid.RowHeadersVisible = False
+        _grid.RowHeadersWidth = 51
+        _grid.RowTemplate.Height = 30
+        _grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect
+        _grid.Size = New Size(934, 687)
+        _grid.TabIndex = 0
+        ' 
+        ' ganttPreviewSplit
+        ' 
+        ganttPreviewSplit.BackColor = Color.FromArgb(CByte(224), CByte(229), CByte(236))
+        ganttPreviewSplit.Dock = DockStyle.Fill
+        ganttPreviewSplit.Location = New Point(0, 0)
+        ganttPreviewSplit.Name = "ganttPreviewSplit"
+        ganttPreviewSplit.Orientation = Orientation.Horizontal
+        ' 
+        ' ganttPreviewSplit.Panel1
+        ' 
+        ganttPreviewSplit.Panel1.Controls.Add(_gantt)
+        ganttPreviewSplit.Panel1MinSize = 260
+        ' 
+        ' ganttPreviewSplit.Panel2
+        ' 
+        ganttPreviewSplit.Panel2.Controls.Add(allocationPreviewPanel)
+        ganttPreviewSplit.Panel2MinSize = 200
+        ganttPreviewSplit.Size = New Size(624, 687)
+        ganttPreviewSplit.SplitterDistance = 418
+        ganttPreviewSplit.SplitterWidth = 5
+        ganttPreviewSplit.TabIndex = 0
+        ' 
+        ' _gantt
+        ' 
+        _gantt.AutoScroll = True
+        _gantt.BackColor = Color.White
+        _gantt.Dock = DockStyle.Fill
+        _gantt.Location = New Point(0, 0)
+        _gantt.Margin = New Padding(3, 4, 3, 4)
+        _gantt.Name = "_gantt"
+        _gantt.Size = New Size(624, 418)
+        _gantt.TabIndex = 0
+        ' 
+        ' allocationPreviewPanel
+        ' 
+        allocationPreviewPanel.BackColor = Color.White
+        allocationPreviewPanel.Controls.Add(allocationPreviewBodySplit)
+        allocationPreviewPanel.Controls.Add(allocationPreviewBadges)
+        allocationPreviewPanel.Controls.Add(allocationPreviewTitle)
+        allocationPreviewPanel.Dock = DockStyle.Fill
+        allocationPreviewPanel.Location = New Point(0, 0)
+        allocationPreviewPanel.Name = "allocationPreviewPanel"
+        allocationPreviewPanel.Padding = New Padding(8)
+        allocationPreviewPanel.Size = New Size(624, 264)
+        allocationPreviewPanel.TabIndex = 0
+        ' 
+        ' allocationPreviewBodySplit
+        ' 
+        allocationPreviewBodySplit.Dock = DockStyle.Fill
+        allocationPreviewBodySplit.Location = New Point(8, 70)
+        allocationPreviewBodySplit.Name = "allocationPreviewBodySplit"
+        ' 
+        ' allocationPreviewBodySplit.Panel1
+        ' 
+        allocationPreviewBodySplit.Panel1.Controls.Add(allocationPreviewChart)
+        ' 
+        ' allocationPreviewBodySplit.Panel2
+        ' 
+        allocationPreviewBodySplit.Panel2.Controls.Add(allocationLegendGrid)
+        allocationPreviewBodySplit.Size = New Size(608, 186)
+        allocationPreviewBodySplit.SplitterDistance = 260
+        allocationPreviewBodySplit.TabIndex = 2
+        ' 
+        ' allocationPreviewChart
+        ' 
+        allocationPreviewChart.BackColor = Color.White
+        allocationPreviewChart.Dock = DockStyle.Fill
+        allocationPreviewChart.Location = New Point(0, 0)
+        allocationPreviewChart.Name = "allocationPreviewChart"
+        allocationPreviewChart.PreviewMode = PlannerPreviewMode.ResourcesUsed
+        allocationPreviewChart.Size = New Size(260, 186)
+        allocationPreviewChart.TabIndex = 0
+        ' 
+        ' allocationLegendGrid
+        ' 
+        allocationLegendGrid.AllowUserToAddRows = False
+        allocationLegendGrid.AllowUserToDeleteRows = False
+        allocationLegendGrid.BackgroundColor = Color.White
+        allocationLegendGrid.BorderStyle = BorderStyle.None
+        allocationLegendGrid.ColumnHeadersHeight = 29
+        allocationLegendGrid.Dock = DockStyle.Fill
+        allocationLegendGrid.Location = New Point(0, 0)
+        allocationLegendGrid.Name = "allocationLegendGrid"
+        allocationLegendGrid.ReadOnly = True
+        allocationLegendGrid.RowHeadersVisible = False
+        allocationLegendGrid.RowHeadersWidth = 51
+        allocationLegendGrid.Size = New Size(344, 186)
+        allocationLegendGrid.TabIndex = 0
+        ' 
+        ' allocationPreviewBadges
+        ' 
+        allocationPreviewBadges.Controls.Add(allocationPrimaryLabel)
+        allocationPreviewBadges.Controls.Add(allocationSecondaryLabel)
+        allocationPreviewBadges.Dock = DockStyle.Top
+        allocationPreviewBadges.Location = New Point(8, 36)
+        allocationPreviewBadges.Name = "allocationPreviewBadges"
+        allocationPreviewBadges.Padding = New Padding(0, 3, 0, 3)
+        allocationPreviewBadges.Size = New Size(608, 34)
+        allocationPreviewBadges.TabIndex = 1
+        allocationPreviewBadges.WrapContents = False
+        ' 
+        ' allocationPrimaryLabel
+        ' 
+        allocationPrimaryLabel.BackColor = Color.FromArgb(CByte(222), CByte(237), CByte(255))
+        allocationPrimaryLabel.Location = New Point(3, 3)
+        allocationPrimaryLabel.Name = "allocationPrimaryLabel"
+        allocationPrimaryLabel.Size = New Size(170, 27)
+        allocationPrimaryLabel.TabIndex = 0
+        allocationPrimaryLabel.Text = "Resources Selected: 3"
+        allocationPrimaryLabel.TextAlign = ContentAlignment.MiddleCenter
+        ' 
+        ' allocationSecondaryLabel
+        ' 
+        allocationSecondaryLabel.BackColor = Color.FromArgb(CByte(234), CByte(242), CByte(252))
+        allocationSecondaryLabel.Location = New Point(179, 3)
+        allocationSecondaryLabel.Name = "allocationSecondaryLabel"
+        allocationSecondaryLabel.Size = New Size(170, 27)
+        allocationSecondaryLabel.TabIndex = 1
+        allocationSecondaryLabel.Text = "Assigned Hours: 24 hrs"
+        allocationSecondaryLabel.TextAlign = ContentAlignment.MiddleCenter
+        ' 
+        ' allocationPreviewTitle
+        ' 
+        allocationPreviewTitle.Dock = DockStyle.Top
+        allocationPreviewTitle.Font = New Font("Segoe UI Semibold", 11F)
+        allocationPreviewTitle.ForeColor = Color.FromArgb(CByte(24), CByte(31), CByte(42))
+        allocationPreviewTitle.Location = New Point(8, 8)
+        allocationPreviewTitle.Name = "allocationPreviewTitle"
+        allocationPreviewTitle.Size = New Size(608, 28)
+        allocationPreviewTitle.TabIndex = 0
+        allocationPreviewTitle.Text = "Planner Preview - Resources Used"
+        ' 
+        ' taskUsageTab
+        ' 
+        taskUsageTab.BackColor = Color.White
+        taskUsageTab.Controls.Add(taskUsageSplit)
+        taskUsageTab.Location = New Point(4, 35)
+        taskUsageTab.Name = "taskUsageTab"
+        taskUsageTab.Padding = New Padding(3)
+        taskUsageTab.Size = New Size(1569, 693)
+        taskUsageTab.TabIndex = 1
+        taskUsageTab.Text = "Task Usage View"
+        ' 
+        ' taskUsageSplit
+        ' 
+        taskUsageSplit.Dock = DockStyle.Fill
+        taskUsageSplit.Location = New Point(3, 3)
+        taskUsageSplit.Name = "taskUsageSplit"
+        ' 
+        ' taskUsageSplit.Panel1
+        ' 
+        taskUsageSplit.Panel1.Controls.Add(_taskUsageGrid)
+        taskUsageSplit.Panel1MinSize = 700
+        ' 
+        ' taskUsageSplit.Panel2
+        ' 
+        taskUsageSplit.Panel2.Controls.Add(taskUsagePreviewPanel)
+        taskUsageSplit.Panel2MinSize = 360
+        taskUsageSplit.Size = New Size(1563, 687)
+        taskUsageSplit.SplitterDistance = 1040
+        taskUsageSplit.SplitterWidth = 5
+        taskUsageSplit.TabIndex = 0
+        ' 
+        ' _taskUsageGrid
+        ' 
+        _taskUsageGrid.AllowUserToAddRows = False
+        _taskUsageGrid.AllowUserToDeleteRows = False
+        _taskUsageGrid.BackgroundColor = Color.White
+        _taskUsageGrid.BorderStyle = BorderStyle.None
+        _taskUsageGrid.ColumnHeadersHeight = 32
+        _taskUsageGrid.Dock = DockStyle.Fill
+        _taskUsageGrid.EnableHeadersVisualStyles = False
+        _taskUsageGrid.Location = New Point(0, 0)
+        _taskUsageGrid.Name = "_taskUsageGrid"
+        _taskUsageGrid.RowHeadersVisible = False
+        _taskUsageGrid.RowHeadersWidth = 51
+        _taskUsageGrid.SelectionMode = DataGridViewSelectionMode.CellSelect
+        _taskUsageGrid.Size = New Size(1040, 687)
+        _taskUsageGrid.TabIndex = 0
+        ' 
+        ' taskUsagePreviewPanel
+        ' 
+        taskUsagePreviewPanel.BackColor = Color.White
+        taskUsagePreviewPanel.Controls.Add(taskUsagePreviewBodySplit)
+        taskUsagePreviewPanel.Controls.Add(taskUsagePreviewBadges)
+        taskUsagePreviewPanel.Controls.Add(taskUsagePreviewTitle)
+        taskUsagePreviewPanel.Dock = DockStyle.Fill
+        taskUsagePreviewPanel.Location = New Point(0, 0)
+        taskUsagePreviewPanel.Name = "taskUsagePreviewPanel"
+        taskUsagePreviewPanel.Padding = New Padding(12)
+        taskUsagePreviewPanel.Size = New Size(518, 687)
+        taskUsagePreviewPanel.TabIndex = 0
+        ' 
+        ' taskUsagePreviewBodySplit
+        ' 
+        taskUsagePreviewBodySplit.Dock = DockStyle.Fill
+        taskUsagePreviewBodySplit.Location = New Point(12, 84)
+        taskUsagePreviewBodySplit.Name = "taskUsagePreviewBodySplit"
+        taskUsagePreviewBodySplit.Orientation = Orientation.Horizontal
+        ' 
+        ' taskUsagePreviewBodySplit.Panel1
+        ' 
+        taskUsagePreviewBodySplit.Panel1.Controls.Add(taskUsagePreviewChart)
+        ' 
+        ' taskUsagePreviewBodySplit.Panel2
+        ' 
+        taskUsagePreviewBodySplit.Panel2.Controls.Add(taskUsageLegendGrid)
+        taskUsagePreviewBodySplit.Size = New Size(494, 591)
+        taskUsagePreviewBodySplit.SplitterDistance = 347
+        taskUsagePreviewBodySplit.TabIndex = 2
+        ' 
+        ' taskUsagePreviewChart
+        ' 
+        taskUsagePreviewChart.BackColor = Color.White
+        taskUsagePreviewChart.Dock = DockStyle.Fill
+        taskUsagePreviewChart.Location = New Point(0, 0)
+        taskUsagePreviewChart.Name = "taskUsagePreviewChart"
+        taskUsagePreviewChart.PreviewMode = PlannerPreviewMode.TaskDuration
+        taskUsagePreviewChart.Size = New Size(494, 347)
+        taskUsagePreviewChart.TabIndex = 0
+        ' 
+        ' taskUsageLegendGrid
+        ' 
+        taskUsageLegendGrid.AllowUserToAddRows = False
+        taskUsageLegendGrid.AllowUserToDeleteRows = False
+        taskUsageLegendGrid.BackgroundColor = Color.White
+        taskUsageLegendGrid.BorderStyle = BorderStyle.None
+        taskUsageLegendGrid.ColumnHeadersHeight = 29
+        taskUsageLegendGrid.Dock = DockStyle.Fill
+        taskUsageLegendGrid.Location = New Point(0, 0)
+        taskUsageLegendGrid.Name = "taskUsageLegendGrid"
+        taskUsageLegendGrid.ReadOnly = True
+        taskUsageLegendGrid.RowHeadersVisible = False
+        taskUsageLegendGrid.RowHeadersWidth = 51
+        taskUsageLegendGrid.Size = New Size(494, 240)
+        taskUsageLegendGrid.TabIndex = 0
+        ' 
+        ' taskUsagePreviewBadges
+        ' 
+        taskUsagePreviewBadges.Controls.Add(taskUsagePrimaryLabel)
+        taskUsagePreviewBadges.Controls.Add(taskUsageSecondaryLabel)
+        taskUsagePreviewBadges.Dock = DockStyle.Top
+        taskUsagePreviewBadges.Location = New Point(12, 44)
+        taskUsagePreviewBadges.Name = "taskUsagePreviewBadges"
+        taskUsagePreviewBadges.Padding = New Padding(0, 4, 0, 4)
+        taskUsagePreviewBadges.Size = New Size(494, 40)
+        taskUsagePreviewBadges.TabIndex = 1
+        ' 
+        ' taskUsagePrimaryLabel
+        ' 
+        taskUsagePrimaryLabel.BackColor = Color.FromArgb(CByte(222), CByte(237), CByte(255))
+        taskUsagePrimaryLabel.Location = New Point(3, 4)
+        taskUsagePrimaryLabel.Name = "taskUsagePrimaryLabel"
+        taskUsagePrimaryLabel.Size = New Size(180, 30)
+        taskUsagePrimaryLabel.TabIndex = 0
+        taskUsagePrimaryLabel.Text = "Scheduled Tasks: 3"
+        taskUsagePrimaryLabel.TextAlign = ContentAlignment.MiddleCenter
+        ' 
+        ' taskUsageSecondaryLabel
+        ' 
+        taskUsageSecondaryLabel.BackColor = Color.FromArgb(CByte(234), CByte(242), CByte(252))
+        taskUsageSecondaryLabel.Location = New Point(189, 4)
+        taskUsageSecondaryLabel.Name = "taskUsageSecondaryLabel"
+        taskUsageSecondaryLabel.Size = New Size(190, 30)
+        taskUsageSecondaryLabel.TabIndex = 1
+        taskUsageSecondaryLabel.Text = "Project Duration: 3 days"
+        taskUsageSecondaryLabel.TextAlign = ContentAlignment.MiddleCenter
+        ' 
+        ' taskUsagePreviewTitle
+        ' 
+        taskUsagePreviewTitle.Dock = DockStyle.Top
+        taskUsagePreviewTitle.Font = New Font("Segoe UI Semibold", 12F)
+        taskUsagePreviewTitle.Location = New Point(12, 12)
+        taskUsagePreviewTitle.Name = "taskUsagePreviewTitle"
+        taskUsagePreviewTitle.Size = New Size(494, 32)
+        taskUsagePreviewTitle.TabIndex = 0
+        taskUsagePreviewTitle.Text = "Planner Preview - Task Count"
+        ' 
+        ' resourceUsageTab
+        ' 
+        resourceUsageTab.BackColor = Color.White
+        resourceUsageTab.Controls.Add(resourceUsageSplit)
+        resourceUsageTab.Location = New Point(4, 35)
+        resourceUsageTab.Name = "resourceUsageTab"
+        resourceUsageTab.Padding = New Padding(3)
+        resourceUsageTab.Size = New Size(1569, 693)
+        resourceUsageTab.TabIndex = 2
+        resourceUsageTab.Text = "Resource Usage View"
+        ' 
+        ' resourceUsageSplit
+        ' 
+        resourceUsageSplit.Dock = DockStyle.Fill
+        resourceUsageSplit.Location = New Point(3, 3)
+        resourceUsageSplit.Name = "resourceUsageSplit"
+        ' 
+        ' resourceUsageSplit.Panel1
+        ' 
+        resourceUsageSplit.Panel1.Controls.Add(_resourceUsageGrid)
+        resourceUsageSplit.Panel1MinSize = 700
+        ' 
+        ' resourceUsageSplit.Panel2
+        ' 
+        resourceUsageSplit.Panel2.Controls.Add(resourceUsagePreviewPanel)
+        resourceUsageSplit.Panel2MinSize = 360
+        resourceUsageSplit.Size = New Size(1563, 687)
+        resourceUsageSplit.SplitterDistance = 1040
+        resourceUsageSplit.SplitterWidth = 5
+        resourceUsageSplit.TabIndex = 0
+        ' 
+        ' _resourceUsageGrid
+        ' 
+        _resourceUsageGrid.AllowUserToAddRows = False
+        _resourceUsageGrid.AllowUserToDeleteRows = False
+        _resourceUsageGrid.BackgroundColor = Color.White
+        _resourceUsageGrid.BorderStyle = BorderStyle.None
+        _resourceUsageGrid.ColumnHeadersHeight = 32
+        _resourceUsageGrid.Dock = DockStyle.Fill
+        _resourceUsageGrid.EnableHeadersVisualStyles = False
+        _resourceUsageGrid.Location = New Point(0, 0)
+        _resourceUsageGrid.Name = "_resourceUsageGrid"
+        _resourceUsageGrid.RowHeadersVisible = False
+        _resourceUsageGrid.RowHeadersWidth = 51
+        _resourceUsageGrid.SelectionMode = DataGridViewSelectionMode.CellSelect
+        _resourceUsageGrid.Size = New Size(1040, 687)
+        _resourceUsageGrid.TabIndex = 0
+        ' 
+        ' resourceUsagePreviewPanel
+        ' 
+        resourceUsagePreviewPanel.BackColor = Color.White
+        resourceUsagePreviewPanel.Controls.Add(resourceUsagePreviewBodySplit)
+        resourceUsagePreviewPanel.Controls.Add(resourceUsagePreviewBadges)
+        resourceUsagePreviewPanel.Controls.Add(resourceUsagePreviewTitle)
+        resourceUsagePreviewPanel.Dock = DockStyle.Fill
+        resourceUsagePreviewPanel.Location = New Point(0, 0)
+        resourceUsagePreviewPanel.Name = "resourceUsagePreviewPanel"
+        resourceUsagePreviewPanel.Padding = New Padding(12)
+        resourceUsagePreviewPanel.Size = New Size(518, 687)
+        resourceUsagePreviewPanel.TabIndex = 0
+        ' 
+        ' resourceUsagePreviewBodySplit
+        ' 
+        resourceUsagePreviewBodySplit.Dock = DockStyle.Fill
+        resourceUsagePreviewBodySplit.Location = New Point(12, 84)
+        resourceUsagePreviewBodySplit.Name = "resourceUsagePreviewBodySplit"
+        resourceUsagePreviewBodySplit.Orientation = Orientation.Horizontal
+        ' 
+        ' resourceUsagePreviewBodySplit.Panel1
+        ' 
+        resourceUsagePreviewBodySplit.Panel1.Controls.Add(resourceUsagePreviewChart)
+        ' 
+        ' resourceUsagePreviewBodySplit.Panel2
+        ' 
+        resourceUsagePreviewBodySplit.Panel2.Controls.Add(resourceUsageLegendGrid)
+        resourceUsagePreviewBodySplit.Size = New Size(494, 591)
+        resourceUsagePreviewBodySplit.SplitterDistance = 348
+        resourceUsagePreviewBodySplit.TabIndex = 2
+        ' 
+        ' resourceUsagePreviewChart
+        ' 
+        resourceUsagePreviewChart.BackColor = Color.White
+        resourceUsagePreviewChart.Dock = DockStyle.Fill
+        resourceUsagePreviewChart.Location = New Point(0, 0)
+        resourceUsagePreviewChart.Name = "resourceUsagePreviewChart"
+        resourceUsagePreviewChart.PreviewMode = PlannerPreviewMode.ResourceContribution
+        resourceUsagePreviewChart.Size = New Size(494, 348)
+        resourceUsagePreviewChart.TabIndex = 0
+        ' 
+        ' resourceUsageLegendGrid
+        ' 
+        resourceUsageLegendGrid.AllowUserToAddRows = False
+        resourceUsageLegendGrid.AllowUserToDeleteRows = False
+        resourceUsageLegendGrid.BackgroundColor = Color.White
+        resourceUsageLegendGrid.BorderStyle = BorderStyle.None
+        resourceUsageLegendGrid.ColumnHeadersHeight = 29
+        resourceUsageLegendGrid.Dock = DockStyle.Fill
+        resourceUsageLegendGrid.Location = New Point(0, 0)
+        resourceUsageLegendGrid.Name = "resourceUsageLegendGrid"
+        resourceUsageLegendGrid.ReadOnly = True
+        resourceUsageLegendGrid.RowHeadersVisible = False
+        resourceUsageLegendGrid.RowHeadersWidth = 51
+        resourceUsageLegendGrid.Size = New Size(494, 239)
+        resourceUsageLegendGrid.TabIndex = 0
+        ' 
+        ' resourceUsagePreviewBadges
+        ' 
+        resourceUsagePreviewBadges.Controls.Add(resourceUsagePrimaryLabel)
+        resourceUsagePreviewBadges.Controls.Add(resourceUsageSecondaryLabel)
+        resourceUsagePreviewBadges.Dock = DockStyle.Top
+        resourceUsagePreviewBadges.Location = New Point(12, 44)
+        resourceUsagePreviewBadges.Name = "resourceUsagePreviewBadges"
+        resourceUsagePreviewBadges.Padding = New Padding(0, 4, 0, 4)
+        resourceUsagePreviewBadges.Size = New Size(494, 40)
+        resourceUsagePreviewBadges.TabIndex = 1
+        ' 
+        ' resourceUsagePrimaryLabel
+        ' 
+        resourceUsagePrimaryLabel.BackColor = Color.FromArgb(CByte(222), CByte(237), CByte(255))
+        resourceUsagePrimaryLabel.Location = New Point(3, 4)
+        resourceUsagePrimaryLabel.Name = "resourceUsagePrimaryLabel"
+        resourceUsagePrimaryLabel.Size = New Size(180, 30)
+        resourceUsagePrimaryLabel.TabIndex = 0
+        resourceUsagePrimaryLabel.Text = "Contributors: 3"
+        resourceUsagePrimaryLabel.TextAlign = ContentAlignment.MiddleCenter
+        ' 
+        ' resourceUsageSecondaryLabel
+        ' 
+        resourceUsageSecondaryLabel.BackColor = Color.FromArgb(CByte(234), CByte(242), CByte(252))
+        resourceUsageSecondaryLabel.Location = New Point(189, 4)
+        resourceUsageSecondaryLabel.Name = "resourceUsageSecondaryLabel"
+        resourceUsageSecondaryLabel.Size = New Size(190, 30)
+        resourceUsageSecondaryLabel.TabIndex = 1
+        resourceUsageSecondaryLabel.Text = "Assigned Hours: 24 hrs"
+        resourceUsageSecondaryLabel.TextAlign = ContentAlignment.MiddleCenter
+        ' 
+        ' resourceUsagePreviewTitle
+        ' 
+        resourceUsagePreviewTitle.Dock = DockStyle.Top
+        resourceUsagePreviewTitle.Font = New Font("Segoe UI Semibold", 12F)
+        resourceUsagePreviewTitle.Location = New Point(12, 12)
+        resourceUsagePreviewTitle.Name = "resourceUsagePreviewTitle"
+        resourceUsagePreviewTitle.Size = New Size(494, 32)
+        resourceUsagePreviewTitle.TabIndex = 0
+        resourceUsagePreviewTitle.Text = "Planner Preview - Resource Contribution"
+        ' 
+        ' capacityPlanningTab
+        ' 
+        capacityPlanningTab.BackColor = Color.White
+        capacityPlanningTab.Controls.Add(_capacityGrid)
+        capacityPlanningTab.Controls.Add(_capacityFilterPanel)
+        capacityPlanningTab.Location = New Point(4, 35)
+        capacityPlanningTab.Name = "capacityPlanningTab"
+        capacityPlanningTab.Padding = New Padding(3)
+        capacityPlanningTab.Size = New Size(1569, 693)
+        capacityPlanningTab.TabIndex = 3
+        capacityPlanningTab.Text = "Capacity Planning"
+        ' 
+        ' _capacityFilterPanel
+        ' 
+        _capacityFilterPanel.AutoScroll = True
+        _capacityFilterPanel.BackColor = Color.White
+        _capacityFilterPanel.Controls.Add(_capacityFromLabel)
+        _capacityFilterPanel.Controls.Add(_capacityStartPicker)
+        _capacityFilterPanel.Controls.Add(_capacityToLabel)
+        _capacityFilterPanel.Controls.Add(_capacityFinishPicker)
+        _capacityFilterPanel.Controls.Add(_capacityEmployeesLabel)
+        _capacityFilterPanel.Controls.Add(_capacityEmployeeList)
+        _capacityFilterPanel.Controls.Add(_capacityApplyButton)
+        _capacityFilterPanel.Controls.Add(_capacitySelectAllButton)
+        _capacityFilterPanel.Controls.Add(_capacityClearButton)
+        _capacityFilterPanel.Controls.Add(_capacityFilterStatusLabel)
+        _capacityFilterPanel.Dock = DockStyle.Top
+        _capacityFilterPanel.Location = New Point(3, 3)
+        _capacityFilterPanel.Name = "_capacityFilterPanel"
+        _capacityFilterPanel.Padding = New Padding(10, 8, 10, 6)
+        _capacityFilterPanel.Size = New Size(1563, 104)
+        _capacityFilterPanel.TabIndex = 0
+        _capacityFilterPanel.WrapContents = False
+        ' 
+        ' _capacityFromLabel
+        ' 
+        _capacityFromLabel.AutoSize = True
+        _capacityFromLabel.ForeColor = Color.FromArgb(CByte(75), CByte(85), CByte(99))
+        _capacityFromLabel.Location = New Point(10, 16)
+        _capacityFromLabel.Margin = New Padding(0, 8, 6, 0)
+        _capacityFromLabel.Name = "_capacityFromLabel"
+        _capacityFromLabel.Size = New Size(43, 20)
+        _capacityFromLabel.TabIndex = 0
+        _capacityFromLabel.Text = "From"
+        _capacityFromLabel.TextAlign = ContentAlignment.MiddleLeft
+        ' 
+        ' _capacityStartPicker
+        ' 
+        _capacityStartPicker.CustomFormat = "dd-MM-yyyy"
+        _capacityStartPicker.Format = DateTimePickerFormat.Custom
+        _capacityStartPicker.Location = New Point(59, 11)
+        _capacityStartPicker.Name = "_capacityStartPicker"
+        _capacityStartPicker.Size = New Size(118, 27)
+        _capacityStartPicker.TabIndex = 1
+        ' 
+        ' _capacityToLabel
+        ' 
+        _capacityToLabel.AutoSize = True
+        _capacityToLabel.ForeColor = Color.FromArgb(CByte(75), CByte(85), CByte(99))
+        _capacityToLabel.Location = New Point(180, 16)
+        _capacityToLabel.Margin = New Padding(0, 8, 6, 0)
+        _capacityToLabel.Name = "_capacityToLabel"
+        _capacityToLabel.Size = New Size(25, 20)
+        _capacityToLabel.TabIndex = 2
+        _capacityToLabel.Text = "To"
+        _capacityToLabel.TextAlign = ContentAlignment.MiddleLeft
+        ' 
+        ' _capacityFinishPicker
+        ' 
+        _capacityFinishPicker.CustomFormat = "dd-MM-yyyy"
+        _capacityFinishPicker.Format = DateTimePickerFormat.Custom
+        _capacityFinishPicker.Location = New Point(211, 11)
+        _capacityFinishPicker.Name = "_capacityFinishPicker"
+        _capacityFinishPicker.Size = New Size(118, 27)
+        _capacityFinishPicker.TabIndex = 3
+        ' 
+        ' _capacityEmployeesLabel
+        ' 
+        _capacityEmployeesLabel.AutoSize = True
+        _capacityEmployeesLabel.ForeColor = Color.FromArgb(CByte(75), CByte(85), CByte(99))
+        _capacityEmployeesLabel.Location = New Point(332, 16)
+        _capacityEmployeesLabel.Margin = New Padding(0, 8, 6, 0)
+        _capacityEmployeesLabel.Name = "_capacityEmployeesLabel"
+        _capacityEmployeesLabel.Size = New Size(81, 20)
+        _capacityEmployeesLabel.TabIndex = 4
+        _capacityEmployeesLabel.Text = "Employees"
+        _capacityEmployeesLabel.TextAlign = ContentAlignment.MiddleLeft
+        ' 
+        ' _capacityEmployeeList
+        ' 
+        _capacityEmployeeList.CheckOnClick = True
+        _capacityEmployeeList.FormattingEnabled = True
+        _capacityEmployeeList.IntegralHeight = False
+        _capacityEmployeeList.Location = New Point(419, 11)
+        _capacityEmployeeList.Name = "_capacityEmployeeList"
+        _capacityEmployeeList.Size = New Size(260, 82)
+        _capacityEmployeeList.TabIndex = 5
+        ' 
+        ' _capacityApplyButton
+        ' 
+        _capacityApplyButton.BackColor = Color.FromArgb(CByte(42), CByte(95), CByte(160))
+        _capacityApplyButton.FlatAppearance.BorderSize = 0
+        _capacityApplyButton.FlatStyle = FlatStyle.Flat
+        _capacityApplyButton.ForeColor = Color.White
+        _capacityApplyButton.Location = New Point(687, 13)
+        _capacityApplyButton.Margin = New Padding(8, 5, 0, 0)
+        _capacityApplyButton.Name = "_capacityApplyButton"
+        _capacityApplyButton.Size = New Size(92, 30)
+        _capacityApplyButton.TabIndex = 6
+        _capacityApplyButton.Text = "Apply"
+        _capacityApplyButton.UseVisualStyleBackColor = False
+        ' 
+        ' _capacitySelectAllButton
+        ' 
+        _capacitySelectAllButton.BackColor = Color.FromArgb(CByte(35), CByte(46), CByte(66))
+        _capacitySelectAllButton.FlatAppearance.BorderSize = 0
+        _capacitySelectAllButton.FlatStyle = FlatStyle.Flat
+        _capacitySelectAllButton.ForeColor = Color.White
+        _capacitySelectAllButton.Location = New Point(787, 13)
+        _capacitySelectAllButton.Margin = New Padding(8, 5, 0, 0)
+        _capacitySelectAllButton.Name = "_capacitySelectAllButton"
+        _capacitySelectAllButton.Size = New Size(92, 30)
+        _capacitySelectAllButton.TabIndex = 7
+        _capacitySelectAllButton.Text = "Select All"
+        _capacitySelectAllButton.UseVisualStyleBackColor = False
+        ' 
+        ' _capacityClearButton
+        ' 
+        _capacityClearButton.BackColor = Color.FromArgb(CByte(234), CByte(238), CByte(245))
+        _capacityClearButton.FlatAppearance.BorderSize = 0
+        _capacityClearButton.FlatStyle = FlatStyle.Flat
+        _capacityClearButton.ForeColor = Color.FromArgb(CByte(35), CByte(46), CByte(66))
+        _capacityClearButton.Location = New Point(887, 13)
+        _capacityClearButton.Margin = New Padding(8, 5, 0, 0)
+        _capacityClearButton.Name = "_capacityClearButton"
+        _capacityClearButton.Size = New Size(92, 30)
+        _capacityClearButton.TabIndex = 8
+        _capacityClearButton.Text = "Clear"
+        _capacityClearButton.UseVisualStyleBackColor = False
+        ' 
+        ' _capacityFilterStatusLabel
+        ' 
+        _capacityFilterStatusLabel.ForeColor = Color.FromArgb(CByte(75), CByte(85), CByte(99))
+        _capacityFilterStatusLabel.Location = New Point(987, 8)
+        _capacityFilterStatusLabel.Name = "_capacityFilterStatusLabel"
+        _capacityFilterStatusLabel.Size = New Size(300, 42)
+        _capacityFilterStatusLabel.TabIndex = 9
+        _capacityFilterStatusLabel.TextAlign = ContentAlignment.MiddleLeft
+        ' 
+        ' _capacityGrid
+        ' 
+        _capacityGrid.AllowUserToAddRows = False
+        _capacityGrid.AllowUserToDeleteRows = False
+        _capacityGrid.BackgroundColor = Color.White
+        _capacityGrid.BorderStyle = BorderStyle.None
+        _capacityGrid.ColumnHeadersHeight = 32
+        _capacityGrid.Dock = DockStyle.Fill
+        _capacityGrid.EnableHeadersVisualStyles = False
+        _capacityGrid.Location = New Point(3, 107)
+        _capacityGrid.Name = "_capacityGrid"
+        _capacityGrid.ReadOnly = True
+        _capacityGrid.RowHeadersVisible = False
+        _capacityGrid.RowHeadersWidth = 51
+        _capacityGrid.Size = New Size(1563, 583)
+        _capacityGrid.TabIndex = 1
+        ' 
+        ' resourceUtilizationTab
+        ' 
+        resourceUtilizationTab.BackColor = Color.White
+        resourceUtilizationTab.Controls.Add(resourceUtilizationHost)
+        resourceUtilizationTab.Location = New Point(4, 35)
+        resourceUtilizationTab.Name = "resourceUtilizationTab"
+        resourceUtilizationTab.Padding = New Padding(3)
+        resourceUtilizationTab.Size = New Size(1569, 693)
+        resourceUtilizationTab.TabIndex = 4
+        resourceUtilizationTab.Text = "Resource Utilization"
+        ' 
+        ' resourceUtilizationHost
+        ' 
+        resourceUtilizationHost.Controls.Add(_resourceUtilizationGrid)
+        resourceUtilizationHost.Controls.Add(resourceUtilizationToolbar)
+        resourceUtilizationHost.Dock = DockStyle.Fill
+        resourceUtilizationHost.Location = New Point(3, 3)
+        resourceUtilizationHost.Name = "resourceUtilizationHost"
+        resourceUtilizationHost.Size = New Size(1563, 687)
+        resourceUtilizationHost.TabIndex = 0
+        ' 
+        ' _resourceUtilizationGrid
+        ' 
+        _resourceUtilizationGrid.AllowUserToAddRows = False
+        _resourceUtilizationGrid.AllowUserToDeleteRows = False
+        _resourceUtilizationGrid.BackgroundColor = Color.White
+        _resourceUtilizationGrid.BorderStyle = BorderStyle.None
+        _resourceUtilizationGrid.ColumnHeadersHeight = 32
+        _resourceUtilizationGrid.Dock = DockStyle.Fill
+        _resourceUtilizationGrid.EnableHeadersVisualStyles = False
+        _resourceUtilizationGrid.Location = New Point(0, 48)
+        _resourceUtilizationGrid.Name = "_resourceUtilizationGrid"
+        _resourceUtilizationGrid.RowHeadersVisible = False
+        _resourceUtilizationGrid.RowHeadersWidth = 51
+        _resourceUtilizationGrid.SelectionMode = DataGridViewSelectionMode.CellSelect
+        _resourceUtilizationGrid.Size = New Size(1563, 639)
+        _resourceUtilizationGrid.TabIndex = 1
+        ' 
+        ' resourceUtilizationToolbar
+        ' 
+        resourceUtilizationToolbar.BackColor = Color.White
+        resourceUtilizationToolbar.Controls.Add(_resourceUtilizationRefreshButton)
+        resourceUtilizationToolbar.Controls.Add(_resourceUtilizationColorSelector)
+        resourceUtilizationToolbar.Controls.Add(_resourceUtilizationApplyButton)
+        resourceUtilizationToolbar.Controls.Add(_resourceUtilizationClearButton)
+        resourceUtilizationToolbar.Controls.Add(_resourceUtilizationMailButton)
+        resourceUtilizationToolbar.Dock = DockStyle.Top
+        resourceUtilizationToolbar.Location = New Point(0, 0)
+        resourceUtilizationToolbar.Name = "resourceUtilizationToolbar"
+        resourceUtilizationToolbar.Padding = New Padding(10, 8, 10, 6)
+        resourceUtilizationToolbar.Size = New Size(1563, 48)
+        resourceUtilizationToolbar.TabIndex = 0
+        resourceUtilizationToolbar.WrapContents = False
+        ' 
+        ' _resourceUtilizationRefreshButton
+        ' 
+        _resourceUtilizationRefreshButton.BackColor = Color.FromArgb(CByte(42), CByte(95), CByte(160))
+        _resourceUtilizationRefreshButton.FlatStyle = FlatStyle.Flat
+        _resourceUtilizationRefreshButton.ForeColor = Color.White
+        _resourceUtilizationRefreshButton.Location = New Point(13, 11)
+        _resourceUtilizationRefreshButton.Name = "_resourceUtilizationRefreshButton"
+        _resourceUtilizationRefreshButton.Size = New Size(130, 28)
+        _resourceUtilizationRefreshButton.TabIndex = 0
+        _resourceUtilizationRefreshButton.Text = "Refresh SQL Hours"
+        _resourceUtilizationRefreshButton.UseVisualStyleBackColor = False
+        ' 
+        ' _resourceUtilizationColorSelector
+        ' 
+        _resourceUtilizationColorSelector.DropDownStyle = ComboBoxStyle.DropDownList
+        _resourceUtilizationColorSelector.FormattingEnabled = True
+        _resourceUtilizationColorSelector.Items.AddRange(New Object() {"Blue - Planned Leave", "Dark Blue - Unplanned Leave", "Yellow - Training", "Green - Weekend Work", "Orange - Pending Work", "Red - Unassigned Hours"})
+        _resourceUtilizationColorSelector.Location = New Point(149, 11)
+        _resourceUtilizationColorSelector.Name = "_resourceUtilizationColorSelector"
+        _resourceUtilizationColorSelector.Size = New Size(180, 28)
+        _resourceUtilizationColorSelector.TabIndex = 1
+        ' 
+        ' _resourceUtilizationApplyButton
+        ' 
+        _resourceUtilizationApplyButton.FlatStyle = FlatStyle.Flat
+        _resourceUtilizationApplyButton.Location = New Point(335, 11)
+        _resourceUtilizationApplyButton.Name = "_resourceUtilizationApplyButton"
+        _resourceUtilizationApplyButton.Size = New Size(120, 28)
+        _resourceUtilizationApplyButton.TabIndex = 2
+        _resourceUtilizationApplyButton.Text = "Apply Highlight"
+        ' 
+        ' _resourceUtilizationClearButton
+        ' 
+        _resourceUtilizationClearButton.FlatStyle = FlatStyle.Flat
+        _resourceUtilizationClearButton.Location = New Point(461, 11)
+        _resourceUtilizationClearButton.Name = "_resourceUtilizationClearButton"
+        _resourceUtilizationClearButton.Size = New Size(120, 28)
+        _resourceUtilizationClearButton.TabIndex = 3
+        _resourceUtilizationClearButton.Text = "Clear Highlight"
+        ' 
+        ' _resourceUtilizationMailButton
+        ' 
+        _resourceUtilizationMailButton.BackColor = Color.FromArgb(CByte(34), CByte(169), CByte(105))
+        _resourceUtilizationMailButton.FlatStyle = FlatStyle.Flat
+        _resourceUtilizationMailButton.ForeColor = Color.White
+        _resourceUtilizationMailButton.Location = New Point(587, 11)
+        _resourceUtilizationMailButton.Name = "_resourceUtilizationMailButton"
+        _resourceUtilizationMailButton.Size = New Size(170, 28)
+        _resourceUtilizationMailButton.TabIndex = 4
+        _resourceUtilizationMailButton.Text = "Send Availability Snip"
+        _resourceUtilizationMailButton.UseVisualStyleBackColor = False
+        ' 
+        ' employeeCapacityTab
+        ' 
+        employeeCapacityTab.BackColor = Color.White
+        employeeCapacityTab.Controls.Add(employeeCapacityHost)
+        employeeCapacityTab.Location = New Point(4, 35)
+        employeeCapacityTab.Name = "employeeCapacityTab"
+        employeeCapacityTab.Padding = New Padding(3)
+        employeeCapacityTab.Size = New Size(1569, 693)
+        employeeCapacityTab.TabIndex = 5
+        employeeCapacityTab.Text = "Employee Capacity"
+        ' 
+        ' employeeCapacityHost
+        ' 
+        employeeCapacityHost.Controls.Add(_employeeCapacityGrid)
+        employeeCapacityHost.Controls.Add(employeeCapacityToolbar)
+        employeeCapacityHost.Dock = DockStyle.Fill
+        employeeCapacityHost.Location = New Point(3, 3)
+        employeeCapacityHost.Name = "employeeCapacityHost"
+        employeeCapacityHost.Size = New Size(1563, 687)
+        employeeCapacityHost.TabIndex = 0
+        ' 
+        ' _employeeCapacityGrid
+        ' 
+        _employeeCapacityGrid.AllowUserToAddRows = False
+        _employeeCapacityGrid.AllowUserToDeleteRows = False
+        _employeeCapacityGrid.BackgroundColor = Color.White
+        _employeeCapacityGrid.BorderStyle = BorderStyle.None
+        _employeeCapacityGrid.ColumnHeadersHeight = 32
+        _employeeCapacityGrid.Dock = DockStyle.Fill
+        _employeeCapacityGrid.EnableHeadersVisualStyles = False
+        _employeeCapacityGrid.Location = New Point(0, 48)
+        _employeeCapacityGrid.Name = "_employeeCapacityGrid"
+        _employeeCapacityGrid.RowHeadersVisible = False
+        _employeeCapacityGrid.RowHeadersWidth = 51
+        _employeeCapacityGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect
+        _employeeCapacityGrid.Size = New Size(1563, 639)
+        _employeeCapacityGrid.TabIndex = 1
+        ' 
+        ' employeeCapacityToolbar
+        ' 
+        employeeCapacityToolbar.BackColor = Color.White
+        employeeCapacityToolbar.Controls.Add(_employeeCapacityAddButton)
+        employeeCapacityToolbar.Controls.Add(_employeeCapacityDeleteButton)
+        employeeCapacityToolbar.Controls.Add(_employeeCapacityRefreshButton)
+        employeeCapacityToolbar.Dock = DockStyle.Top
+        employeeCapacityToolbar.Location = New Point(0, 0)
+        employeeCapacityToolbar.Name = "employeeCapacityToolbar"
+        employeeCapacityToolbar.Padding = New Padding(10, 8, 10, 6)
+        employeeCapacityToolbar.Size = New Size(1563, 48)
+        employeeCapacityToolbar.TabIndex = 0
+        employeeCapacityToolbar.WrapContents = False
+        ' 
+        ' _employeeCapacityAddButton
+        ' 
+        _employeeCapacityAddButton.BackColor = Color.FromArgb(CByte(34), CByte(169), CByte(105))
+        _employeeCapacityAddButton.FlatStyle = FlatStyle.Flat
+        _employeeCapacityAddButton.ForeColor = Color.White
+        _employeeCapacityAddButton.Location = New Point(13, 11)
+        _employeeCapacityAddButton.Name = "_employeeCapacityAddButton"
+        _employeeCapacityAddButton.Size = New Size(130, 28)
+        _employeeCapacityAddButton.TabIndex = 0
+        _employeeCapacityAddButton.Text = "Add Capacity"
+        _employeeCapacityAddButton.UseVisualStyleBackColor = False
+        ' 
+        ' _employeeCapacityDeleteButton
+        ' 
+        _employeeCapacityDeleteButton.BackColor = Color.FromArgb(CByte(35), CByte(46), CByte(66))
+        _employeeCapacityDeleteButton.FlatStyle = FlatStyle.Flat
+        _employeeCapacityDeleteButton.ForeColor = Color.White
+        _employeeCapacityDeleteButton.Location = New Point(149, 11)
+        _employeeCapacityDeleteButton.Name = "_employeeCapacityDeleteButton"
+        _employeeCapacityDeleteButton.Size = New Size(130, 28)
+        _employeeCapacityDeleteButton.TabIndex = 1
+        _employeeCapacityDeleteButton.Text = "Delete Entry"
+        _employeeCapacityDeleteButton.UseVisualStyleBackColor = False
+        ' 
+        ' _employeeCapacityRefreshButton
+        ' 
+        _employeeCapacityRefreshButton.BackColor = Color.FromArgb(CByte(42), CByte(95), CByte(160))
+        _employeeCapacityRefreshButton.FlatStyle = FlatStyle.Flat
+        _employeeCapacityRefreshButton.ForeColor = Color.White
+        _employeeCapacityRefreshButton.Location = New Point(285, 11)
+        _employeeCapacityRefreshButton.Name = "_employeeCapacityRefreshButton"
+        _employeeCapacityRefreshButton.Size = New Size(150, 28)
+        _employeeCapacityRefreshButton.TabIndex = 2
+        _employeeCapacityRefreshButton.Text = "Refresh Capacity"
+        _employeeCapacityRefreshButton.UseVisualStyleBackColor = False
+        ' 
+        ' _detailsPanel
+        ' 
+        _detailsPanel.BackColor = Color.White
+        _detailsPanel.Controls.Add(taskWorkspaceTitle)
+        _detailsPanel.Dock = DockStyle.Fill
+        _detailsPanel.Location = New Point(0, 0)
+        _detailsPanel.Margin = New Padding(3, 4, 3, 4)
+        _detailsPanel.Name = "_detailsPanel"
+        _detailsPanel.Padding = New Padding(16, 19, 16, 19)
+        _detailsPanel.Size = New Size(150, 46)
+        _detailsPanel.TabIndex = 0
+        ' 
+        ' taskWorkspaceTitle
+        ' 
+        taskWorkspaceTitle.Dock = DockStyle.Top
+        taskWorkspaceTitle.Font = New Font("Segoe UI Semibold", 10.5F)
+        taskWorkspaceTitle.ForeColor = Color.FromArgb(CByte(24), CByte(31), CByte(42))
+        taskWorkspaceTitle.Location = New Point(16, 19)
+        taskWorkspaceTitle.Name = "taskWorkspaceTitle"
+        taskWorkspaceTitle.Size = New Size(118, 37)
+        taskWorkspaceTitle.TabIndex = 0
+        taskWorkspaceTitle.Text = "Task allocation"
+        ' 
+        ' statusBar
+        ' 
+        statusBar.BackColor = Color.White
+        statusBar.ImageScalingSize = New Size(20, 20)
+        statusBar.Items.AddRange(New ToolStripItem() {_status})
+        statusBar.Location = New Point(0, 1029)
+        statusBar.Name = "statusBar"
+        statusBar.Padding = New Padding(1, 0, 16, 0)
+        statusBar.Size = New Size(1577, 26)
+        statusBar.TabIndex = 3
+        ' 
+        ' _status
+        ' 
+        _status.Name = "_status"
+        _status.Size = New Size(50, 20)
+        _status.Text = "Ready"
+        ' 
+        ' SMASchedulerForm
+        ' 
+        AutoScaleDimensions = New SizeF(8F, 20F)
+        AutoScaleMode = AutoScaleMode.Font
+        BackColor = Color.FromArgb(CByte(244), CByte(246), CByte(249))
+        ClientSize = New Size(1577, 1055)
+        Controls.Add(contentSplit)
+        Controls.Add(statusBar)
+        Controls.Add(headerPanel)
+        Controls.Add(commandBar)
+        Font = New Font("Segoe UI", 9F)
+        Margin = New Padding(3, 4, 3, 4)
+        MinimumSize = New Size(1323, 891)
+        Name = "SMASchedulerForm"
+        Text = "SMA Scheduler"
+        commandBar.ResumeLayout(False)
+        commandBar.PerformLayout()
+        headerPanel.ResumeLayout(False)
+        headerPanel.PerformLayout()
+        CType(_totalProjectHours, ComponentModel.ISupportInitialize).EndInit()
+        contentSplit.Panel1.ResumeLayout(False)
+        contentSplit.Panel2.ResumeLayout(False)
+        CType(contentSplit, ComponentModel.ISupportInitialize).EndInit()
+        contentSplit.ResumeLayout(False)
+        _workspaceTabs.ResumeLayout(False)
+        taskAllocationTab.ResumeLayout(False)
+        mainSplit.Panel1.ResumeLayout(False)
+        mainSplit.Panel2.ResumeLayout(False)
+        CType(mainSplit, ComponentModel.ISupportInitialize).EndInit()
+        mainSplit.ResumeLayout(False)
+        CType(_grid, ComponentModel.ISupportInitialize).EndInit()
+        ganttPreviewSplit.Panel1.ResumeLayout(False)
+        ganttPreviewSplit.Panel2.ResumeLayout(False)
+        CType(ganttPreviewSplit, ComponentModel.ISupportInitialize).EndInit()
+        ganttPreviewSplit.ResumeLayout(False)
+        allocationPreviewPanel.ResumeLayout(False)
+        allocationPreviewBodySplit.Panel1.ResumeLayout(False)
+        allocationPreviewBodySplit.Panel2.ResumeLayout(False)
+        CType(allocationPreviewBodySplit, ComponentModel.ISupportInitialize).EndInit()
+        allocationPreviewBodySplit.ResumeLayout(False)
+        CType(allocationLegendGrid, ComponentModel.ISupportInitialize).EndInit()
+        allocationPreviewBadges.ResumeLayout(False)
+        taskUsageTab.ResumeLayout(False)
+        taskUsageSplit.Panel1.ResumeLayout(False)
+        taskUsageSplit.Panel2.ResumeLayout(False)
+        CType(taskUsageSplit, ComponentModel.ISupportInitialize).EndInit()
+        taskUsageSplit.ResumeLayout(False)
+        CType(_taskUsageGrid, ComponentModel.ISupportInitialize).EndInit()
+        taskUsagePreviewPanel.ResumeLayout(False)
+        taskUsagePreviewBodySplit.Panel1.ResumeLayout(False)
+        taskUsagePreviewBodySplit.Panel2.ResumeLayout(False)
+        CType(taskUsagePreviewBodySplit, ComponentModel.ISupportInitialize).EndInit()
+        taskUsagePreviewBodySplit.ResumeLayout(False)
+        CType(taskUsageLegendGrid, ComponentModel.ISupportInitialize).EndInit()
+        taskUsagePreviewBadges.ResumeLayout(False)
+        resourceUsageTab.ResumeLayout(False)
+        resourceUsageSplit.Panel1.ResumeLayout(False)
+        resourceUsageSplit.Panel2.ResumeLayout(False)
+        CType(resourceUsageSplit, ComponentModel.ISupportInitialize).EndInit()
+        resourceUsageSplit.ResumeLayout(False)
+        CType(_resourceUsageGrid, ComponentModel.ISupportInitialize).EndInit()
+        resourceUsagePreviewPanel.ResumeLayout(False)
+        resourceUsagePreviewBodySplit.Panel1.ResumeLayout(False)
+        resourceUsagePreviewBodySplit.Panel2.ResumeLayout(False)
+        CType(resourceUsagePreviewBodySplit, ComponentModel.ISupportInitialize).EndInit()
+        resourceUsagePreviewBodySplit.ResumeLayout(False)
+        CType(resourceUsageLegendGrid, ComponentModel.ISupportInitialize).EndInit()
+        resourceUsagePreviewBadges.ResumeLayout(False)
+        capacityPlanningTab.ResumeLayout(False)
+        _capacityFilterPanel.ResumeLayout(False)
+        _capacityFilterPanel.PerformLayout()
+        CType(_capacityGrid, ComponentModel.ISupportInitialize).EndInit()
+        resourceUtilizationTab.ResumeLayout(False)
+        resourceUtilizationHost.ResumeLayout(False)
+        CType(_resourceUtilizationGrid, ComponentModel.ISupportInitialize).EndInit()
+        resourceUtilizationToolbar.ResumeLayout(False)
+        employeeCapacityTab.ResumeLayout(False)
+        employeeCapacityHost.ResumeLayout(False)
+        CType(_employeeCapacityGrid, ComponentModel.ISupportInitialize).EndInit()
+        employeeCapacityToolbar.ResumeLayout(False)
+        _detailsPanel.ResumeLayout(False)
+        statusBar.ResumeLayout(False)
+        statusBar.PerformLayout()
+        ResumeLayout(False)
+        PerformLayout()
 
     End Sub
 
@@ -1367,6 +1565,17 @@ Partial Class SMASchedulerForm
     Private resourceUsagePreviewBodySplit As SplitContainer
     Private resourceUsagePreviewChart As PlannerPieChartPanel
     Private resourceUsageLegendGrid As DataGridView
+    Private _capacityFilterPanel As FlowLayoutPanel
+    Private _capacityFromLabel As Label
+    Private WithEvents _capacityStartPicker As DateTimePicker
+    Private _capacityToLabel As Label
+    Private WithEvents _capacityFinishPicker As DateTimePicker
+    Private _capacityEmployeesLabel As Label
+    Private _capacityEmployeeList As CheckedListBox
+    Private WithEvents _capacityApplyButton As Button
+    Private WithEvents _capacitySelectAllButton As Button
+    Private WithEvents _capacityClearButton As Button
+    Private _capacityFilterStatusLabel As Label
     Private _capacityGrid As DataGridView
     Private resourceUtilizationHost As Panel
     Private resourceUtilizationToolbar As FlowLayoutPanel
@@ -1395,6 +1604,9 @@ Partial Class SMASchedulerForm
     Private _summaryTitle As Label
     Private _summaryDates As Label
     Private _summaryResources As Label
+    Private _projectDetailsCaptionLabel As Label
+    Private _projectDetailsValueLabel As Label
+    Private WithEvents _scheduleProjectButton As Button
     Private WithEvents _grid As DataGridView
     Private _gantt As GanttPanel
     Private _detailsPanel As Panel

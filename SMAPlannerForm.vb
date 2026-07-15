@@ -33,8 +33,6 @@ Public Class SMAPlannerForm
         _recentProjectSearchBox.MaxLength = 8
 
         _grid.AutoGenerateColumns = False
-        _grid.Columns.Clear()
-        AddProjectGridColumns()
         _grid.DataSource = _projects
         _grid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(35, 46, 66)
         _grid.ColumnHeadersDefaultCellStyle.ForeColor = Color.White
@@ -46,18 +44,6 @@ Public Class SMAPlannerForm
         _grid.DefaultCellStyle.SelectionBackColor = Color.FromArgb(219, 235, 255)
         _grid.DefaultCellStyle.SelectionForeColor = Color.FromArgb(24, 31, 42)
 
-    End Sub
-
-    Private Sub AddProjectGridColumns()
-        _grid.Columns.Add(New DataGridViewTextBoxColumn With {.DataPropertyName = NameOf(ProjectLibraryItem.DisplayProjectId), .HeaderText = "Project ID", .Width = 110, .ReadOnly = True})
-        _grid.Columns.Add(New DataGridViewTextBoxColumn With {.DataPropertyName = NameOf(ProjectLibraryItem.ProjectName), .HeaderText = "Project Name", .Width = 240, .ReadOnly = True, .AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, .MinimumWidth = 220})
-        _grid.Columns.Add(New DataGridViewTextBoxColumn With {.DataPropertyName = NameOf(ProjectLibraryItem.VersionNumber), .HeaderText = "Version", .Width = 88, .ReadOnly = True})
-        _grid.Columns.Add(New DataGridViewTextBoxColumn With {.DataPropertyName = NameOf(ProjectLibraryItem.ProjectSize), .HeaderText = "Size", .Width = 96, .ReadOnly = True})
-        _grid.Columns.Add(New DataGridViewTextBoxColumn With {.DataPropertyName = NameOf(ProjectLibraryItem.ProjectType), .HeaderText = "Type", .Width = 100, .ReadOnly = True})
-        _grid.Columns.Add(New DataGridViewTextBoxColumn With {.DataPropertyName = NameOf(ProjectLibraryItem.TaskCount), .HeaderText = "Tasks", .Width = 76, .ReadOnly = True})
-        _grid.Columns.Add(New DataGridViewTextBoxColumn With {.DataPropertyName = NameOf(ProjectLibraryItem.ResourceHours), .HeaderText = "Resource Hours", .Width = 118, .ReadOnly = True, .DefaultCellStyle = New DataGridViewCellStyle With {.Format = "0.##", .Alignment = DataGridViewContentAlignment.MiddleRight}})
-        _grid.Columns.Add(New DataGridViewTextBoxColumn With {.DataPropertyName = NameOf(ProjectLibraryItem.StartDate), .HeaderText = "Start Date", .Width = 108, .ReadOnly = True, .DefaultCellStyle = New DataGridViewCellStyle With {.Format = "dd-MMM-yyyy"}})
-        _grid.Columns.Add(New DataGridViewTextBoxColumn With {.DataPropertyName = NameOf(ProjectLibraryItem.FinishDate), .HeaderText = "Finish Date", .Width = 108, .ReadOnly = True, .DefaultCellStyle = New DataGridViewCellStyle With {.Format = "dd-MMM-yyyy"}})
     End Sub
 
     Private Shared Function CreateSqlRepository() As SqlProjectRepository
@@ -244,8 +230,8 @@ Public Class SMAPlannerForm
             .ProjectCode = projectCode,
             .ProjectName = project.ProjectName,
             .ClientName = "SQL",
-            .VersionNumber = If(String.IsNullOrWhiteSpace(project.VersionNumber), "1.0", project.VersionNumber),
-            .ProjectSize = If(String.IsNullOrWhiteSpace(project.ProjectSize), "Small", project.ProjectSize),
+            .VersionNumber = If(project.VersionNumber, "").Trim(),
+            .ProjectSize = If(project.ProjectSize, "").Trim(),
             .TemplateName = project.ProjectName,
             .ProjectType = If(String.IsNullOrWhiteSpace(project.ProjectType), "New", project.ProjectType),
             .SavedProjectId = project.ProjectId,
@@ -673,31 +659,8 @@ Public Class SMAPlannerForm
 
     Private Sub SeedPlannerDesignerData()
         _projects.Clear()
-        _projects.Add(New ProjectLibraryItem With {
-            .ProjectId = 1201,
-            .ProjectName = "SMA BRE Project",
-            .VersionNumber = "1.0",
-            .ProjectSize = "Small",
-            .ProjectType = "New",
-            .TaskCount = 15,
-            .ResourceHours = 42D,
-            .StartDate = New Date(2026, 6, 24),
-            .FinishDate = New Date(2026, 7, 2)
-        })
-        _projects.Add(New ProjectLibraryItem With {
-            .ProjectId = 1202,
-            .ProjectName = "SMA Within Project",
-            .VersionNumber = "1.1",
-            .ProjectSize = "Medium",
-            .ProjectType = "Update",
-            .TaskCount = 9,
-            .ResourceHours = 28D,
-            .StartDate = New Date(2026, 6, 27),
-            .FinishDate = New Date(2026, 7, 4)
-        })
 
         _grid.DataSource = _projects
-        _liveProjectSearchBox.Text = "1201"
         _status.Text = "Designer preview"
         UpdatePlanningSummary()
     End Sub

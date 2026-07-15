@@ -20,6 +20,8 @@ Public Class TaskCatalogItem
 
     Public Function HoursForSize(sizeName As String) As Decimal
         Select Case If(sizeName, "").Trim().ToLowerInvariant()
+            Case "small"
+                Return SmallHours
             Case "medium"
                 Return MediumHours
             Case "large"
@@ -27,7 +29,7 @@ Public Class TaskCatalogItem
             Case "very large"
                 Return VeryLargeHours
             Case Else
-                Return SmallHours
+                Return 0D
         End Select
     End Function
 End Class

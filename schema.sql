@@ -83,7 +83,7 @@ CREATE TABLE dbo.SmaScheduleProjects
 (
     ProjectId INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
     ProjectName NVARCHAR(200) NOT NULL UNIQUE,
-    ProjectVersion NVARCHAR(50) NOT NULL DEFAULT '1.0',
+    ProjectVersion NVARCHAR(50) NOT NULL,
     ProjectSize NVARCHAR(50) NULL,
     ProjectType NVARCHAR(50) NULL,
     TotalProjectHours DECIMAL(12,2) NOT NULL DEFAULT 0,
