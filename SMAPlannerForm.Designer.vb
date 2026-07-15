@@ -24,6 +24,8 @@ Partial Class SMAPlannerForm
         Me.titleLabel = New System.Windows.Forms.Label()
         Me.searchLabel = New System.Windows.Forms.Label()
         Me._liveProjectSearchBox = New System.Windows.Forms.TextBox()
+        Me.taskHoursSizeLabel = New System.Windows.Forms.Label()
+        Me._taskHoursSizeSelector = New System.Windows.Forms.ComboBox()
         Me.btnScheduleProject = New System.Windows.Forms.Button()
         Me.gridPanel = New System.Windows.Forms.Panel()
         Me._grid = New System.Windows.Forms.DataGridView()
@@ -72,6 +74,8 @@ Partial Class SMAPlannerForm
         Me.headerPanel.Controls.Add(Me.titleLabel)
         Me.headerPanel.Controls.Add(Me.searchLabel)
         Me.headerPanel.Controls.Add(Me._liveProjectSearchBox)
+        Me.headerPanel.Controls.Add(Me.taskHoursSizeLabel)
+        Me.headerPanel.Controls.Add(Me._taskHoursSizeSelector)
         Me.headerPanel.Controls.Add(Me.btnScheduleProject)
         Me.headerPanel.Dock = System.Windows.Forms.DockStyle.Top
         Me.headerPanel.Location = New System.Drawing.Point(0, 0)
@@ -109,13 +113,33 @@ Partial Class SMAPlannerForm
         Me._liveProjectSearchBox.Size = New System.Drawing.Size(290, 27)
         Me._liveProjectSearchBox.TabIndex = 5
         '
+        'taskHoursSizeLabel
+        '
+        Me.taskHoursSizeLabel.AutoSize = True
+        Me.taskHoursSizeLabel.ForeColor = System.Drawing.Color.FromArgb(CType(CType(75, Byte), Integer), CType(CType(85, Byte), Integer), CType(CType(99, Byte), Integer))
+        Me.taskHoursSizeLabel.Location = New System.Drawing.Point(334, 76)
+        Me.taskHoursSizeLabel.Name = "taskHoursSizeLabel"
+        Me.taskHoursSizeLabel.Size = New System.Drawing.Size(112, 20)
+        Me.taskHoursSizeLabel.TabIndex = 6
+        Me.taskHoursSizeLabel.Text = "Task Hours Size"
+        '
+        '_taskHoursSizeSelector
+        '
+        Me._taskHoursSizeSelector.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList
+        Me._taskHoursSizeSelector.FormattingEnabled = True
+        Me._taskHoursSizeSelector.Items.AddRange(New Object() {"Small", "Medium", "Large", "Very Large"})
+        Me._taskHoursSizeSelector.Location = New System.Drawing.Point(334, 100)
+        Me._taskHoursSizeSelector.Name = "_taskHoursSizeSelector"
+        Me._taskHoursSizeSelector.Size = New System.Drawing.Size(160, 28)
+        Me._taskHoursSizeSelector.TabIndex = 7
+        '
         'btnScheduleProject
         '
         Me.btnScheduleProject.BackColor = System.Drawing.Color.FromArgb(CType(CType(32, Byte), Integer), CType(CType(164, Byte), Integer), CType(CType(112, Byte), Integer))
         Me.btnScheduleProject.FlatAppearance.BorderSize = 0
         Me.btnScheduleProject.FlatStyle = System.Windows.Forms.FlatStyle.Flat
         Me.btnScheduleProject.ForeColor = System.Drawing.Color.White
-        Me.btnScheduleProject.Location = New System.Drawing.Point(356, 96)
+        Me.btnScheduleProject.Location = New System.Drawing.Point(526, 96)
         Me.btnScheduleProject.Name = "btnScheduleProject"
         Me.btnScheduleProject.Size = New System.Drawing.Size(150, 34)
         Me.btnScheduleProject.TabIndex = 8
@@ -494,6 +518,8 @@ Partial Class SMAPlannerForm
     Private titleLabel As Label
     Private searchLabel As Label
     Private WithEvents _liveProjectSearchBox As TextBox
+    Private taskHoursSizeLabel As Label
+    Private WithEvents _taskHoursSizeSelector As ComboBox
     Private WithEvents btnScheduleProject As Button
     Private gridPanel As Panel
     Private WithEvents _grid As DataGridView

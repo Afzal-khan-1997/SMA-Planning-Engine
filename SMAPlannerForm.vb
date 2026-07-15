@@ -31,6 +31,13 @@ Public Class SMAPlannerForm
         _liveProjectSearchBox.AutoCompleteSource = AutoCompleteSource.None
         _liveProjectSearchBox.MaxLength = 8
         _recentProjectSearchBox.MaxLength = 8
+        _taskHoursSizeSelector.DropDownStyle = ComboBoxStyle.DropDownList
+        If _taskHoursSizeSelector.Items.Count = 0 Then
+            _taskHoursSizeSelector.Items.AddRange({"Small", "Medium", "Large", "Very Large"})
+        End If
+        If _taskHoursSizeSelector.SelectedIndex < 0 Then
+            _taskHoursSizeSelector.SelectedIndex = 0
+        End If
 
         _grid.AutoGenerateColumns = False
         _grid.DataSource = _projects
@@ -51,7 +58,7 @@ Public Class SMAPlannerForm
         _grid.DataSource = _projects
         RefreshSearchProjectSuggestions()
         UpdatePlanningSummary()
-        SetPlannerStatus("Enter a Project ID and click Schedule Project to load project details from SQL.")
+        SetPlannerStatus("Enter a Project ID, choose task hours size, then click Schedule Project.")
     End Sub
 
     Private Shared Function CreateSqlRepository() As SqlProjectRepository
@@ -409,6 +416,7 @@ Public Class SMAPlannerForm
             Return
         End If
 
+        Dim taskHoursSize = SelectedTaskHoursSize()
         If IsDemoProjectId(projectCode) Then
             OpenDemoSchedulerProject()
             Return
@@ -421,7 +429,7 @@ Public Class SMAPlannerForm
 
         Dim sqlProject As SqlProjectPlanningInfo = Nothing
         ' Step 1: load the live project details from SQL by Project ID at SMA.
-        ' Project size comes from Table_Project_Tracking and drives scheduler resource hours.
+        ' Task-hour size is selected by the user in Planner and drives scheduler resource hours.
         Try
             sqlProject = _sqlRepository.GetProjectPlanningInfo(projectCode)
         Catch ex As Exception
@@ -459,18 +467,6 @@ Public Class SMAPlannerForm
             Return
         End If
 
-        If String.IsNullOrWhiteSpace(sqlProject.ProjectSize) Then
-            MessageBox.Show(Me, "Project size is missing in SQL for this Project ID.", "Schedule Project", MessageBoxButtons.OK, MessageBoxIcon.Warning)
-            SetPlannerStatus("Project size is missing in SQL.")
-            Return
-        End If
-
-        If Not IsKnownProjectSize(sqlProject.ProjectSize) Then
-            MessageBox.Show(Me, "Project size from SQL is not valid for this Project ID.", "Schedule Project", MessageBoxButtons.OK, MessageBoxIcon.Warning)
-            SetPlannerStatus("Project size from SQL is not valid.")
-            Return
-        End If
-
         ' Step 3: build the scheduler input model from SQL project metadata and report filters.
         Dim projectName = sqlProject.ProjectName.Trim()
 
@@ -484,12 +480,12 @@ Public Class SMAPlannerForm
             .ProjectName = projectName,
             .ClientName = "SQL",
             .VersionNumber = sqlProject.VersionNumber.Trim(),
-            .ProjectSize = sqlProject.ProjectSize.Trim(),
+            .ProjectSize = taskHoursSize,
             .TemplateName = FirstNonBlank(sqlProject.ProjectType, "New"),
             .ProjectType = FirstNonBlank(sqlProject.ProjectType, "New"),
             .ReportType = sqlProject.ReportType,
             .TaskReportFilter = BuildTaskReportFilter(sqlProject),
-            .ProjectDetailsText = BuildProjectDetailsText(sqlProject),
+            .ProjectDetailsText = BuildProjectDetailsText(sqlProject, taskHoursSize),
             .FinalCompletionDate = sqlProject.FinalCompletionDate,
             .PlanningMessage = sqlProject.PlanningMessage,
             .ControllerAtRolc = sqlProject.ControllerAtRolc,
@@ -525,6 +521,18 @@ Public Class SMAPlannerForm
         RefreshPlannerLists()
     End Sub
 
+    Private Function SelectedTaskHoursSize() As String
+        Dim selectedSize = If(_taskHoursSizeSelector Is Nothing OrElse _taskHoursSizeSelector.SelectedItem Is Nothing,
+            "",
+            Convert.ToString(_taskHoursSizeSelector.SelectedItem, CultureInfo.InvariantCulture))
+
+        If IsKnownProjectSize(selectedSize) Then
+            Return selectedSize.Trim()
+        End If
+
+        Return "Small"
+    End Function
+
     Private Shared Function IsDemoProjectId(projectCode As String) As Boolean
 #If DEBUG Then
         Return String.Equals(If(projectCode, "").Trim(), "12345", StringComparison.OrdinalIgnoreCase)
@@ -533,18 +541,19 @@ Public Class SMAPlannerForm
 #End If
     End Function
 
-    Private Shared Function CreateDemoProject() As LiveProjectItem
+    Private Function CreateDemoProject() As LiveProjectItem
+        Dim taskHoursSize = SelectedTaskHoursSize()
         Return New LiveProjectItem With {
             .ProjectCode = "12345",
             .ProjectName = "Demo SMA Planning Project",
             .ClientName = "Demo",
             .VersionNumber = "1.0",
-            .ProjectSize = "Small",
+            .ProjectSize = taskHoursSize,
             .TemplateName = "Demo BRE/ROL",
             .ProjectType = "New",
             .ReportType = "BRE/ROL",
             .TaskReportFilter = "BRE/ROL",
-            .ProjectDetailsText = "Debug demo project. SQL is not used for Project ID 12345.",
+            .ProjectDetailsText = "Task Hours Size: " & taskHoursSize & " | Actual Project Size: Demo | Debug demo project. SQL is not used for Project ID 12345.",
             .PlanningMessage = "Demo scheduler loaded without SQL."
         }
     End Function
@@ -602,12 +611,14 @@ Public Class SMAPlannerForm
         Return String.Join("; ", parts)
     End Function
 
-    Private Shared Function BuildProjectDetailsText(sqlProject As SqlProjectPlanningInfo) As String
+    Private Shared Function BuildProjectDetailsText(sqlProject As SqlProjectPlanningInfo, taskHoursSize As String) As String
         If sqlProject Is Nothing Then
             Return ""
         End If
 
         Dim details As New List(Of String) From {
+            "Task Hours Size: " & If(String.IsNullOrWhiteSpace(taskHoursSize), "Small", taskHoursSize.Trim()),
+            "Actual Project Size: " & If(String.IsNullOrWhiteSpace(sqlProject.ProjectSize), "Not found", sqlProject.ProjectSize.Trim()),
             "Report Type: " & If(String.IsNullOrWhiteSpace(sqlProject.ReportType), "None", sqlProject.ReportType)
         }
 

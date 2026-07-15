@@ -109,7 +109,7 @@ Public Class SMASchedulerForm
         End If
 
         If String.IsNullOrWhiteSpace(liveProject.ProjectSize) Then
-            Throw New InvalidOperationException("Project size is missing in SQL for this Project ID.")
+            Throw New InvalidOperationException("Task hours size is missing for this schedule.")
         End If
 
         ' Scheduler handoff from SMA Planning Engine: populate project fields first.
@@ -124,8 +124,8 @@ Public Class SMASchedulerForm
         _hasDeedProfile = liveProject.DeedProfile
         _hasShadowAnalysis = liveProject.ShadowAnalysis
         _isUrgentSmallProject = liveProject.UrgentSmallProjects
-        ' The Planning Engine passes SQL Table_Project_Tracking project size here.
-        ' That selected size controls which task resource-hour column is used.
+        ' The Planning Engine passes the user-selected task-hours size here.
+        ' That selected size controls which Task_Template hour column is used.
         SelectProjectSize(liveProject.ProjectSize)
         UpdateProjectMetadataDisplay()
 
