@@ -7,23 +7,6 @@ Public Class LiveProjectCatalogService
         _sqlRepository = sqlRepository
     End Sub
 
-    Public Function SearchProjects(searchText As String) As List(Of LiveProjectItem)
-        Dim query = If(searchText, "").Trim()
-
-        If _sqlRepository Is Nothing Then
-            Return New List(Of LiveProjectItem)()
-        End If
-
-        Try
-            Return _sqlRepository.LoadTemplateProjects(query).
-            GroupBy(Function(project) project.ProjectName, StringComparer.OrdinalIgnoreCase).
-            Select(Function(group) group.First()).
-            OrderBy(Function(project) project.ProjectName).
-            ToList()
-        Catch
-            Return New List(Of LiveProjectItem)()
-        End Try
-    End Function
 End Class
 
 Public Class LiveProjectItem
@@ -32,8 +15,8 @@ Public Class LiveProjectItem
     Public Property ClientName As String = ""
     Public Property VersionNumber As String = ""
     Public Property ProjectSize As String = ""
-    Public Property TemplateName As String = "New Project"
-    Public Property ProjectType As String = "New"
+    Public Property TemplateName As String = ""
+    Public Property ProjectType As String = ""
     Public Property SavedProjectId As Integer
     Public Property SourceFilePath As String = ""
     Public Property ReportType As String = ""
@@ -49,11 +32,6 @@ Public Class LiveProjectItem
     Public Property ShadowAnalysis As Boolean
     Public Property UrgentSmallProjects As Boolean
 
-    Public ReadOnly Property IsStoredProject As Boolean
-        Get
-            Return SavedProjectId > 0 OrElse Not String.IsNullOrWhiteSpace(SourceFilePath)
-        End Get
-    End Property
 
     Public ReadOnly Property DisplayText As String
         Get
@@ -61,7 +39,5 @@ Public Class LiveProjectItem
         End Get
     End Property
 
-    Public Overrides Function ToString() As String
-        Return DisplayText
-    End Function
+
 End Class

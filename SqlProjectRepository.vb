@@ -52,8 +52,6 @@ Public Class SqlProjectRepository
         Using connection = CreateConnection()
             connection.Open()
 
-            ValidateProjectDetailsTable(connection)
-
             Dim GetProjectDetailsDataTable As New DataTable()
 
             Using GetProjectDetails As IDbCommand = connection.CreateCommand()
@@ -494,53 +492,6 @@ Public Class SqlProjectRepository
         Return result
     End Function
 
-    Public Function LoadTemplateProjects(Optional searchText As String = "") As List(Of LiveProjectItem)
-        Dim result As New List(Of LiveProjectItem)()
-
-        Using connection = CreateConnection()
-            connection.Open()
-            ValidateExcelSqlDesign(connection, requireScheduleSaveTables:=False)
-
-            Dim taskTemplateTable = ResolveTaskTemplateTable(connection)
-            If taskTemplateTable.Length = 0 Then
-                Return result
-            End If
-
-            If Not ColumnExists(connection, taskTemplateTable, "Task ID") Then
-                Return result
-            End If
-
-            Using command = connection.CreateCommand()
-                command.CommandText =
-                    "SELECT DISTINCT ISNULL([Project Type], 'New') AS ProjectType " &
-                    "FROM " & SqlTableName(taskTemplateTable) & " " &
-                    "WHERE ISNULL(IsActive, 1) = 1 " &
-                    "AND (@SearchText = '' OR ISNULL([Project Type], 'New') LIKE '%' + @SearchText + '%') " &
-                    "ORDER BY ISNULL([Project Type], 'New')"
-                AddParameter(command, "@SearchText", If(searchText, "").Trim())
-
-                Using reader = command.ExecuteReader()
-                    While reader.Read()
-                        Dim projectType = If(reader("ProjectType") Is DBNull.Value, "New", CStr(reader("ProjectType")).Trim())
-                        If projectType.Length = 0 Then
-                            projectType = "New"
-                        End If
-
-                        result.Add(New LiveProjectItem With {
-                            .ProjectCode = "TPL-" & MakeSafeCode(projectType),
-                            .ProjectName = projectType & " Project Template",
-                            .ClientName = "SQL Template",
-                            .TemplateName = projectType,
-                            .ProjectType = projectType,
-                            .ReportType = projectType
-                        })
-                    End While
-                End Using
-            End Using
-        End Using
-
-        Return result
-    End Function
 
     Private Function LoadTaskTemplatesFromDatabaseDesign(connection As IDbConnection, tableName As String, projectType As String, projectSize As String, reportType As String) As List(Of TaskCatalogItem)
         Dim result As New List(Of TaskCatalogItem)()
@@ -588,22 +539,8 @@ Public Class SqlProjectRepository
         Return result
     End Function
 
-    Private Function CreateConnection() As IDbConnection
-        Dim connectionType = ResolveSqlConnectionType()
-        Dim connection = DirectCast(Activator.CreateInstance(connectionType), IDbConnection)
-        connection.ConnectionString = _connectionString
-        Return connection
-    End Function
-
-    Private Function ResolveSqlConnectionType() As Type
-        For Each name In {"Microsoft.Data.SqlClient.SqlConnection, Microsoft.Data.SqlClient", "System.Data.SqlClient.SqlConnection, System.Data.SqlClient"}
-            Dim resolved = Type.GetType(name, False)
-            If resolved IsNot Nothing Then
-                Return resolved
-            End If
-        Next
-
-        Throw New InvalidOperationException("No SQL Server provider was found. Add Microsoft.Data.SqlClient to the project or install the SQL Server client provider on this machine.")
+    Public Function CreateConnection() As SqlConnection
+        Return New SqlConnection(_connectionString)
     End Function
 
     Private Function BuildTaskAssignmentRows(task As ScheduleTask) As List(Of AssignmentPersistRow)
@@ -937,14 +874,6 @@ Public Class SqlProjectRepository
         Return result
     End Function
 
-    Private Sub ValidateProjectDetailsTable(connection As IDbConnection)
-        If Not TableExists(connection, "dbo.Version_Table") Then
-            Throw New InvalidOperationException("Required SQL table is missing: dbo.Version_Table. Please create the tables from SMA_Database_Design before using the planner.")
-        End If
-
-        RequireColumns(connection, "dbo.Version_Table", {"Project Name", "Project ID at SMA", "Version", "Active", "Report BRE", "Report ROL", "Report Within", "Final Completion Date", "Planning Message", "ControlleratROLC", "Client Type", "Is_Pointcloud", "Teck Pack", "Deed Profile", "Shadow_Analysis", "Urgent Small Projects", "IsPlanned"})
-    End Sub
-
     Private Function GetActualProjectSize(connection As IDbConnection, projectIdAtSma As String) As String
         Dim projectSizes = LoadActualProjectSizeLookup(connection)
         Dim projectSize = ""
@@ -983,13 +912,10 @@ Public Class SqlProjectRepository
 
     Private Function LoadVersionProjectLookup(connection As IDbConnection) As Dictionary(Of String, SqlProjectPlanningInfo)
         Dim result As New Dictionary(Of String, SqlProjectPlanningInfo)(StringComparer.OrdinalIgnoreCase)
-        ValidateProjectDetailsTable(connection)
 
         Using GetProjectDetails As IDbCommand = connection.CreateCommand()
             GetProjectDetails.CommandText =
-                "SELECT [Project Name], [Project ID at SMA], [Version], [Active], [Report BRE], [Report ROL], [Report Within], [Final Completion Date], [Planning Message], [ControlleratROLC], [Client Type], [Is_Pointcloud], [Teck Pack], [Deed Profile], [Shadow_Analysis], [Urgent Small Projects], [IsPlanned] " &
-                "FROM dbo.Version_Table " &
-                "WHERE ISNULL(LTRIM(RTRIM(CAST([Project ID at SMA] AS NVARCHAR(100)))), '') <> ''"
+                "SELECT [Project Name], [Project ID at SMA], [Version], [Active], [Report BRE], [Report ROL], [Report Within], [Final Completion Date], [Planning Message], [ControlleratROLC], [Client Type], [Is_Pointcloud], [Teck Pack], [Deed Profile], [Shadow_Analysis], [Urgent Small Projects], [IsPlanned]   FROM [Version_Table]  WHERE [Project ID at SMA] AS NVARCHAR(100)))), '') <> ''"
 
             Using reader = GetProjectDetails.ExecuteReader()
                 While reader.Read()
@@ -1458,36 +1384,6 @@ Public Class SqlProjectRepository
         Return dates
     End Function
 
-    Private Shared Function ParseFirstPredecessor(predecessors As String) As Object
-        If String.IsNullOrWhiteSpace(predecessors) Then
-            Return DBNull.Value
-        End If
-
-        Dim firstValue = predecessors.Split({","c}, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()
-        Dim predecessorNumber As Integer
-        If firstValue IsNot Nothing AndAlso Integer.TryParse(firstValue.Trim(), predecessorNumber) Then
-            Return predecessorNumber
-        End If
-
-        Return DBNull.Value
-    End Function
-
-    Private Shared Function MakeSafeCode(value As String) As String
-        Dim characters = value.ToUpperInvariant().Select(Function(ch) If(Char.IsLetterOrDigit(ch), ch, "_"c)).ToArray()
-        Return New String(characters)
-    End Function
-
-    Private Sub Execute(connection As IDbConnection, sql As String, parameters As Dictionary(Of String, Object))
-        Using command = connection.CreateCommand()
-            command.CommandText = sql
-            If parameters IsNot Nothing Then
-                For Each item In parameters
-                    AddParameter(command, item.Key, item.Value)
-                Next
-            End If
-            command.ExecuteNonQuery()
-        End Using
-    End Sub
 
     Private Sub AddParameter(command As IDbCommand, name As String, value As Object)
         Dim parameter = command.CreateParameter()
@@ -1496,23 +1392,7 @@ Public Class SqlProjectRepository
         command.Parameters.Add(parameter)
     End Sub
 
-    Private Shared Function ResolveProjectType(savedType As String, projectName As String) As String
-        If Not String.IsNullOrWhiteSpace(savedType) Then
-            Return savedType.Trim()
-        End If
 
-        Dim normalizedName = If(projectName, "")
-        If normalizedName.IndexOf("feedback", StringComparison.OrdinalIgnoreCase) >= 0 Then
-            Return "Feedback"
-        End If
-        If normalizedName.IndexOf("update", StringComparison.OrdinalIgnoreCase) >= 0 OrElse
-            normalizedName.IndexOf("bre", StringComparison.OrdinalIgnoreCase) >= 0 OrElse
-            normalizedName.IndexOf("rol", StringComparison.OrdinalIgnoreCase) >= 0 Then
-            Return "Update"
-        End If
-
-        Return "New"
-    End Function
 End Class
 
 Public Class SqlProjectPlanningInfo
@@ -1522,7 +1402,7 @@ Public Class SqlProjectPlanningInfo
     Public Property IsActive As Boolean
     Public Property IsPlanned As Boolean?
     Public Property ProjectSize As String = ""
-    Public Property ProjectType As String = "New"
+    Public Property ProjectType As String = ""
     Public Property ReportType As String = ""
     Public Property FinalCompletionDate As Date?
     Public Property PlanningMessage As String = ""
