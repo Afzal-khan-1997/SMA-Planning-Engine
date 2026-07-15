@@ -10,6 +10,13 @@ Partial Public Class LoginForm
 
     Private Const AllowedPassword As String = "12345"
 
+    <STAThread()>
+    Public Shared Sub Main()
+        Application.EnableVisualStyles()
+        Application.SetCompatibleTextRenderingDefault(False)
+        Application.Run(New LoginForm())
+    End Sub
+
     Public Sub New()
         InitializeComponent()
         _usernameTextBox.Text = CurrentWindowsUserName()
@@ -40,7 +47,16 @@ Partial Public Class LoginForm
             Return
         End If
 
-        DialogResult = DialogResult.OK
+        OpenPlannerForm()
+    End Sub
+
+    Private Sub OpenPlannerForm()
+        Hide()
+
+        Using plannerForm As New SMAPlannerForm()
+            plannerForm.ShowDialog()
+        End Using
+
         Close()
     End Sub
 

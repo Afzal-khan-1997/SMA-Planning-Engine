@@ -5,7 +5,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <RootNamespace>SMAScheduler</RootNamespace>
     <AssemblyName>SMA Planning Engine</AssemblyName>
-    <StartupObject>SMAScheduler.Program</StartupObject>
+    <StartupObject>SMAScheduler.LoginForm</StartupObject>
     <OptionExplicit>On</OptionExplicit>
     <OptionCompare>Binary</OptionCompare>
     <OptionStrict>Off</OptionStrict>
