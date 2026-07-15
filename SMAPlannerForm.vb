@@ -21,7 +21,7 @@ Public Class SMAPlannerForm
         If IsInDesignerHost() Then
             SeedPlannerDesignerData()
         Else
-            LoadProjectList()
+            InitializePlannerWithoutSql()
         End If
         ApplyCurrentTheme()
     End Sub
@@ -44,6 +44,14 @@ Public Class SMAPlannerForm
         _grid.DefaultCellStyle.SelectionBackColor = Color.FromArgb(219, 235, 255)
         _grid.DefaultCellStyle.SelectionForeColor = Color.FromArgb(24, 31, 42)
 
+    End Sub
+
+    Private Sub InitializePlannerWithoutSql()
+        _projects.Clear()
+        _grid.DataSource = _projects
+        RefreshSearchProjectSuggestions()
+        UpdatePlanningSummary()
+        SetPlannerStatus("Enter a Project ID and click Schedule Project to load project details from SQL.")
     End Sub
 
     Private Shared Function CreateSqlRepository() As SqlProjectRepository
