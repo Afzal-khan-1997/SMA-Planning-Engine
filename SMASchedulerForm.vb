@@ -747,6 +747,7 @@ Public Class SMASchedulerForm
         grid.BackgroundColor = Color.White
         grid.BorderStyle = BorderStyle.None
         grid.ColumnHeadersHeight = 32
+        grid.ColumnHeadersVisible = True
         grid.Dock = DockStyle.Fill
         grid.EnableHeadersVisualStyles = False
         grid.GridColor = Color.FromArgb(232, 236, 242)
@@ -842,6 +843,7 @@ Public Class SMASchedulerForm
                 _capacityClearButton.Visible = False
                 _capacityClearButton.Enabled = False
             End If
+            _capacityFilterPanel.Height = 48
         Finally
             _isUpdatingCapacityFilters = False
         End Try
@@ -1004,131 +1006,6 @@ Public Class SMASchedulerForm
         End Try
     End Sub
 
-    Private Function PlannerPreviewBadge(text As String) As Label
-        Return New Label With {
-            .AutoSize = False,
-            .Text = text,
-            .Width = 210,
-            .Height = 28,
-            .Margin = New Padding(0, 2, 0, 4),
-            .BackColor = Color.FromArgb(225, 239, 255),
-            .ForeColor = Color.FromArgb(24, 31, 42),
-            .Font = New Font("Segoe UI Semibold", 9.0F),
-            .TextAlign = ContentAlignment.MiddleCenter
-        }
-    End Function
-
-    Private Function BuildWorkspaceTabPage(title As String) As TabPage
-        Return New TabPage(title) With {
-            .BackColor = Color.White,
-            .Padding = New Padding(0)
-        }
-    End Function
-
-    Private Function BuildWorkspaceSurfaceHost() As Panel
-        Return New Panel With {
-            .Dock = DockStyle.Fill,
-            .Padding = New Padding(0, 0, 10, 16),
-            .BackColor = Color.White
-        }
-    End Function
-
-    Private Function BuildPlannerPreviewHost(mode As PlannerPreviewMode, ByRef chart As PlannerPieChartPanel, ByRef taskCountLabel As Label, ByRef durationLabel As Label) As Panel
-        Dim host As New Panel With {
-            .Dock = DockStyle.Top,
-            .Height = 310,
-            .Padding = New Padding(10, 10, 10, 12),
-            .BackColor = Color.White
-        }
-
-        Dim card As New Panel With {
-            .Dock = DockStyle.Fill,
-            .BackColor = Color.White,
-            .BorderStyle = BorderStyle.FixedSingle,
-            .Padding = New Padding(12)
-        }
-
-        Dim title As New Label With {
-            .Dock = DockStyle.Top,
-            .Height = 28,
-            .Text = "Planner Preview",
-            .Font = New Font("Segoe UI Semibold", 12.0F),
-            .ForeColor = Color.FromArgb(24, 31, 42),
-            .TextAlign = ContentAlignment.MiddleLeft
-        }
-
-        taskCountLabel = PlannerPreviewBadge(PreviewPrimaryBadgeText(mode, 0, 0D, 0))
-        taskCountLabel.Dock = DockStyle.Top
-        taskCountLabel.Tag = mode
-
-        durationLabel = PlannerPreviewBadge(PreviewSecondaryBadgeText(mode, 0D, 0D))
-        durationLabel.Dock = DockStyle.Top
-        durationLabel.Tag = mode
-
-        chart = New PlannerPieChartPanel() With {
-            .Dock = DockStyle.Fill,
-            .Margin = New Padding(0),
-            .MinimumSize = New Size(180, 180),
-            .PreviewMode = mode
-        }
-
-        Dim legend = PlannerLegendGrid(mode)
-        legend.Dock = DockStyle.Right
-        legend.Width = 220
-
-        Dim bodyPanel As New Panel With {
-            .Dock = DockStyle.Fill,
-            .BackColor = Color.White
-        }
-        bodyPanel.Controls.Add(chart)
-        bodyPanel.Controls.Add(legend)
-
-        card.Controls.Add(bodyPanel)
-        card.Controls.Add(durationLabel)
-        card.Controls.Add(taskCountLabel)
-        card.Controls.Add(title)
-        host.Controls.Add(card)
-
-        _plannerPieCharts.Add(chart)
-        _plannerLegendGrids.Add(legend)
-        If _plannerLegendGrid Is Nothing Then
-            _plannerLegendGrid = legend
-        End If
-        _plannerTaskCountLabels.Add(taskCountLabel)
-        _plannerDurationLabels.Add(durationLabel)
-
-        Return host
-    End Function
-
-    Private Function BuildWorkspacePreviewSplit(mainControl As Control, previewHost As Control) As SplitContainer
-        Dim split As New SplitContainer With {
-            .Dock = DockStyle.Fill,
-            .Orientation = Orientation.Vertical,
-            .BackColor = Color.FromArgb(232, 236, 242),
-            .SplitterWidth = 6,
-            .FixedPanel = FixedPanel.Panel2
-        }
-
-        split.Panel1.Padding = New Padding(0, 0, 10, 0)
-        split.Panel2.Padding = New Padding(0)
-        split.Panel1.Controls.Add(mainControl)
-
-        Dim previewCanvas As New Panel With {
-            .Dock = DockStyle.Fill,
-            .BackColor = Color.White
-        }
-        previewCanvas.Controls.Add(previewHost)
-        split.Panel2.Controls.Add(previewCanvas)
-
-        AddHandler split.SizeChanged,
-            Sub()
-                ApplyFixedPanel2Width(split, 620, 310)
-            End Sub
-
-        ApplyFixedPanel2Width(split, 620, 310)
-        Return split
-    End Function
-
     Private Shared Function PreviewPrimaryBadgeText(mode As PlannerPreviewMode, taskCount As Integer, assignedHours As Decimal, resourceCount As Integer) As String
         Select Case mode
             Case PlannerPreviewMode.ResourcesUsed
@@ -1226,157 +1103,6 @@ Public Class SMASchedulerForm
         End If
 
         Return BuildEvenResourceAllocations(resourceNames, task.ResourceHours)
-    End Function
-
-    Private Function BuildResourceUtilizationHost() As Control
-        Dim host As New Panel With {
-            .Dock = DockStyle.Fill,
-            .BackColor = Color.White,
-            .Padding = New Padding(0)
-        }
-
-        Dim toolbar As New FlowLayoutPanel With {
-            .Dock = DockStyle.Top,
-            .Height = 44,
-            .Padding = New Padding(10, 8, 10, 6),
-            .BackColor = Color.White,
-            .WrapContents = False,
-            .AutoScroll = True
-        }
-
-        _resourceUtilizationRefreshButton = New Button With {
-            .Text = "Refresh SQL Hours",
-            .Width = 130,
-            .Height = 28,
-            .FlatStyle = FlatStyle.Flat,
-            .BackColor = Color.FromArgb(42, 95, 160),
-            .ForeColor = Color.White
-        }
-        _resourceUtilizationColorSelector = New ComboBox With {
-            .Width = 180,
-            .DropDownStyle = ComboBoxStyle.DropDownList
-        }
-        _resourceUtilizationColorSelector.Items.AddRange({
-            "Blue - Planned Leave",
-            "Dark Blue - Unplanned Leave",
-            "Yellow - Training",
-            "Green - Weekend Work",
-            "Orange - Pending Work",
-            "Red - Unassigned Hours"
-        })
-        If _resourceUtilizationColorSelector.Items.Count > 0 Then
-            _resourceUtilizationColorSelector.SelectedIndex = 0
-        End If
-
-        _resourceUtilizationApplyButton = New Button With {
-            .Text = "Apply Highlight",
-            .Width = 120,
-            .Height = 28,
-            .FlatStyle = FlatStyle.Flat
-        }
-        _resourceUtilizationClearButton = New Button With {
-            .Text = "Clear Highlight",
-            .Width = 120,
-            .Height = 28,
-            .FlatStyle = FlatStyle.Flat
-        }
-        _resourceUtilizationMailButton = New Button With {
-            .Text = "Send Availability Snip",
-            .Width = 160,
-            .Height = 28,
-            .FlatStyle = FlatStyle.Flat,
-            .BackColor = Color.FromArgb(34, 169, 105),
-            .ForeColor = Color.White
-        }
-
-        toolbar.Controls.Add(_resourceUtilizationRefreshButton)
-        toolbar.Controls.Add(_resourceUtilizationColorSelector)
-        toolbar.Controls.Add(_resourceUtilizationApplyButton)
-        toolbar.Controls.Add(_resourceUtilizationClearButton)
-        toolbar.Controls.Add(_resourceUtilizationMailButton)
-
-        host.Controls.Add(_resourceUtilizationGrid)
-        host.Controls.Add(toolbar)
-        Return host
-    End Function
-
-    Private Function BuildTaskViewGrid() As DataGridView
-        Dim usageGrid As New DataGridView With {
-            .AllowUserToAddRows = False,
-            .AllowUserToDeleteRows = False,
-            .AutoGenerateColumns = False,
-            .AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None,
-            .BackgroundColor = Color.White,
-            .BorderStyle = BorderStyle.None,
-            .ColumnHeadersHeight = 32,
-            .Dock = DockStyle.Fill,
-            .EnableHeadersVisualStyles = False,
-            .GridColor = Color.FromArgb(232, 236, 242),
-            .MultiSelect = False,
-            .Name = "_taskUsageGrid",
-            .RowHeadersVisible = False,
-            .ScrollBars = ScrollBars.Both,
-            .SelectionMode = DataGridViewSelectionMode.CellSelect
-        }
-        usageGrid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(35, 46, 66)
-        usageGrid.ColumnHeadersDefaultCellStyle.ForeColor = Color.White
-        usageGrid.ColumnHeadersDefaultCellStyle.Font = New Font("Segoe UI Semibold", 9.0F)
-        usageGrid.DefaultCellStyle.SelectionBackColor = Color.FromArgb(219, 235, 255)
-        usageGrid.DefaultCellStyle.SelectionForeColor = Color.FromArgb(24, 31, 42)
-        Return usageGrid
-    End Function
-
-    Private Function BuildResourceUsageGrid() As DataGridView
-        Dim usageGrid As New DataGridView With {
-            .AllowUserToAddRows = False,
-            .AllowUserToDeleteRows = False,
-            .AutoGenerateColumns = False,
-            .AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None,
-            .BackgroundColor = Color.White,
-            .BorderStyle = BorderStyle.None,
-            .ColumnHeadersHeight = 32,
-            .Dock = DockStyle.Fill,
-            .EnableHeadersVisualStyles = False,
-            .GridColor = Color.FromArgb(232, 236, 242),
-            .MultiSelect = False,
-            .Name = "_resourceUsageGrid",
-            .RowHeadersVisible = False,
-            .ScrollBars = ScrollBars.Both,
-            .SelectionMode = DataGridViewSelectionMode.CellSelect
-        }
-        usageGrid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(35, 46, 66)
-        usageGrid.ColumnHeadersDefaultCellStyle.ForeColor = Color.White
-        usageGrid.ColumnHeadersDefaultCellStyle.Font = New Font("Segoe UI Semibold", 9.0F)
-        usageGrid.DefaultCellStyle.SelectionBackColor = Color.FromArgb(219, 235, 255)
-        usageGrid.DefaultCellStyle.SelectionForeColor = Color.FromArgb(24, 31, 42)
-        Return usageGrid
-    End Function
-
-    Private Function BuildCapacityPlanningSummaryGrid() As DataGridView
-        Dim grid As New DataGridView With {
-            .AllowUserToAddRows = False,
-            .AllowUserToDeleteRows = False,
-            .AutoGenerateColumns = False,
-            .AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None,
-            .BackgroundColor = Color.White,
-            .BorderStyle = BorderStyle.None,
-            .ColumnHeadersHeight = 32,
-            .Dock = DockStyle.Fill,
-            .EnableHeadersVisualStyles = False,
-            .GridColor = Color.FromArgb(232, 236, 242),
-            .MultiSelect = False,
-            .Name = "_capacityGrid",
-            .ReadOnly = True,
-            .RowHeadersVisible = False,
-            .ScrollBars = ScrollBars.Both,
-            .SelectionMode = DataGridViewSelectionMode.FullRowSelect
-        }
-        grid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(35, 46, 66)
-        grid.ColumnHeadersDefaultCellStyle.ForeColor = Color.White
-        grid.ColumnHeadersDefaultCellStyle.Font = New Font("Segoe UI Semibold", 9.0F)
-        grid.DefaultCellStyle.SelectionBackColor = Color.FromArgb(219, 235, 255)
-        grid.DefaultCellStyle.SelectionForeColor = Color.FromArgb(24, 31, 42)
-        Return grid
     End Function
 
     Private Sub UpdateTaskUsageGrid()
@@ -2528,6 +2254,7 @@ Public Class SMASchedulerForm
             End If
 
             AddDateColumns(_capacityGrid, _capacityDateColumns, projectStart, projectFinish)
+            FormatCapacityDateColumnHeaders()
 
             Dim sqlData = LoadSqlCapacityPlanningData(projectStart, projectFinish)
             If sqlData IsNot Nothing AndAlso sqlData.Employees.Count > 0 Then
@@ -2614,6 +2341,22 @@ Public Class SMASchedulerForm
 
         Return Date.Today
     End Function
+
+    Private Sub FormatCapacityDateColumnHeaders()
+        If _capacityGrid Is Nothing Then
+            Return
+        End If
+
+        _capacityGrid.ColumnHeadersVisible = True
+        _capacityGrid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing
+        _capacityGrid.ColumnHeadersHeight = 42
+
+        For Each dateColumn In _capacityDateColumns
+            Dim column = _capacityGrid.Columns(dateColumn.Key)
+            column.HeaderText = dateColumn.Value.ToString("dd-MMM" & Environment.NewLine & "ddd", CultureInfo.InvariantCulture)
+            column.MinimumWidth = 88
+        Next
+    End Sub
 
     Private Function CapacityFilterFinishDate() As Date
         If _capacityFinishPicker IsNot Nothing Then

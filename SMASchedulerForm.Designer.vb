@@ -1035,15 +1035,16 @@ Partial Class SMASchedulerForm
         _capacityGrid.AllowUserToDeleteRows = False
         _capacityGrid.BackgroundColor = Color.White
         _capacityGrid.BorderStyle = BorderStyle.None
-        _capacityGrid.ColumnHeadersHeight = 32
+        _capacityGrid.ColumnHeadersHeight = 42
+        _capacityGrid.ColumnHeadersVisible = True
         _capacityGrid.Dock = DockStyle.Fill
         _capacityGrid.EnableHeadersVisualStyles = False
-        _capacityGrid.Location = New Point(3, 107)
+        _capacityGrid.Location = New Point(3, 51)
         _capacityGrid.Name = "_capacityGrid"
         _capacityGrid.ReadOnly = True
         _capacityGrid.RowHeadersVisible = False
         _capacityGrid.RowHeadersWidth = 51
-        _capacityGrid.Size = New Size(1544, 420)
+        _capacityGrid.Size = New Size(1544, 476)
         _capacityGrid.TabIndex = 1
         ' 
         ' _capacityFilterPanel
@@ -1060,7 +1061,7 @@ Partial Class SMASchedulerForm
         _capacityFilterPanel.Location = New Point(3, 3)
         _capacityFilterPanel.Name = "_capacityFilterPanel"
         _capacityFilterPanel.Padding = New Padding(10, 8, 10, 6)
-        _capacityFilterPanel.Size = New Size(1544, 104)
+        _capacityFilterPanel.Size = New Size(1544, 48)
         _capacityFilterPanel.TabIndex = 0
         _capacityFilterPanel.WrapContents = False
         ' 
