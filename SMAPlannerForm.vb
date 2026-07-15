@@ -27,8 +27,8 @@ Public Class SMAPlannerForm
     End Sub
 
     Private Sub ConfigurePlannerForm()
-        _liveProjectSearchBox.AutoCompleteMode = AutoCompleteMode.Suggest
-        _liveProjectSearchBox.AutoCompleteSource = AutoCompleteSource.CustomSource
+        _liveProjectSearchBox.AutoCompleteMode = AutoCompleteMode.None
+        _liveProjectSearchBox.AutoCompleteSource = AutoCompleteSource.None
         _liveProjectSearchBox.MaxLength = 8
         _recentProjectSearchBox.MaxLength = 8
 
@@ -188,7 +188,6 @@ Public Class SMAPlannerForm
     Private Sub RefreshSearchProjectSuggestions()
         Dim query = If(_liveProjectSearchBox.Text, "").Trim()
         Dim previousCode = If(_selectedSearchProject Is Nothing, "", _selectedSearchProject.ProjectCode)
-        Dim autoComplete As New AutoCompleteStringCollection()
 
         _searchProjectMatches.Clear()
         For Each project In SearchStoredProjects(query).
@@ -196,13 +195,7 @@ Public Class SMAPlannerForm
             Select(Function(group) group.First()).
             OrderBy(Function(item) item.SavedProjectId)
             _searchProjectMatches.Add(project)
-            Dim searchToken = ProjectSearchToken(project)
-            If searchToken.Length > 0 Then
-                autoComplete.Add(searchToken)
-            End If
         Next
-
-        _liveProjectSearchBox.AutoCompleteCustomSource = autoComplete
 
         If query.Length = 0 Then
             _selectedSearchProject = Nothing

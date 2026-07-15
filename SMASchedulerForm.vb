@@ -54,14 +54,14 @@ Public Class SMASchedulerForm
         _taskCatalogService = New TaskCatalogService(_sqlRepository)
         _employeeCatalogService = New EmployeeCatalogService(_sqlRepository)
         InitializeComponent()
-        ConfigureDesignerUi()
+
         If IsInDesignerHost() Then
-            SeedSchedulerDesignerData()
+            Return
         End If
+
+        ConfigureDesignerUi()
         RecalculateAndRefresh("Ready")
-        If Not IsInDesignerHost() Then
-            ClearPlanningInputDisplays()
-        End If
+        ClearPlanningInputDisplays()
         MarkCurrentStateSaved()
     End Sub
 
