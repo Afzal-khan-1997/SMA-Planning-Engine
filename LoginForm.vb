@@ -5,7 +5,8 @@ Partial Public Class LoginForm
 
     Private Shared ReadOnly AllowedUsers As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase) From {
         "Sheik.Ahsan",
-        "Afzal.khan"
+        "Afzal.khan",
+        "AK"
     }
 
     Private Const AllowedPassword As String = "12345"
@@ -79,4 +80,8 @@ Partial Public Class LoginForm
 
         Return identityName
     End Function
+
+    Private Sub _cancelButton_Click(sender As Object, e As EventArgs) Handles _cancelButton.Click
+        Exit Sub
+    End Sub
 End Class

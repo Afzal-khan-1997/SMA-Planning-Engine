@@ -84,7 +84,7 @@ Public Class SMASchedulerForm
             Return Nothing
         End If
 
-        Return New SqlProjectRepository(connectionString.Trim())
+        Return New SqlProjectRepository()
     End Function
 
     Private Shared Function IsInDesignerHost() As Boolean

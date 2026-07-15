@@ -2,22 +2,11 @@ Imports System.ComponentModel
 Imports System.Data
 Imports System.Globalization
 Imports System.Reflection
+Imports Microsoft.Data.SqlClient
 
 Public Class SqlProjectRepository
-    Private ReadOnly _connectionString As String
-
-    Public Sub New(connectionString As String)
-        _connectionString = connectionString
-    End Sub
-
-    Public Sub TestConnection()
-        Using connection = CreateConnection()
-            connection.Open()
-        End Using
-    End Sub
-
     Public Sub SaveProject(projectName As String, tasks As BindingList(Of ScheduleTask), projectVersion As String, projectSize As String, projectType As String, totalProjectHours As Decimal, resourcesNeeded As Integer, resourceHours As Decimal, Optional projectIdAtSma As String = "")
-        Using connection = CreateConnection()
+        Using connection As SqlConnection = ActiveSQLConnection()
             connection.Open()
 
             If String.IsNullOrWhiteSpace(projectVersion) Then
@@ -49,7 +38,7 @@ Public Class SqlProjectRepository
             Return Nothing
         End If
 
-        Using connection = CreateConnection()
+        Using connection As SqlConnection = ActiveSQLConnection()
             connection.Open()
 
             Dim GetProjectDetailsDataTable As New DataTable()
@@ -97,7 +86,7 @@ Public Class SqlProjectRepository
         Dim projects As New List(Of ProjectLibraryItem)()
         Dim projectCode = If(projectIdAtSma, "").Trim()
 
-        Using connection = CreateConnection()
+        Using connection As SqlConnection = ActiveSQLConnection()
             connection.Open()
 
             If Not TableExists(connection, "dbo.Version_Table") OrElse Not TableExists(connection, "dbo.Project Schedule Table") Then
@@ -175,7 +164,7 @@ Public Class SqlProjectRepository
             Return Nothing
         End If
 
-        Using connection = CreateConnection()
+        Using connection As SqlConnection = ActiveSQLConnection()
             connection.Open()
 
             If Not TableExists(connection, "dbo.Version_Table") OrElse Not TableExists(connection, "dbo.Project Schedule Table") Then
@@ -303,7 +292,7 @@ Public Class SqlProjectRepository
     Public Function LoadResourceAvailability(startDate As Date, finishDate As Date) As Dictionary(Of String, Dictionary(Of Date, Decimal))
         Dim result As New Dictionary(Of String, Dictionary(Of Date, Decimal))(StringComparer.OrdinalIgnoreCase)
 
-        Using connection = CreateConnection()
+        Using connection As SqlConnection = ActiveSQLConnection()
             connection.Open()
             ValidateExcelSqlDesign(connection, requireScheduleSaveTables:=True)
 
@@ -319,7 +308,7 @@ Public Class SqlProjectRepository
     Public Function LoadEmployees() As List(Of String)
         Dim result As New List(Of String)()
 
-        Using connection = CreateConnection()
+        Using connection As SqlConnection = ActiveSQLConnection()
             connection.Open()
             ValidateExcelSqlDesign(connection, requireScheduleSaveTables:=False)
 
@@ -352,7 +341,7 @@ Public Class SqlProjectRepository
     Public Function LoadCapacityPlanningData(startDate As Date, finishDate As Date) As SqlCapacityPlanningData
         Dim result As New SqlCapacityPlanningData()
 
-        Using connection = CreateConnection()
+        Using connection As SqlConnection = ActiveSQLConnection()
             connection.Open()
             ValidateExcelSqlDesign(connection, requireScheduleSaveTables:=True)
 
@@ -473,7 +462,7 @@ Public Class SqlProjectRepository
     Public Function LoadTaskTemplates(templateName As String, projectSize As String, Optional reportType As String = "") As List(Of TaskCatalogItem)
         Dim result As New List(Of TaskCatalogItem)()
 
-        Using connection = CreateConnection()
+        Using connection As SqlConnection = ActiveSQLConnection()
             connection.Open()
             ValidateExcelSqlDesign(connection, requireScheduleSaveTables:=False)
 
@@ -537,10 +526,6 @@ Public Class SqlProjectRepository
         End Using
 
         Return result
-    End Function
-
-    Public Function CreateConnection() As SqlConnection
-        Return New SqlConnection(_connectionString)
     End Function
 
     Private Function BuildTaskAssignmentRows(task As ScheduleTask) As List(Of AssignmentPersistRow)
@@ -814,11 +799,6 @@ Public Class SqlProjectRepository
         End Using
 
         Return result
-    End Function
-
-    Private Function LoadEmployeeNameLookup(connection As IDbConnection) As Dictionary(Of Integer, String)
-        Dim result As New Dictionary(Of Integer, String)()
-        Return LoadEmployeeNameLookupFromMaster(connection)
     End Function
 
     Private Function LoadEmployeeNameLookupFromMaster(connection As IDbConnection) As Dictionary(Of Integer, String)
@@ -1232,26 +1212,6 @@ Public Class SqlProjectRepository
             Case Else
                 Return ""
         End Select
-    End Function
-
-    Private Shared Function ProjectTypeFromVersionFlags(reportBre As Object, reportRol As Object, reportWithin As Object) As String
-        If SqlBoolean(reportBre) AndAlso SqlBoolean(reportRol) Then
-            Return "BRE/ROL"
-        End If
-
-        If SqlBoolean(reportWithin) Then
-            Return "Within"
-        End If
-
-        If SqlBoolean(reportRol) Then
-            Return "ROL"
-        End If
-
-        If SqlBoolean(reportBre) Then
-            Return "BRE"
-        End If
-
-        Return "New"
     End Function
 
     Private Shared Function BuildReportTypeDisplay(reportBre As Object, reportRol As Object, reportWithin As Object) As String

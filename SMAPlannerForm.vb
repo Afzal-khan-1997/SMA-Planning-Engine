@@ -53,7 +53,6 @@ Public Class SMAPlannerForm
     Private Sub InitializePlannerWithoutSql()
         _projects.Clear()
         _grid.DataSource = _projects
-        RefreshSearchProjectSuggestions()
         UpdatePlanningSummary()
         SetPlannerStatus("Enter a Project ID, choose task hours size, then click Schedule Project.")
     End Sub
@@ -77,7 +76,7 @@ Public Class SMAPlannerForm
             Return Nothing
         End If
 
-        Return New SqlProjectRepository(connectionString)
+        Return New SqlProjectRepository()
     End Function
 
     Private Sub PlannerActivated(sender As Object, e As EventArgs) Handles MyBase.Activated
@@ -85,7 +84,7 @@ Public Class SMAPlannerForm
     End Sub
 
     Private Sub ApplyCurrentTheme()
-        _currentTheme = DeterminePlannerTheme()
+        _currentTheme = SchedulerThemePalette.ThemeByName("Dusk")
         Dim theme = _currentTheme
 
         If theme Is Nothing OrElse IsDisposed Then
@@ -174,91 +173,8 @@ Public Class SMAPlannerForm
         End If
     End Sub
 
-    Private Function DeterminePlannerTheme() As SchedulerThemePalette
-        Return SchedulerThemePalette.ThemeByName("Dusk")
-    End Function
-
     Private Shared Function ControlReady(control As Control) As Boolean
         Return control IsNot Nothing AndAlso Not control.IsDisposed
-    End Function
-
-    Private Sub LiveProjectSearchTextChanged(sender As Object, e As EventArgs) Handles _liveProjectSearchBox.TextChanged
-        If _isUpdatingSearchText Then
-            Return
-        End If
-        RefreshSearchProjectSuggestions()
-    End Sub
-
-    Private Sub RefreshSearchProjectSuggestions()
-        Dim query = If(_liveProjectSearchBox.Text, "").Trim()
-        Dim previousCode = If(_selectedSearchProject Is Nothing, "", _selectedSearchProject.ProjectCode)
-
-        _searchProjectMatches.Clear()
-        For Each project In SearchStoredProjects(query).
-            GroupBy(Function(item) item.ProjectCode, StringComparer.OrdinalIgnoreCase).
-            Select(Function(group) group.First()).
-            OrderBy(Function(item) item.SavedProjectId)
-            _searchProjectMatches.Add(project)
-        Next
-
-        If query.Length = 0 Then
-            _selectedSearchProject = Nothing
-            Return
-        End If
-
-        _selectedSearchProject = _searchProjectMatches.FirstOrDefault(
-            Function(project) Not String.IsNullOrWhiteSpace(previousCode) AndAlso
-                String.Equals(project.ProjectCode, previousCode, StringComparison.OrdinalIgnoreCase))
-
-        If _selectedSearchProject Is Nothing Then
-            _selectedSearchProject = ResolveSearchProject(False)
-        End If
-    End Sub
-
-    Private Function SearchStoredProjects(searchText As String) As IEnumerable(Of LiveProjectItem)
-        Dim query = If(searchText, "").Trim()
-        Dim matches = _projects.AsEnumerable()
-
-        If query.Length > 0 Then
-            matches = matches.Where(Function(project)
-                                        Return project.DisplayProjectId.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0 OrElse
-                                            project.ProjectName.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0
-                                    End Function)
-        End If
-
-        Return matches.Select(Function(project) CreateStoredProjectOption(project))
-    End Function
-
-    Private Shared Function CreateStoredProjectOption(project As ProjectLibraryItem) As LiveProjectItem
-        Dim projectCode = project.DisplayProjectId
-        Return New LiveProjectItem With {
-            .ProjectCode = projectCode,
-            .ProjectName = project.ProjectName,
-            .ClientName = "SQL",
-            .VersionNumber = If(project.VersionNumber, "").Trim(),
-            .ProjectSize = If(project.ProjectSize, "").Trim(),
-            .TemplateName = project.ProjectName,
-            .ProjectType = If(String.IsNullOrWhiteSpace(project.ProjectType), "New", project.ProjectType),
-            .SavedProjectId = project.ProjectId,
-            .SourceFilePath = project.FilePath,
-            .ReportType = If(String.IsNullOrWhiteSpace(project.ProjectType), "New", project.ProjectType)
-        }
-    End Function
-
-    Private Shared Function ProjectSearchToken(project As LiveProjectItem) As String
-        If project Is Nothing Then
-            Return ""
-        End If
-
-        If Not String.IsNullOrWhiteSpace(project.ProjectCode) Then
-            Return project.ProjectCode.Trim()
-        End If
-
-        If project.SavedProjectId > 0 Then
-            Return project.SavedProjectId.ToString(CultureInfo.InvariantCulture)
-        End If
-
-        Return ""
     End Function
 
     Private Sub LoadProjectList()
@@ -269,7 +185,6 @@ Public Class SMAPlannerForm
 
         If _sqlRepository Is Nothing Then
             SetPlannerStatus("SQL connection is not configured. Update App.config with SmaSchedulerDb.")
-            RefreshSearchProjectSuggestions()
             UpdatePlanningSummary()
             Return
         End If
@@ -287,12 +202,7 @@ Public Class SMAPlannerForm
         If loadedFromSql AndAlso recentSearchText.Length > 0 AndAlso _projects.Count = 0 Then
             SetPlannerStatus("This project is not planned in this application.")
         End If
-        RefreshSearchProjectSuggestions()
         UpdatePlanningSummary()
-    End Sub
-
-    Private Sub RefreshPlannerLists()
-        LoadProjectList()
     End Sub
 
     Private Sub UpdatePlanningSummary()
@@ -320,70 +230,6 @@ Public Class SMAPlannerForm
         Return projects.Count(Function(project) String.Equals(project.ProjectType, projectType, StringComparison.OrdinalIgnoreCase))
     End Function
 
-    Private Function ResolveSearchProject(preferFirstMatch As Boolean) As LiveProjectItem
-        Dim query = If(_liveProjectSearchBox.Text, "").Trim()
-        If query.Length = 0 Then
-            Return Nothing
-        End If
-
-        Dim exactMatch = _searchProjectMatches.FirstOrDefault(
-            Function(project)
-                Return ProjectSearchToken(project).Equals(query, StringComparison.OrdinalIgnoreCase)
-            End Function)
-        If exactMatch IsNot Nothing Then
-            Return exactMatch
-        End If
-
-        If preferFirstMatch AndAlso _searchProjectMatches.Count > 0 Then
-            Return _searchProjectMatches(0)
-        End If
-
-        Return Nothing
-    End Function
-
-    Private Sub LiveProjectSearchKeyDown(sender As Object, e As KeyEventArgs) Handles _liveProjectSearchBox.KeyDown
-        If e.KeyCode = Keys.Back Then
-            HandleSearchBoxBackspace(e)
-            Return
-        End If
-
-        If e.KeyCode <> Keys.Enter Then
-            Return
-        End If
-
-        e.Handled = True
-        e.SuppressKeyPress = True
-
-        Dim matchedProject = ResolveSearchProject(True)
-        If matchedProject IsNot Nothing Then
-            _selectedSearchProject = matchedProject
-            ReplaceSearchText(ProjectSearchToken(matchedProject))
-        End If
-    End Sub
-
-    Private Sub HandleSearchBoxBackspace(e As KeyEventArgs)
-        If _isUpdatingSearchText OrElse _liveProjectSearchBox.SelectionLength <= 0 Then
-            Return
-        End If
-
-        Dim selectionStart = _liveProjectSearchBox.SelectionStart
-        Dim currentText = _liveProjectSearchBox.Text
-        Dim updatedText = If(selectionStart <= 0, "", currentText.Substring(0, selectionStart - 1))
-        ReplaceSearchText(updatedText)
-        e.Handled = True
-        e.SuppressKeyPress = True
-    End Sub
-
-    Private Sub ReplaceSearchText(value As String)
-        _isUpdatingSearchText = True
-        Try
-            _liveProjectSearchBox.Text = value
-            _liveProjectSearchBox.SelectionStart = _liveProjectSearchBox.TextLength
-            _liveProjectSearchBox.SelectionLength = 0
-        Finally
-            _isUpdatingSearchText = False
-        End Try
-    End Sub
 
     Private Sub RecentProjectSearchTextChanged(sender As Object, e As EventArgs) Handles _recentProjectSearchBox.TextChanged
         LoadProjectList()
@@ -391,19 +237,6 @@ Public Class SMAPlannerForm
 
     Private Sub ActiveProjectsCheckBoxChanged(sender As Object, e As EventArgs) Handles _activeProjectsCheckBox.CheckedChanged
         LoadProjectList()
-    End Sub
-
-    Private Sub RecentProjectSearchKeyDown(sender As Object, e As KeyEventArgs) Handles _recentProjectSearchBox.KeyDown
-        If e.KeyCode <> Keys.Enter Then
-            Return
-        End If
-
-        e.Handled = True
-        e.SuppressKeyPress = True
-        LoadProjectList()
-        If _recentProjectSearchBox.Text.Trim().Length > 0 AndAlso _projects.Count = 0 Then
-            MessageBox.Show(Me, "This project is not planned in this application.", "Recent Scheduled Projects", MessageBoxButtons.OK, MessageBoxIcon.Information)
-        End If
     End Sub
 
     Private Sub btnScheduleProject_Click(sender As Object, e As EventArgs) Handles btnScheduleProject.Click
@@ -438,36 +271,24 @@ Public Class SMAPlannerForm
         Catch ex As Exception
             MessageBox.Show(Me, "SQL project details could not be loaded." & Environment.NewLine & ex.Message, "SQL Load Failed", MessageBoxButtons.OK, MessageBoxIcon.Error)
             SetPlannerStatus("SQL project details could not be loaded.")
-            Return
+            Exit Sub
         End Try
 
         If sqlProject Is Nothing Then
             MessageBox.Show(Me, "No project found for this Project ID.", "Schedule Project", MessageBoxButtons.OK, MessageBoxIcon.Information)
             SetPlannerStatus("No project found for this Project ID.")
-            Return
+            Exit Sub
         End If
 
         ' Step 2: enforce planning rules before opening the Scheduler form.
         If sqlProject IsNot Nothing AndAlso sqlProject.IsPlanned.HasValue AndAlso sqlProject.IsPlanned.Value Then
             MessageBox.Show(Me, "This project has already been planned. Please search for it in the 'Recent Scheduled Projects' list.", "Schedule Project", MessageBoxButtons.OK, MessageBoxIcon.Warning)
-            Return
+            Exit Sub
         End If
 
         If sqlProject IsNot Nothing AndAlso Not sqlProject.IsActive Then
             MessageBox.Show(Me, "This project is not planned in this application.", "Schedule Project", MessageBoxButtons.OK, MessageBoxIcon.Information)
-            Return
-        End If
-
-        If String.IsNullOrWhiteSpace(sqlProject.ProjectName) Then
-            MessageBox.Show(Me, "Project name is missing in SQL for this Project ID.", "Schedule Project", MessageBoxButtons.OK, MessageBoxIcon.Warning)
-            SetPlannerStatus("Project name is missing in SQL.")
-            Return
-        End If
-
-        If String.IsNullOrWhiteSpace(sqlProject.VersionNumber) Then
-            MessageBox.Show(Me, "Project version is missing in SQL for this Project ID.", "Schedule Project", MessageBoxButtons.OK, MessageBoxIcon.Warning)
-            SetPlannerStatus("Project version is missing in SQL.")
-            Return
+            Exit Sub
         End If
 
         ' Step 3: build the scheduler input model from SQL project metadata and report filters.
@@ -509,11 +330,11 @@ Public Class SMAPlannerForm
         Catch ex As InvalidOperationException
             MessageBox.Show(Me, ex.Message, "Schedule Project", MessageBoxButtons.OK, MessageBoxIcon.Information)
             SetPlannerStatus(ex.Message)
-            Return
+            Exit Sub
         Catch ex As Exception
             MessageBox.Show(Me, "SQL task details could not be loaded." & Environment.NewLine & ex.Message, "SQL Load Failed", MessageBoxButtons.OK, MessageBoxIcon.Error)
             SetPlannerStatus("SQL task details could not be loaded.")
-            Return
+            Exit Sub
         Finally
             If scheduler IsNot Nothing Then
                 scheduler.Dispose()
@@ -521,7 +342,7 @@ Public Class SMAPlannerForm
         End Try
 
         ApplyCurrentTheme()
-        RefreshPlannerLists()
+        LoadProjectList()
     End Sub
 
     Private Function SelectedTaskHoursSize() As String
@@ -700,7 +521,7 @@ Public Class SMAPlannerForm
             FormTransitionService.ShowDialogWithMotion(Me, scheduler)
         End Using
         ApplyCurrentTheme()
-        RefreshPlannerLists()
+        LoadProjectList()
     End Sub
 
     Private Sub SetPlannerStatus(message As String)
