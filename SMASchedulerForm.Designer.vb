@@ -1037,6 +1037,10 @@ Partial Class SMASchedulerForm
         _capacityGrid.BorderStyle = BorderStyle.None
         _capacityGrid.ColumnHeadersHeight = 42
         _capacityGrid.ColumnHeadersVisible = True
+        _capacityGrid.ColumnHeadersDefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter
+        _capacityGrid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(CByte(35), CByte(46), CByte(66))
+        _capacityGrid.ColumnHeadersDefaultCellStyle.ForeColor = Color.White
+        _capacityGrid.ColumnHeadersDefaultCellStyle.WrapMode = DataGridViewTriState.True
         _capacityGrid.Dock = DockStyle.Fill
         _capacityGrid.EnableHeadersVisualStyles = False
         _capacityGrid.Location = New Point(3, 51)

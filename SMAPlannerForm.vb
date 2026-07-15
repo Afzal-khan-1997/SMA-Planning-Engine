@@ -35,9 +35,6 @@ Public Class SMAPlannerForm
         If _taskHoursSizeSelector.Items.Count = 0 Then
             _taskHoursSizeSelector.Items.AddRange({"Small", "Medium", "Large", "Very Large"})
         End If
-        If _taskHoursSizeSelector.SelectedIndex < 0 Then
-            _taskHoursSizeSelector.SelectedIndex = 0
-        End If
 
         _grid.AutoGenerateColumns = False
         _grid.DataSource = _projects
@@ -417,6 +414,12 @@ Public Class SMAPlannerForm
         End If
 
         Dim taskHoursSize = SelectedTaskHoursSize()
+        If String.IsNullOrWhiteSpace(taskHoursSize) Then
+            MessageBox.Show(Me, "Please select project size for scheduling.", "Schedule Project", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            SetPlannerStatus("Please select project size for scheduling.")
+            Return
+        End If
+
         If IsDemoProjectId(projectCode) Then
             OpenDemoSchedulerProject()
             Return
@@ -526,11 +529,7 @@ Public Class SMAPlannerForm
             "",
             Convert.ToString(_taskHoursSizeSelector.SelectedItem, CultureInfo.InvariantCulture))
 
-        If IsKnownProjectSize(selectedSize) Then
-            Return selectedSize.Trim()
-        End If
-
-        Return "Small"
+        Return If(selectedSize, "").Trim()
     End Function
 
     Private Shared Function IsDemoProjectId(projectCode As String) As Boolean
@@ -581,11 +580,6 @@ Public Class SMAPlannerForm
 #End If
     End Sub
 
-    Private Shared Function IsKnownProjectSize(projectSize As String) As Boolean
-        Return {"Small", "Medium", "Large", "Very Large"}.
-            Any(Function(sizeName) String.Equals(sizeName, If(projectSize, "").Trim(), StringComparison.OrdinalIgnoreCase))
-    End Function
-
     Private Shared Function FirstNonBlank(ParamArray values() As String) As String
         For Each value In values
             If Not String.IsNullOrWhiteSpace(value) Then
@@ -617,7 +611,7 @@ Public Class SMAPlannerForm
         End If
 
         Dim details As New List(Of String) From {
-            "Task Hours Size: " & If(String.IsNullOrWhiteSpace(taskHoursSize), "Small", taskHoursSize.Trim()),
+            "Task Hours Size: " & If(String.IsNullOrWhiteSpace(taskHoursSize), "Not selected", taskHoursSize.Trim()),
             "Actual Project Size: " & If(String.IsNullOrWhiteSpace(sqlProject.ProjectSize), "Not found", sqlProject.ProjectSize.Trim()),
             "Report Type: " & If(String.IsNullOrWhiteSpace(sqlProject.ReportType), "None", sqlProject.ReportType)
         }

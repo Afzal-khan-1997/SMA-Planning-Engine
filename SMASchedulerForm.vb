@@ -159,7 +159,7 @@ Public Class SMASchedulerForm
         _hasDeedProfile = liveProject.DeedProfile
         _hasShadowAnalysis = liveProject.ShadowAnalysis
         _isUrgentSmallProject = liveProject.UrgentSmallProjects
-        SelectProjectSize(If(String.IsNullOrWhiteSpace(liveProject.ProjectSize), "Small", liveProject.ProjectSize))
+        SelectProjectSize(liveProject.ProjectSize)
         UpdateProjectMetadataDisplay()
 
         Dim demoTasks = CreateDemoTaskCatalog()
@@ -597,7 +597,7 @@ Public Class SMASchedulerForm
         _taskCatalogSelector.DataSource = _taskCatalog
         _taskCatalogSelector.DisplayMember = NameOf(TaskCatalogItem.Title)
         _projectSizeSelector.Items.AddRange({"Small", "Medium", "Large", "Very Large"})
-        _projectSizeSelector.SelectedIndex = 0
+        _projectSizeSelector.SelectedIndex = -1
 
         _isLoadingCatalogControls = False
         UpdateAllocationHoursFromSelectedCatalog()
@@ -2255,6 +2255,7 @@ Public Class SMASchedulerForm
 
             AddDateColumns(_capacityGrid, _capacityDateColumns, projectStart, projectFinish)
             FormatCapacityDateColumnHeaders()
+            AddCapacityDateHeaderRow()
 
             Dim sqlData = LoadSqlCapacityPlanningData(projectStart, projectFinish)
             If sqlData IsNot Nothing AndAlso sqlData.Employees.Count > 0 Then
@@ -2348,13 +2349,48 @@ Public Class SMASchedulerForm
         End If
 
         _capacityGrid.ColumnHeadersVisible = True
+        _capacityGrid.EnableHeadersVisualStyles = False
+        _capacityGrid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(35, 46, 66)
+        _capacityGrid.ColumnHeadersDefaultCellStyle.ForeColor = Color.White
+        _capacityGrid.ColumnHeadersDefaultCellStyle.Font = New Font("Segoe UI Semibold", 9.0F)
+        _capacityGrid.ColumnHeadersDefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter
+        _capacityGrid.ColumnHeadersDefaultCellStyle.WrapMode = DataGridViewTriState.True
         _capacityGrid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing
         _capacityGrid.ColumnHeadersHeight = 42
+        If _capacityGrid.Columns.Count > 0 Then
+            _capacityGrid.Columns(0).HeaderText = "Resource / Task"
+        End If
 
         For Each dateColumn In _capacityDateColumns
             Dim column = _capacityGrid.Columns(dateColumn.Key)
             column.HeaderText = dateColumn.Value.ToString("dd-MMM" & Environment.NewLine & "ddd", CultureInfo.InvariantCulture)
             column.MinimumWidth = 88
+        Next
+    End Sub
+
+    Private Sub AddCapacityDateHeaderRow()
+        If _capacityGrid Is Nothing OrElse _capacityGrid.Columns.Count = 0 Then
+            Return
+        End If
+
+        Dim rowIndex = _capacityGrid.Rows.Add()
+        Dim row = _capacityGrid.Rows(rowIndex)
+        row.Frozen = True
+        row.ReadOnly = True
+        row.Height = 34
+        row.DefaultCellStyle.BackColor = Color.FromArgb(35, 46, 66)
+        row.DefaultCellStyle.ForeColor = Color.White
+        row.DefaultCellStyle.Font = New Font("Segoe UI Semibold", 9.0F)
+        row.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter
+        row.Cells(0).Value = "Resource / Task"
+
+        For Each dateColumn In _capacityDateColumns
+            Dim cell = row.Cells(dateColumn.Key)
+            cell.Value = dateColumn.Value.ToString("dd-MMM ddd", CultureInfo.InvariantCulture)
+            cell.Style.BackColor = Color.FromArgb(35, 46, 66)
+            cell.Style.ForeColor = Color.White
+            cell.Style.Font = New Font("Segoe UI Semibold", 9.0F)
+            cell.ToolTipText = dateColumn.Value.ToString("dd-MMM-yyyy", CultureInfo.InvariantCulture)
         Next
     End Sub
 
