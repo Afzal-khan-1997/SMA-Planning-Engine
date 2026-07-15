@@ -823,23 +823,30 @@ Public Class SMASchedulerForm
             Return
         End If
 
-        Dim defaultStart As Date
-        Dim defaultFinish As Date
-        If Not TryGetProjectDateRange(defaultStart, defaultFinish) Then
-            defaultStart = Date.Today
-            defaultFinish = Date.Today.AddDays(14)
-        End If
+        Dim defaultStart = Date.Today
+        Dim defaultFinish = Date.Today.AddDays(15)
 
         _isUpdatingCapacityFilters = True
         Try
             _capacityStartPicker.Value = defaultStart.Date
             _capacityFinishPicker.Value = defaultFinish.Date
+            If _capacityEmployeeList IsNot Nothing Then
+                _capacityEmployeeList.Visible = False
+                _capacityEmployeeList.Enabled = False
+            End If
+            If _capacitySelectAllButton IsNot Nothing Then
+                _capacitySelectAllButton.Visible = False
+                _capacitySelectAllButton.Enabled = False
+            End If
+            If _capacityClearButton IsNot Nothing Then
+                _capacityClearButton.Visible = False
+                _capacityClearButton.Enabled = False
+            End If
         Finally
             _isUpdatingCapacityFilters = False
         End Try
 
         _capacityFilterPanel.BringToFront()
-        PopulateCapacityEmployeeChecklist(_employees.Cast(Of String)(), checkAll:=True)
     End Sub
 
     Private Sub PopulateCapacityEmployeeChecklist(employeeNames As IEnumerable(Of String), checkAll As Boolean)
@@ -868,17 +875,7 @@ Public Class SMASchedulerForm
     End Sub
 
     Private Function SelectedCapacityEmployees() As List(Of String)
-        If _capacityEmployeeList Is Nothing Then
-            Return New List(Of String)()
-        End If
-
-        Return _capacityEmployeeList.CheckedItems.
-            Cast(Of Object)().
-            Select(Function(item) Convert.ToString(item, CultureInfo.InvariantCulture)).
-            Where(Function(name) Not String.IsNullOrWhiteSpace(name)).
-            Select(Function(name) name.Trim()).
-            Distinct(StringComparer.OrdinalIgnoreCase).
-            ToList()
+        Return New List(Of String)()
     End Function
 
     Private Sub CapacityFilterApplyButton_Click(sender As Object, e As EventArgs) Handles _capacityApplyButton.Click
@@ -886,24 +883,10 @@ Public Class SMASchedulerForm
     End Sub
 
     Private Sub CapacityFilterSelectAllButton_Click(sender As Object, e As EventArgs) Handles _capacitySelectAllButton.Click
-        If _capacityEmployeeList Is Nothing Then
-            Return
-        End If
-
-        For index = 0 To _capacityEmployeeList.Items.Count - 1
-            _capacityEmployeeList.SetItemChecked(index, True)
-        Next
         UpdateCapacityPlanningGrid()
     End Sub
 
     Private Sub CapacityFilterClearButton_Click(sender As Object, e As EventArgs) Handles _capacityClearButton.Click
-        If _capacityEmployeeList Is Nothing Then
-            Return
-        End If
-
-        For index = 0 To _capacityEmployeeList.Items.Count - 1
-            _capacityEmployeeList.SetItemChecked(index, False)
-        Next
         UpdateCapacityPlanningGrid()
     End Sub
 
@@ -2548,15 +2531,11 @@ Public Class SMASchedulerForm
 
             Dim sqlData = LoadSqlCapacityPlanningData(projectStart, projectFinish)
             If sqlData IsNot Nothing AndAlso sqlData.Employees.Count > 0 Then
-                PopulateCapacityEmployeeChecklist(sqlData.Employees.Select(Function(employee) employee.EmployeeName), checkAll:=_capacityEmployeeList Is Nothing OrElse _capacityEmployeeList.Items.Count = 0)
                 RenderSqlCapacityPlanningGrid(sqlData, projectStart, projectFinish)
                 Return
             End If
 
-            Dim resources = SelectedCapacityEmployees()
-            If resources.Count = 0 Then
-                resources = AllKnownEmployees()
-            End If
+            Dim resources = AllKnownEmployees()
             If resources.Count = 0 Then
                 _capacityGrid.Rows.Add("No employees loaded")
                 Return
@@ -2633,12 +2612,6 @@ Public Class SMASchedulerForm
             Return _capacityStartPicker.Value.Date
         End If
 
-        Dim projectStart As Date
-        Dim projectFinish As Date
-        If TryGetProjectDateRange(projectStart, projectFinish) Then
-            Return projectStart.Date
-        End If
-
         Return Date.Today
     End Function
 
@@ -2647,13 +2620,7 @@ Public Class SMASchedulerForm
             Return _capacityFinishPicker.Value.Date
         End If
 
-        Dim projectStart As Date
-        Dim projectFinish As Date
-        If TryGetProjectDateRange(projectStart, projectFinish) Then
-            Return projectFinish.Date
-        End If
-
-        Return Date.Today
+        Return Date.Today.AddDays(15)
     End Function
 
     Private Function LoadSqlCapacityPlanningData(projectStart As Date, projectFinish As Date) As SqlCapacityPlanningData
@@ -2671,21 +2638,12 @@ Public Class SMASchedulerForm
     End Function
 
     Private Sub RenderSqlCapacityPlanningGrid(sqlData As SqlCapacityPlanningData, projectStart As Date, projectFinish As Date)
-        Dim selectedNames = SelectedCapacityEmployees()
-        If selectedNames.Count = 0 AndAlso _capacityEmployeeList IsNot Nothing AndAlso _capacityEmployeeList.Items.Count > 0 Then
-            _capacityGrid.Rows.Add("Select employee(s) to view capacity planning.")
-            UpdateCapacityFilterStatus(0, projectStart, projectFinish, True)
-            Return
-        End If
-
-        Dim selectedSet = New HashSet(Of String)(selectedNames, StringComparer.OrdinalIgnoreCase)
         Dim employees = sqlData.Employees.
-            Where(Function(employee) selectedSet.Contains(employee.EmployeeName)).
             OrderBy(Function(employee) employee.EmployeeName, StringComparer.OrdinalIgnoreCase).
             ToList()
 
         If employees.Count = 0 Then
-            _capacityGrid.Rows.Add("No selected active employees found.")
+            _capacityGrid.Rows.Add("No active employees found.")
             UpdateCapacityFilterStatus(0, projectStart, projectFinish, True)
             Return
         End If
@@ -2695,7 +2653,6 @@ Public Class SMASchedulerForm
             ToDictionary(Function(group) group.Key, Function(group) group.Last().AvailableHours, StringComparer.OrdinalIgnoreCase)
 
         Dim assignmentsByEmployee = sqlData.Assignments.
-            Where(Function(item) selectedSet.Contains(item.EmployeeName)).
             GroupBy(Function(item) item.EmployeeId, StringComparer.OrdinalIgnoreCase).
             ToDictionary(Function(group) group.Key, Function(group) group.ToList(), StringComparer.OrdinalIgnoreCase)
 

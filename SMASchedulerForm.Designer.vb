@@ -1054,11 +1054,7 @@ Partial Class SMASchedulerForm
         _capacityFilterPanel.Controls.Add(_capacityStartPicker)
         _capacityFilterPanel.Controls.Add(_capacityToLabel)
         _capacityFilterPanel.Controls.Add(_capacityFinishPicker)
-        _capacityFilterPanel.Controls.Add(_capacityEmployeesLabel)
-        _capacityFilterPanel.Controls.Add(_capacityEmployeeList)
         _capacityFilterPanel.Controls.Add(_capacityApplyButton)
-        _capacityFilterPanel.Controls.Add(_capacitySelectAllButton)
-        _capacityFilterPanel.Controls.Add(_capacityClearButton)
         _capacityFilterPanel.Controls.Add(_capacityFilterStatusLabel)
         _capacityFilterPanel.Dock = DockStyle.Top
         _capacityFilterPanel.Location = New Point(3, 3)
@@ -1121,6 +1117,7 @@ Partial Class SMASchedulerForm
         _capacityEmployeesLabel.TabIndex = 4
         _capacityEmployeesLabel.Text = "Employees"
         _capacityEmployeesLabel.TextAlign = ContentAlignment.MiddleLeft
+        _capacityEmployeesLabel.Visible = False
         ' 
         ' _capacityEmployeeList
         ' 
@@ -1131,6 +1128,7 @@ Partial Class SMASchedulerForm
         _capacityEmployeeList.Name = "_capacityEmployeeList"
         _capacityEmployeeList.Size = New Size(260, 82)
         _capacityEmployeeList.TabIndex = 5
+        _capacityEmployeeList.Visible = False
         ' 
         ' _capacityApplyButton
         ' 
@@ -1138,7 +1136,7 @@ Partial Class SMASchedulerForm
         _capacityApplyButton.FlatAppearance.BorderSize = 0
         _capacityApplyButton.FlatStyle = FlatStyle.Flat
         _capacityApplyButton.ForeColor = Color.White
-        _capacityApplyButton.Location = New Point(668, 13)
+        _capacityApplyButton.Location = New Point(337, 11)
         _capacityApplyButton.Margin = New Padding(8, 5, 0, 0)
         _capacityApplyButton.Name = "_capacityApplyButton"
         _capacityApplyButton.Size = New Size(92, 30)
@@ -1159,6 +1157,7 @@ Partial Class SMASchedulerForm
         _capacitySelectAllButton.TabIndex = 7
         _capacitySelectAllButton.Text = "Select All"
         _capacitySelectAllButton.UseVisualStyleBackColor = False
+        _capacitySelectAllButton.Visible = False
         ' 
         ' _capacityClearButton
         ' 
@@ -1173,13 +1172,14 @@ Partial Class SMASchedulerForm
         _capacityClearButton.TabIndex = 8
         _capacityClearButton.Text = "Clear"
         _capacityClearButton.UseVisualStyleBackColor = False
+        _capacityClearButton.Visible = False
         ' 
         ' _capacityFilterStatusLabel
         ' 
         _capacityFilterStatusLabel.ForeColor = Color.FromArgb(CByte(75), CByte(85), CByte(99))
-        _capacityFilterStatusLabel.Location = New Point(963, 8)
+        _capacityFilterStatusLabel.Location = New Point(437, 8)
         _capacityFilterStatusLabel.Name = "_capacityFilterStatusLabel"
-        _capacityFilterStatusLabel.Size = New Size(300, 42)
+        _capacityFilterStatusLabel.Size = New Size(460, 42)
         _capacityFilterStatusLabel.TabIndex = 9
         _capacityFilterStatusLabel.TextAlign = ContentAlignment.MiddleLeft
         ' 

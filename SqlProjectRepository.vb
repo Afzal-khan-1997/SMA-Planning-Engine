@@ -33,15 +33,6 @@ Public Class SqlProjectRepository
             ValidateExcelSqlDesign(connection, requireScheduleSaveTables:=True)
             Dim affectedCapacityRows = LoadScheduleCapacityRows(connection, projectCode, normalizedVersion)
 
-            Using DeleteProjectSchedule As IDbCommand = connection.CreateCommand()
-                DeleteProjectSchedule.CommandText =
-                    "DELETE FROM [dbo].[Project Schedule Table] " &
-                    "WHERE [ProjectID at SMA] = @ProjectIdAtSma AND [Version] = @VersionNumber"
-                AddParameter(DeleteProjectSchedule, "@ProjectIdAtSma", projectCode)
-                AddParameter(DeleteProjectSchedule, "@VersionNumber", normalizedVersion)
-                DeleteProjectSchedule.ExecuteNonQuery()
-            End Using
-
             Dim savedRows = SaveProjectScheduleRows(connection, projectCode, normalizedVersion, tasks)
             affectedCapacityRows.AddRange(savedRows)
             UpdateEmployeeCapacityFromSchedule(connection, affectedCapacityRows)
@@ -897,6 +888,8 @@ Public Class SqlProjectRepository
         Dim employeeLookup = LoadEmployeeIdLookup(connection)
         Dim missingEmployees As New List(Of String)()
         Dim scheduleIdIsIdentity = IsIdentityColumn(connection, "dbo.Project Schedule Table", "Schedule ID")
+        Dim existingRows = LoadExistingProjectScheduleRows(connection, projectIdAtSma, projectVersion)
+        Dim usedScheduleIds As New HashSet(Of Integer)()
 
         For Each task In tasks
             Dim assignmentRows = BuildTaskAssignmentRows(task)
@@ -913,33 +906,13 @@ Public Class SqlProjectRepository
                 End If
 
                 Dim employeeId = employeeLookup(assignmentRow.EmployeeName)
-                Using InsertProjectSchedule As IDbCommand = connection.CreateCommand()
-                    If scheduleIdIsIdentity Then
-                        InsertProjectSchedule.CommandText =
-                            "INSERT INTO [dbo].[Project Schedule Table] " &
-                            "([ProjectID at SMA], [Version], [Task Name], [Task Order], [Employee ID], [Planned Hours], [Schedule Date], [Status], [Start Date ], [End Date ], [Planned On], [Planned By]) " &
-                            "VALUES (@ProjectIdAtSma, @VersionNumber, @TaskName, @TaskOrder, @EmployeeId, @PlannedHours, @ScheduleDate, @Status, @StartDate, @EndDate, @PlannedOn, @PlannedBy)"
-                    Else
-                        InsertProjectSchedule.CommandText =
-                            "INSERT INTO [dbo].[Project Schedule Table] " &
-                            "([Schedule ID], [ProjectID at SMA], [Version], [Task Name], [Task Order], [Employee ID], [Planned Hours], [Schedule Date], [Status], [Start Date ], [End Date ], [Planned On], [Planned By]) " &
-                            "VALUES ((SELECT ISNULL(MAX([Schedule ID]), 0) + 1 FROM [dbo].[Project Schedule Table]), @ProjectIdAtSma, @VersionNumber, @TaskName, @TaskOrder, @EmployeeId, @PlannedHours, @ScheduleDate, @Status, @StartDate, @EndDate, @PlannedOn, @PlannedBy)"
-                    End If
-
-                    AddParameter(InsertProjectSchedule, "@ProjectIdAtSma", projectIdAtSma)
-                    AddParameter(InsertProjectSchedule, "@VersionNumber", projectVersion)
-                    AddParameter(InsertProjectSchedule, "@TaskName", task.TaskName)
-                    AddParameter(InsertProjectSchedule, "@TaskOrder", task.TaskId)
-                    AddParameter(InsertProjectSchedule, "@EmployeeId", employeeId)
-                    AddParameter(InsertProjectSchedule, "@PlannedHours", assignmentRow.AssignedHours)
-                    AddParameter(InsertProjectSchedule, "@ScheduleDate", assignmentRow.WorkDate)
-                    AddParameter(InsertProjectSchedule, "@Status", If(task.PercentComplete >= 100, "Completed", "Inprogress"))
-                    AddParameter(InsertProjectSchedule, "@StartDate", task.StartDate.Date)
-                    AddParameter(InsertProjectSchedule, "@EndDate", task.FinishDate.Date)
-                    AddParameter(InsertProjectSchedule, "@PlannedOn", Date.Now)
-                    AddParameter(InsertProjectSchedule, "@PlannedBy", Environment.UserName)
-                    InsertProjectSchedule.ExecuteNonQuery()
-                End Using
+                Dim existingRow = FindReusableScheduleRow(existingRows, usedScheduleIds, task.TaskId, assignmentRow.WorkDate, employeeId)
+                If existingRow IsNot Nothing Then
+                    UpdateProjectScheduleRow(connection, existingRow.ScheduleId, task, employeeId, assignmentRow)
+                    usedScheduleIds.Add(existingRow.ScheduleId)
+                Else
+                    InsertProjectScheduleRow(connection, projectIdAtSma, projectVersion, task, employeeId, assignmentRow, scheduleIdIsIdentity)
+                End If
 
                 savedRows.Add(New SavedExcelScheduleRow With {
                     .EmployeeId = employeeId,
@@ -952,11 +925,109 @@ Public Class SqlProjectRepository
             Throw New InvalidOperationException("Employee IDs were not found in Employees_Master for: " & String.Join(", ", missingEmployees.OrderBy(Function(name) name, StringComparer.OrdinalIgnoreCase)))
         End If
 
+        DeleteRemovedProjectScheduleRows(connection, existingRows, usedScheduleIds)
+
         Return savedRows.
             GroupBy(Function(row) row.EmployeeId.ToString(CultureInfo.InvariantCulture) & "|" & row.WorkDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)).
             Select(Function(group) group.First()).
             ToList()
     End Function
+
+    Private Function LoadExistingProjectScheduleRows(connection As IDbConnection, projectIdAtSma As String, projectVersion As String) As List(Of ExistingProjectScheduleRow)
+        Dim rows As New List(Of ExistingProjectScheduleRow)()
+
+        Using GetExistingProjectSchedule As IDbCommand = connection.CreateCommand()
+            GetExistingProjectSchedule.CommandText =
+                "SELECT [Schedule ID], [Task Order], [Employee ID], [Schedule Date] " &
+                "FROM [dbo].[Project Schedule Table] " &
+                "WHERE [ProjectID at SMA] = @ProjectIdAtSma AND [Version] = @VersionNumber " &
+                "ORDER BY [Task Order], [Schedule Date], [Schedule ID]"
+            AddParameter(GetExistingProjectSchedule, "@ProjectIdAtSma", projectIdAtSma)
+            AddParameter(GetExistingProjectSchedule, "@VersionNumber", projectVersion)
+
+            Using reader = GetExistingProjectSchedule.ExecuteReader()
+                While reader.Read()
+                    If reader("Schedule ID") Is DBNull.Value OrElse reader("Task Order") Is DBNull.Value OrElse reader("Schedule Date") Is DBNull.Value Then
+                        Continue While
+                    End If
+
+                    rows.Add(New ExistingProjectScheduleRow With {
+                        .ScheduleId = CInt(reader("Schedule ID")),
+                        .TaskOrder = CInt(reader("Task Order")),
+                        .EmployeeId = If(reader("Employee ID") Is DBNull.Value, 0, CInt(reader("Employee ID"))),
+                        .ScheduleDate = CDate(reader("Schedule Date")).Date
+                    })
+                End While
+            End Using
+        End Using
+
+        Return rows
+    End Function
+
+    Private Function FindReusableScheduleRow(existingRows As List(Of ExistingProjectScheduleRow), usedScheduleIds As HashSet(Of Integer), taskOrder As Integer, scheduleDate As Date, employeeId As Integer) As ExistingProjectScheduleRow
+        Dim exactMatch = existingRows.FirstOrDefault(Function(row) Not usedScheduleIds.Contains(row.ScheduleId) AndAlso row.TaskOrder = taskOrder AndAlso row.ScheduleDate.Date = scheduleDate.Date AndAlso row.EmployeeId = employeeId)
+        If exactMatch IsNot Nothing Then
+            Return exactMatch
+        End If
+
+        Return existingRows.FirstOrDefault(Function(row) Not usedScheduleIds.Contains(row.ScheduleId) AndAlso row.TaskOrder = taskOrder AndAlso row.ScheduleDate.Date = scheduleDate.Date)
+    End Function
+
+    Private Sub UpdateProjectScheduleRow(connection As IDbConnection, scheduleId As Integer, task As ScheduleTask, employeeId As Integer, assignmentRow As AssignmentPersistRow)
+        Using UpdateProjectSchedule As IDbCommand = connection.CreateCommand()
+            UpdateProjectSchedule.CommandText =
+                "UPDATE [dbo].[Project Schedule Table] " &
+                "SET [Task Name] = @TaskName, [Task Order] = @TaskOrder, [Employee ID] = @EmployeeId, [Planned Hours] = @PlannedHours, [Schedule Date] = @ScheduleDate, [Status] = @Status, [Start Date ] = @StartDate, [End Date ] = @EndDate, [Planned On] = @PlannedOn, [Planned By] = @PlannedBy " &
+                "WHERE [Schedule ID] = @ScheduleId"
+            AddProjectScheduleParameters(UpdateProjectSchedule, task, employeeId, assignmentRow)
+            AddParameter(UpdateProjectSchedule, "@ScheduleId", scheduleId)
+            UpdateProjectSchedule.ExecuteNonQuery()
+        End Using
+    End Sub
+
+    Private Sub InsertProjectScheduleRow(connection As IDbConnection, projectIdAtSma As String, projectVersion As String, task As ScheduleTask, employeeId As Integer, assignmentRow As AssignmentPersistRow, scheduleIdIsIdentity As Boolean)
+        Using InsertProjectSchedule As IDbCommand = connection.CreateCommand()
+            If scheduleIdIsIdentity Then
+                InsertProjectSchedule.CommandText =
+                    "INSERT INTO [dbo].[Project Schedule Table] " &
+                    "([ProjectID at SMA], [Version], [Task Name], [Task Order], [Employee ID], [Planned Hours], [Schedule Date], [Status], [Start Date ], [End Date ], [Planned On], [Planned By]) " &
+                    "VALUES (@ProjectIdAtSma, @VersionNumber, @TaskName, @TaskOrder, @EmployeeId, @PlannedHours, @ScheduleDate, @Status, @StartDate, @EndDate, @PlannedOn, @PlannedBy)"
+            Else
+                InsertProjectSchedule.CommandText =
+                    "INSERT INTO [dbo].[Project Schedule Table] " &
+                    "([Schedule ID], [ProjectID at SMA], [Version], [Task Name], [Task Order], [Employee ID], [Planned Hours], [Schedule Date], [Status], [Start Date ], [End Date ], [Planned On], [Planned By]) " &
+                    "VALUES ((SELECT ISNULL(MAX([Schedule ID]), 0) + 1 FROM [dbo].[Project Schedule Table]), @ProjectIdAtSma, @VersionNumber, @TaskName, @TaskOrder, @EmployeeId, @PlannedHours, @ScheduleDate, @Status, @StartDate, @EndDate, @PlannedOn, @PlannedBy)"
+            End If
+
+            AddParameter(InsertProjectSchedule, "@ProjectIdAtSma", projectIdAtSma)
+            AddParameter(InsertProjectSchedule, "@VersionNumber", projectVersion)
+            AddProjectScheduleParameters(InsertProjectSchedule, task, employeeId, assignmentRow)
+            InsertProjectSchedule.ExecuteNonQuery()
+        End Using
+    End Sub
+
+    Private Sub AddProjectScheduleParameters(command As IDbCommand, task As ScheduleTask, employeeId As Integer, assignmentRow As AssignmentPersistRow)
+        AddParameter(command, "@TaskName", task.TaskName)
+        AddParameter(command, "@TaskOrder", task.TaskId)
+        AddParameter(command, "@EmployeeId", employeeId)
+        AddParameter(command, "@PlannedHours", assignmentRow.AssignedHours)
+        AddParameter(command, "@ScheduleDate", assignmentRow.WorkDate)
+        AddParameter(command, "@Status", If(task.PercentComplete >= 100, "Completed", "Inprogress"))
+        AddParameter(command, "@StartDate", task.StartDate.Date)
+        AddParameter(command, "@EndDate", task.FinishDate.Date)
+        AddParameter(command, "@PlannedOn", Date.Now)
+        AddParameter(command, "@PlannedBy", Environment.UserName)
+    End Sub
+
+    Private Sub DeleteRemovedProjectScheduleRows(connection As IDbConnection, existingRows As List(Of ExistingProjectScheduleRow), usedScheduleIds As HashSet(Of Integer))
+        For Each existingRow In existingRows.Where(Function(row) Not usedScheduleIds.Contains(row.ScheduleId))
+            Using DeleteProjectSchedule As IDbCommand = connection.CreateCommand()
+                DeleteProjectSchedule.CommandText = "DELETE FROM [dbo].[Project Schedule Table] WHERE [Schedule ID] = @ScheduleId"
+                AddParameter(DeleteProjectSchedule, "@ScheduleId", existingRow.ScheduleId)
+                DeleteProjectSchedule.ExecuteNonQuery()
+            End Using
+        Next
+    End Sub
 
     Private Function LoadScheduleCapacityRows(connection As IDbConnection, projectIdAtSma As String, projectVersion As String) As List(Of SavedExcelScheduleRow)
         Dim rows As New List(Of SavedExcelScheduleRow)()
@@ -1655,6 +1726,13 @@ End Class
 Friend Class SavedExcelScheduleRow
     Public Property EmployeeId As Integer
     Public Property WorkDate As Date
+End Class
+
+Friend Class ExistingProjectScheduleRow
+    Public Property ScheduleId As Integer
+    Public Property TaskOrder As Integer
+    Public Property EmployeeId As Integer
+    Public Property ScheduleDate As Date
 End Class
 
 Friend Class AssignmentSavedScheduleRow
