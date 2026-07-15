@@ -32,43 +32,51 @@ Public Class SqlProjectRepository
             Dim normalizedVersion = projectVersion.Trim()
             Dim normalizedProjectSize = projectSize.Trim()
             Dim projectId = GetOrCreateProject(connection, projectName, projectVersion, projectSize, projectType, totalProjectHours, resourcesNeeded, resourceHours)
-            Execute(connection,
-                    "DELETE FROM dbo.SmaScheduleTasks WHERE ProjectId = @ProjectId AND ISNULL(VersionNumber, '') = @VersionNumber",
-                    New Dictionary(Of String, Object) From {
-                        {"@ProjectId", projectId},
-                        {"@VersionNumber", normalizedVersion}
-                    })
-            Execute(connection,
-                    "DELETE FROM dbo.TaskAssignment WHERE ProjectId = @ProjectId AND ISNULL(VersionNumber, '') = @VersionNumber",
-                    New Dictionary(Of String, Object) From {
-                        {"@ProjectId", projectId},
-                        {"@VersionNumber", normalizedVersion}
-                    })
+            Using DeleteScheduleTasks As IDbCommand = connection.CreateCommand()
+                DeleteScheduleTasks.CommandText =
+                    "DELETE FROM dbo.SmaScheduleTasks " &
+                    "WHERE ProjectId = @ProjectId AND ISNULL(VersionNumber, '') = @VersionNumber"
+                AddParameter(DeleteScheduleTasks, "@ProjectId", projectId)
+                AddParameter(DeleteScheduleTasks, "@VersionNumber", normalizedVersion)
+                DeleteScheduleTasks.ExecuteNonQuery()
+            End Using
+
+            Using DeleteTaskAssignments As IDbCommand = connection.CreateCommand()
+                DeleteTaskAssignments.CommandText =
+                    "DELETE FROM dbo.TaskAssignment " &
+                    "WHERE ProjectId = @ProjectId AND ISNULL(VersionNumber, '') = @VersionNumber"
+                AddParameter(DeleteTaskAssignments, "@ProjectId", projectId)
+                AddParameter(DeleteTaskAssignments, "@VersionNumber", normalizedVersion)
+                DeleteTaskAssignments.ExecuteNonQuery()
+            End Using
 
             For Each task In tasks
-                Execute(connection,
-                        "INSERT INTO dbo.SmaScheduleTasks (ProjectId, VersionNumber, TaskId, DatabaseTaskId, TaskName, StartDate, DurationDays, FinishDate, PercentComplete, Predecessors, DependencyType, AssignedTo, AssignmentDate, ResourceNames, ResourceAllocations, DailyResourceAllocations, ResourceHours, ModuleId, PlannerTaskId) VALUES (@ProjectId, @VersionNumber, @TaskId, @DatabaseTaskId, @TaskName, @StartDate, @DurationDays, @FinishDate, @PercentComplete, @Predecessors, @DependencyType, @AssignedTo, @AssignmentDate, @ResourceNames, @ResourceAllocations, @DailyResourceAllocations, @ResourceHours, @ModuleId, @PlannerTaskId)",
-                        New Dictionary(Of String, Object) From {
-                            {"@ProjectId", projectId},
-                            {"@VersionNumber", normalizedVersion},
-                            {"@TaskId", task.TaskId},
-                            {"@DatabaseTaskId", task.DatabaseTaskId},
-                            {"@TaskName", task.TaskName},
-                            {"@StartDate", task.StartDate},
-                            {"@DurationDays", task.DurationDays},
-                            {"@FinishDate", task.FinishDate},
-                            {"@PercentComplete", task.PercentComplete},
-                            {"@Predecessors", task.Predecessors},
-                            {"@DependencyType", task.DependencyType},
-                            {"@AssignedTo", task.AssignedTo},
-                            {"@AssignmentDate", task.AssignmentDate},
-                            {"@ResourceNames", task.ResourceNames},
-                            {"@ResourceAllocations", task.ResourceAllocations},
-                            {"@DailyResourceAllocations", task.DailyResourceAllocations},
-                            {"@ResourceHours", task.ResourceHours},
-                            {"@ModuleId", task.ModuleId},
-                            {"@PlannerTaskId", task.PlannerTaskId}
-                        })
+                Using InsertScheduleTask As IDbCommand = connection.CreateCommand()
+                    InsertScheduleTask.CommandText =
+                        "INSERT INTO dbo.SmaScheduleTasks " &
+                        "(ProjectId, VersionNumber, TaskId, DatabaseTaskId, TaskName, StartDate, DurationDays, FinishDate, PercentComplete, Predecessors, DependencyType, AssignedTo, AssignmentDate, ResourceNames, ResourceAllocations, DailyResourceAllocations, ResourceHours, ModuleId, PlannerTaskId) " &
+                        "VALUES (@ProjectId, @VersionNumber, @TaskId, @DatabaseTaskId, @TaskName, @StartDate, @DurationDays, @FinishDate, @PercentComplete, @Predecessors, @DependencyType, @AssignedTo, @AssignmentDate, @ResourceNames, @ResourceAllocations, @DailyResourceAllocations, @ResourceHours, @ModuleId, @PlannerTaskId)"
+                    AddParameter(InsertScheduleTask, "@ProjectId", projectId)
+                    AddParameter(InsertScheduleTask, "@VersionNumber", normalizedVersion)
+                    AddParameter(InsertScheduleTask, "@TaskId", task.TaskId)
+                    AddParameter(InsertScheduleTask, "@DatabaseTaskId", task.DatabaseTaskId)
+                    AddParameter(InsertScheduleTask, "@TaskName", task.TaskName)
+                    AddParameter(InsertScheduleTask, "@StartDate", task.StartDate)
+                    AddParameter(InsertScheduleTask, "@DurationDays", task.DurationDays)
+                    AddParameter(InsertScheduleTask, "@FinishDate", task.FinishDate)
+                    AddParameter(InsertScheduleTask, "@PercentComplete", task.PercentComplete)
+                    AddParameter(InsertScheduleTask, "@Predecessors", task.Predecessors)
+                    AddParameter(InsertScheduleTask, "@DependencyType", task.DependencyType)
+                    AddParameter(InsertScheduleTask, "@AssignedTo", task.AssignedTo)
+                    AddParameter(InsertScheduleTask, "@AssignmentDate", task.AssignmentDate)
+                    AddParameter(InsertScheduleTask, "@ResourceNames", task.ResourceNames)
+                    AddParameter(InsertScheduleTask, "@ResourceAllocations", task.ResourceAllocations)
+                    AddParameter(InsertScheduleTask, "@DailyResourceAllocations", task.DailyResourceAllocations)
+                    AddParameter(InsertScheduleTask, "@ResourceHours", task.ResourceHours)
+                    AddParameter(InsertScheduleTask, "@ModuleId", task.ModuleId)
+                    AddParameter(InsertScheduleTask, "@PlannerTaskId", task.PlannerTaskId)
+                    InsertScheduleTask.ExecuteNonQuery()
+                End Using
             Next
 
             SaveTaskAssignments(connection, projectId, projectName, normalizedVersion, normalizedProjectSize, projectType, tasks)
@@ -141,40 +149,45 @@ Public Class SqlProjectRepository
                 Return Nothing
             End If
 
-            Using command = connection.CreateCommand()
-                command.CommandText =
+            Dim GetProjectDetailsDataTable As New DataTable()
+
+            Using GetProjectDetails As IDbCommand = connection.CreateCommand()
+                GetProjectDetails.CommandText =
                     "SELECT TOP 1 v.[Project Name], v.[Project ID at SMA], v.[Version], v.[Active], v.[Report BRE], v.[Report ROL], v.[Report Within], v.[Final Completion Date], v.[Planning Message], v.[ControlleratROLC], v.[Client Type], v.[Is_Pointcloud], v.[Teck Pack], v.[Deed Profile], v.[Shadow_Analysis], v.[Urgent Small Projects], v.[IsPlanned], t.[Project Size] " &
                     "FROM dbo.Version_Table v " &
                     "LEFT JOIN dbo.Table_Project_Tracking t ON t.[Project ID at SMA] = v.[Project ID at SMA] " &
                     "WHERE v.[Project ID at SMA] = @ProjectIdAtSma"
-                AddParameter(command, "@ProjectIdAtSma", projectCode)
+                AddParameter(GetProjectDetails, "@ProjectIdAtSma", projectCode)
 
-                Using reader = command.ExecuteReader()
-                    If Not reader.Read() Then
-                        Return Nothing
-                    End If
-
-                    Return New SqlProjectPlanningInfo With {
-                        .ProjectIdAtSma = Convert.ToString(reader("Project ID at SMA"), CultureInfo.InvariantCulture),
-                        .ProjectName = Convert.ToString(reader("Project Name"), CultureInfo.InvariantCulture),
-                        .VersionNumber = RequiredSqlVersionText(reader("Version")),
-                        .IsActive = SqlBoolean(reader("Active")),
-                        .IsPlanned = SqlNullableBoolean(reader("IsPlanned")),
-                        .ProjectSize = ProjectSizeNameFromSql(reader("Project Size")),
-                        .ProjectType = ProjectTypeFromVersion(reader("Version")),
-                        .ReportType = BuildReportTypeDisplay(reader("Report BRE"), reader("Report ROL"), reader("Report Within")),
-                        .FinalCompletionDate = SqlNullableDate(reader("Final Completion Date")),
-                        .PlanningMessage = SqlText(reader("Planning Message")),
-                        .ControllerAtRolc = SqlText(reader("ControlleratROLC")),
-                        .ClientType = SqlText(reader("Client Type")),
-                        .IsPointcloud = SqlBoolean(reader("Is_Pointcloud")),
-                        .TechPack = SqlBoolean(reader("Teck Pack")),
-                        .DeedProfile = SqlBoolean(reader("Deed Profile")),
-                        .ShadowAnalysis = SqlBoolean(reader("Shadow_Analysis")),
-                        .UrgentSmallProjects = SqlBoolean(reader("Urgent Small Projects"))
-                    }
+                Using GetProjectDetailsReader = GetProjectDetails.ExecuteReader()
+                    GetProjectDetailsDataTable.Load(GetProjectDetailsReader)
                 End Using
             End Using
+
+            If GetProjectDetailsDataTable.Rows.Count = 0 Then
+                Return Nothing
+            End If
+
+            Dim projectDetailsRow = GetProjectDetailsDataTable.Rows(0)
+            Return New SqlProjectPlanningInfo With {
+                .ProjectIdAtSma = Convert.ToString(projectDetailsRow("Project ID at SMA"), CultureInfo.InvariantCulture),
+                .ProjectName = Convert.ToString(projectDetailsRow("Project Name"), CultureInfo.InvariantCulture),
+                .VersionNumber = RequiredSqlVersionText(projectDetailsRow("Version")),
+                .IsActive = SqlBoolean(projectDetailsRow("Active")),
+                .IsPlanned = SqlNullableBoolean(projectDetailsRow("IsPlanned")),
+                .ProjectSize = ProjectSizeNameFromSql(projectDetailsRow("Project Size")),
+                .ProjectType = ProjectTypeFromVersion(projectDetailsRow("Version")),
+                .ReportType = BuildReportTypeDisplay(projectDetailsRow("Report BRE"), projectDetailsRow("Report ROL"), projectDetailsRow("Report Within")),
+                .FinalCompletionDate = SqlNullableDate(projectDetailsRow("Final Completion Date")),
+                .PlanningMessage = SqlText(projectDetailsRow("Planning Message")),
+                .ControllerAtRolc = SqlText(projectDetailsRow("ControlleratROLC")),
+                .ClientType = SqlText(projectDetailsRow("Client Type")),
+                .IsPointcloud = SqlBoolean(projectDetailsRow("Is_Pointcloud")),
+                .TechPack = SqlBoolean(projectDetailsRow("Teck Pack")),
+                .DeedProfile = SqlBoolean(projectDetailsRow("Deed Profile")),
+                .ShadowAnalysis = SqlBoolean(projectDetailsRow("Shadow_Analysis")),
+                .UrgentSmallProjects = SqlBoolean(projectDetailsRow("Urgent Small Projects"))
+            }
         End Using
     End Function
 
@@ -861,22 +874,29 @@ Public Class SqlProjectRepository
     End Sub
 
     Private Function GetOrCreateProject(connection As IDbConnection, projectName As String, projectVersion As String, projectSize As String, projectType As String, totalProjectHours As Decimal, resourcesNeeded As Integer, resourceHours As Decimal) As Integer
-        Execute(connection,
-                "IF NOT EXISTS (SELECT 1 FROM dbo.SmaScheduleProjects WHERE ProjectName = @ProjectName) INSERT INTO dbo.SmaScheduleProjects (ProjectName, ProjectVersion, ProjectSize, ProjectType, TotalProjectHours, ResourcesNeeded, ResourceHours) VALUES (@ProjectName, @ProjectVersion, @ProjectSize, @ProjectType, @TotalProjectHours, @ResourcesNeeded, @ResourceHours) ELSE UPDATE dbo.SmaScheduleProjects SET ProjectVersion = @ProjectVersion, ProjectSize = @ProjectSize, ProjectType = @ProjectType, TotalProjectHours = @TotalProjectHours, ResourcesNeeded = @ResourcesNeeded, ResourceHours = @ResourceHours, UpdatedAt = SYSUTCDATETIME() WHERE ProjectName = @ProjectName",
-                New Dictionary(Of String, Object) From {
-                    {"@ProjectName", projectName},
-                    {"@ProjectVersion", projectVersion.Trim()},
-                    {"@ProjectSize", projectSize.Trim()},
-                    {"@ProjectType", If(String.IsNullOrWhiteSpace(projectType), "New", projectType)},
-                    {"@TotalProjectHours", totalProjectHours},
-                    {"@ResourcesNeeded", resourcesNeeded},
-                    {"@ResourceHours", resourceHours}
-                })
+        Using SaveProjectHeader As IDbCommand = connection.CreateCommand()
+            SaveProjectHeader.CommandText =
+                "IF NOT EXISTS (SELECT 1 FROM dbo.SmaScheduleProjects WHERE ProjectName = @ProjectName) " &
+                "INSERT INTO dbo.SmaScheduleProjects (ProjectName, ProjectVersion, ProjectSize, ProjectType, TotalProjectHours, ResourcesNeeded, ResourceHours) " &
+                "VALUES (@ProjectName, @ProjectVersion, @ProjectSize, @ProjectType, @TotalProjectHours, @ResourcesNeeded, @ResourceHours) " &
+                "ELSE " &
+                "UPDATE dbo.SmaScheduleProjects " &
+                "SET ProjectVersion = @ProjectVersion, ProjectSize = @ProjectSize, ProjectType = @ProjectType, TotalProjectHours = @TotalProjectHours, ResourcesNeeded = @ResourcesNeeded, ResourceHours = @ResourceHours, UpdatedAt = SYSUTCDATETIME() " &
+                "WHERE ProjectName = @ProjectName"
+            AddParameter(SaveProjectHeader, "@ProjectName", projectName)
+            AddParameter(SaveProjectHeader, "@ProjectVersion", projectVersion.Trim())
+            AddParameter(SaveProjectHeader, "@ProjectSize", projectSize.Trim())
+            AddParameter(SaveProjectHeader, "@ProjectType", If(String.IsNullOrWhiteSpace(projectType), "New", projectType))
+            AddParameter(SaveProjectHeader, "@TotalProjectHours", totalProjectHours)
+            AddParameter(SaveProjectHeader, "@ResourcesNeeded", resourcesNeeded)
+            AddParameter(SaveProjectHeader, "@ResourceHours", resourceHours)
+            SaveProjectHeader.ExecuteNonQuery()
+        End Using
 
-        Using command = connection.CreateCommand()
-            command.CommandText = "SELECT ProjectId FROM dbo.SmaScheduleProjects WHERE ProjectName = @ProjectName"
-            AddParameter(command, "@ProjectName", projectName)
-            Return CInt(command.ExecuteScalar())
+        Using GetProjectId As IDbCommand = connection.CreateCommand()
+            GetProjectId.CommandText = "SELECT ProjectId FROM dbo.SmaScheduleProjects WHERE ProjectName = @ProjectName"
+            AddParameter(GetProjectId, "@ProjectName", projectName)
+            Return CInt(GetProjectId.ExecuteScalar())
         End Using
     End Function
 
@@ -1090,28 +1110,30 @@ Public Class SqlProjectRepository
                     Continue For
                 End If
 
-                Execute(connection,
-                        "INSERT INTO dbo.TaskAssignment (ProjectId, ProjectName, VersionNumber, ProjectSize, ProjectType, TaskId, TaskName, TaskOrder, EmployeeId, WorkDate, AssignedHours, StartDate, FinishDate, DependencyTaskOrder, DependencyType, Remarks, UpdatedOn, UpdatedBy) " &
-                        "VALUES (@ProjectId, @ProjectName, @VersionNumber, @ProjectSize, @ProjectType, @TaskId, @TaskName, @TaskOrder, @EmployeeId, @WorkDate, @AssignedHours, @StartDate, @FinishDate, @DependencyTaskOrder, @DependencyType, @Remarks, GETDATE(), @UpdatedBy)",
-                        New Dictionary(Of String, Object) From {
-                            {"@ProjectId", projectId},
-                            {"@ProjectName", projectName},
-                            {"@VersionNumber", projectVersion.Trim()},
-                            {"@ProjectSize", projectSize.Trim()},
-                            {"@ProjectType", If(String.IsNullOrWhiteSpace(projectType), "New", projectType)},
-                            {"@TaskId", task.TaskId},
-                            {"@TaskName", task.TaskName},
-                            {"@TaskOrder", task.TaskId},
-                            {"@EmployeeId", employeeLookup(assignmentRow.EmployeeName)},
-                            {"@WorkDate", assignmentRow.WorkDate},
-                            {"@AssignedHours", assignmentRow.AssignedHours},
-                            {"@StartDate", task.StartDate},
-                            {"@FinishDate", task.FinishDate},
-                            {"@DependencyTaskOrder", ParseFirstPredecessor(task.Predecessors)},
-                            {"@DependencyType", If(String.IsNullOrWhiteSpace(task.DependencyType), "FS", task.DependencyType)},
-                            {"@Remarks", DBNull.Value},
-                            {"@UpdatedBy", Environment.UserName}
-                        })
+                Using InsertTaskAssignment As IDbCommand = connection.CreateCommand()
+                    InsertTaskAssignment.CommandText =
+                        "INSERT INTO dbo.TaskAssignment " &
+                        "(ProjectId, ProjectName, VersionNumber, ProjectSize, ProjectType, TaskId, TaskName, TaskOrder, EmployeeId, WorkDate, AssignedHours, StartDate, FinishDate, DependencyTaskOrder, DependencyType, Remarks, UpdatedOn, UpdatedBy) " &
+                        "VALUES (@ProjectId, @ProjectName, @VersionNumber, @ProjectSize, @ProjectType, @TaskId, @TaskName, @TaskOrder, @EmployeeId, @WorkDate, @AssignedHours, @StartDate, @FinishDate, @DependencyTaskOrder, @DependencyType, @Remarks, GETDATE(), @UpdatedBy)"
+                    AddParameter(InsertTaskAssignment, "@ProjectId", projectId)
+                    AddParameter(InsertTaskAssignment, "@ProjectName", projectName)
+                    AddParameter(InsertTaskAssignment, "@VersionNumber", projectVersion.Trim())
+                    AddParameter(InsertTaskAssignment, "@ProjectSize", projectSize.Trim())
+                    AddParameter(InsertTaskAssignment, "@ProjectType", If(String.IsNullOrWhiteSpace(projectType), "New", projectType))
+                    AddParameter(InsertTaskAssignment, "@TaskId", task.TaskId)
+                    AddParameter(InsertTaskAssignment, "@TaskName", task.TaskName)
+                    AddParameter(InsertTaskAssignment, "@TaskOrder", task.TaskId)
+                    AddParameter(InsertTaskAssignment, "@EmployeeId", employeeLookup(assignmentRow.EmployeeName))
+                    AddParameter(InsertTaskAssignment, "@WorkDate", assignmentRow.WorkDate)
+                    AddParameter(InsertTaskAssignment, "@AssignedHours", assignmentRow.AssignedHours)
+                    AddParameter(InsertTaskAssignment, "@StartDate", task.StartDate)
+                    AddParameter(InsertTaskAssignment, "@FinishDate", task.FinishDate)
+                    AddParameter(InsertTaskAssignment, "@DependencyTaskOrder", ParseFirstPredecessor(task.Predecessors))
+                    AddParameter(InsertTaskAssignment, "@DependencyType", If(String.IsNullOrWhiteSpace(task.DependencyType), "FS", task.DependencyType))
+                    AddParameter(InsertTaskAssignment, "@Remarks", DBNull.Value)
+                    AddParameter(InsertTaskAssignment, "@UpdatedBy", Environment.UserName)
+                    InsertTaskAssignment.ExecuteNonQuery()
+                End Using
             Next
         Next
 
