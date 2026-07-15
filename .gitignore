@@ -427,3 +427,7 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# Codex/document render scratch output
+work/tmp/
+outputs/study_guide_render/
