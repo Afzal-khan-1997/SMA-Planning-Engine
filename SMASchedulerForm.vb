@@ -20,6 +20,7 @@ Public Class SMASchedulerForm
     Private ReadOnly _plannerTaskCountLabels As New List(Of Label)
     Private ReadOnly _plannerDurationLabels As New List(Of Label)
     Private _currentTheme As SchedulerThemePalette = SchedulerThemePalette.ThemeByName("Dusk")
+    Private _projectIdAtSma As String = ""
     Private _projectType As String = "New"
     Private _projectDetailsText As String = ""
     Private _projectReportType As String = ""
@@ -114,6 +115,7 @@ Public Class SMASchedulerForm
 
         ' Scheduler handoff from SMA Planning Engine: populate project fields first.
         ClearProjectForNewSchedule()
+        _projectIdAtSma = liveProject.ProjectCode.Trim()
         _projectName.Text = liveProject.ProjectName.Trim()
         _versionNumber.Text = liveProject.VersionNumber.Trim()
         _projectType = If(String.IsNullOrWhiteSpace(liveProject.ProjectType), ProjectTypeFromTemplate(liveProject.TemplateName, liveProject.ProjectName), liveProject.ProjectType)
@@ -146,6 +148,7 @@ Public Class SMASchedulerForm
         End If
 
         ClearProjectForNewSchedule()
+        _projectIdAtSma = ""
         _projectName.Text = If(String.IsNullOrWhiteSpace(liveProject.ProjectName), "Demo SMA Planning Project", liveProject.ProjectName.Trim())
         _versionNumber.Text = If(String.IsNullOrWhiteSpace(liveProject.VersionNumber), "1.0", liveProject.VersionNumber.Trim())
         _projectType = If(String.IsNullOrWhiteSpace(liveProject.ProjectType), "New", liveProject.ProjectType.Trim())
@@ -213,6 +216,7 @@ Public Class SMASchedulerForm
 
         ResetWorkspaceTransientState()
         _tasks.Clear()
+        _projectIdAtSma = savedSchedule.ProjectIdAtSma
         _projectName.Text = savedSchedule.ProjectName
         If String.IsNullOrWhiteSpace(savedSchedule.VersionNumber) Then
             Throw New InvalidOperationException("Saved schedule version is missing in SQL.")
@@ -1569,6 +1573,7 @@ Public Class SMASchedulerForm
     Private Sub ClearProjectForNewSchedule()
         ResetWorkspaceTransientState()
         _tasks.Clear()
+        _projectIdAtSma = ""
         _projectType = "New"
         ResetProjectFlagState()
         _projectName.Text = "SMA Scheduler"
@@ -1840,7 +1845,7 @@ Public Class SMASchedulerForm
             Dim projectSize = Convert.ToString(_projectSizeSelector.SelectedItem, CultureInfo.InvariantCulture)
             Dim totalAssignedHours = _tasks.Sum(Function(task) task.ResourceHours)
 
-            _sqlRepository.SaveProject(projectName, _tasks, version, projectSize, _projectType, _totalProjectHours.Value, AssignedResourceCount(), totalAssignedHours)
+            _sqlRepository.SaveProject(projectName, _tasks, version, projectSize, _projectType, _totalProjectHours.Value, AssignedResourceCount(), totalAssignedHours, _projectIdAtSma)
 
             MarkCurrentStateSaved()
 
@@ -4264,6 +4269,7 @@ Public NotInheritable Class SchedulerThemePreferences
 End Class
 
 Public Class SavedProjectSchedule
+    Public Property ProjectIdAtSma As String = ""
     Public Property ProjectName As String = ""
     Public Property VersionNumber As String = ""
     Public Property PlannerPlan As String = "SMA Planning Engine"
