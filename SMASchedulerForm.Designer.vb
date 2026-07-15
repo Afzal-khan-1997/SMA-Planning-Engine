@@ -193,7 +193,7 @@ Partial Class SMASchedulerForm
         commandBar.Location = New Point(0, 0)
         commandBar.Name = "commandBar"
         commandBar.Padding = New Padding(11, 9, 11, 9)
-        commandBar.Size = New Size(1577, 45)
+        commandBar.Size = New Size(1440, 45)
         commandBar.TabIndex = 0
         ' 
         ' btnSave
@@ -302,7 +302,7 @@ Partial Class SMASchedulerForm
         headerPanel.Margin = New Padding(3, 4, 3, 4)
         headerPanel.Name = "headerPanel"
         headerPanel.Padding = New Padding(18, 16, 18, 16)
-        headerPanel.Size = New Size(1577, 252)
+        headerPanel.Size = New Size(1440, 224)
         headerPanel.TabIndex = 1
         ' 
         ' appTitle
@@ -310,7 +310,7 @@ Partial Class SMASchedulerForm
         appTitle.AutoSize = True
         appTitle.Font = New Font("Segoe UI Semibold", 16F)
         appTitle.ForeColor = Color.FromArgb(CByte(24), CByte(31), CByte(42))
-        appTitle.Location = New Point(0, 0)
+        appTitle.Location = New Point(18, 12)
         appTitle.Name = "appTitle"
         appTitle.Size = New Size(203, 37)
         appTitle.TabIndex = 0
@@ -320,7 +320,7 @@ Partial Class SMASchedulerForm
         ' 
         projectLabel.AutoSize = True
         projectLabel.ForeColor = Color.DimGray
-        projectLabel.Location = New Point(13, 42)
+        projectLabel.Location = New Point(22, 54)
         projectLabel.Name = "projectLabel"
         projectLabel.Size = New Size(55, 20)
         projectLabel.TabIndex = 1
@@ -329,10 +329,10 @@ Partial Class SMASchedulerForm
         ' _projectName
         ' 
         _projectName.BorderStyle = BorderStyle.FixedSingle
-        _projectName.Location = New Point(13, 66)
+        _projectName.Location = New Point(22, 78)
         _projectName.Margin = New Padding(3, 4, 3, 4)
         _projectName.Name = "_projectName"
-        _projectName.Size = New Size(263, 27)
+        _projectName.Size = New Size(300, 27)
         _projectName.TabIndex = 2
         _projectName.Text = "SMA Scheduler"
         ' 
@@ -340,7 +340,7 @@ Partial Class SMASchedulerForm
         ' 
         versionLabel.AutoSize = True
         versionLabel.ForeColor = Color.DimGray
-        versionLabel.Location = New Point(291, 42)
+        versionLabel.Location = New Point(342, 54)
         versionLabel.Name = "versionLabel"
         versionLabel.Size = New Size(57, 20)
         versionLabel.TabIndex = 15
@@ -349,7 +349,7 @@ Partial Class SMASchedulerForm
         ' _versionNumber
         ' 
         _versionNumber.BorderStyle = BorderStyle.FixedSingle
-        _versionNumber.Location = New Point(291, 66)
+        _versionNumber.Location = New Point(342, 78)
         _versionNumber.Margin = New Padding(3, 4, 3, 4)
         _versionNumber.Name = "_versionNumber"
         _versionNumber.Size = New Size(86, 27)
@@ -360,7 +360,7 @@ Partial Class SMASchedulerForm
         ' 
         totalHoursLabel.AutoSize = True
         totalHoursLabel.ForeColor = Color.DimGray
-        totalHoursLabel.Location = New Point(412, 42)
+        totalHoursLabel.Location = New Point(452, 54)
         totalHoursLabel.Name = "totalHoursLabel"
         totalHoursLabel.Size = New Size(135, 20)
         totalHoursLabel.TabIndex = 9
@@ -369,7 +369,7 @@ Partial Class SMASchedulerForm
         ' _totalProjectHours
         ' 
         _totalProjectHours.DecimalPlaces = 1
-        _totalProjectHours.Location = New Point(412, 66)
+        _totalProjectHours.Location = New Point(452, 78)
         _totalProjectHours.Margin = New Padding(3, 4, 3, 4)
         _totalProjectHours.Maximum = New Decimal(New Integer() {100000, 0, 0, 0})
         _totalProjectHours.Name = "_totalProjectHours"
@@ -381,7 +381,7 @@ Partial Class SMASchedulerForm
         ' 
         projectSizeLabel.AutoSize = True
         projectSizeLabel.ForeColor = Color.DimGray
-        projectSizeLabel.Location = New Point(13, 108)
+        projectSizeLabel.Location = New Point(22, 124)
         projectSizeLabel.Name = "projectSizeLabel"
         projectSizeLabel.Size = New Size(86, 20)
         projectSizeLabel.TabIndex = 3
@@ -391,16 +391,16 @@ Partial Class SMASchedulerForm
         ' 
         _projectSizeSelector.DropDownStyle = ComboBoxStyle.DropDownList
         _projectSizeSelector.FormattingEnabled = True
-        _projectSizeSelector.Location = New Point(13, 132)
+        _projectSizeSelector.Location = New Point(22, 148)
         _projectSizeSelector.Margin = New Padding(3, 4, 3, 4)
         _projectSizeSelector.Name = "_projectSizeSelector"
-        _projectSizeSelector.Size = New Size(134, 28)
+        _projectSizeSelector.Size = New Size(150, 28)
         _projectSizeSelector.TabIndex = 4
         ' 
         ' _includeSaturdays
         ' 
         _includeSaturdays.AutoSize = True
-        _includeSaturdays.Location = New Point(166, 132)
+        _includeSaturdays.Location = New Point(194, 150)
         _includeSaturdays.Name = "_includeSaturdays"
         _includeSaturdays.Size = New Size(124, 24)
         _includeSaturdays.TabIndex = 20
@@ -412,9 +412,9 @@ Partial Class SMASchedulerForm
         _summaryTitle.BackColor = Color.FromArgb(CByte(223), CByte(245), CByte(232))
         _summaryTitle.Font = New Font("Segoe UI Semibold", 10F)
         _summaryTitle.ForeColor = Color.FromArgb(CByte(37), CByte(47), CByte(63))
-        _summaryTitle.Location = New Point(13, 170)
+        _summaryTitle.Location = New Point(22, 184)
         _summaryTitle.Name = "_summaryTitle"
-        _summaryTitle.Size = New Size(189, 56)
+        _summaryTitle.Size = New Size(190, 30)
         _summaryTitle.TabIndex = 5
         _summaryTitle.Text = "0 tasks"
         _summaryTitle.TextAlign = ContentAlignment.MiddleLeft
@@ -424,9 +424,9 @@ Partial Class SMASchedulerForm
         _summaryDates.BackColor = Color.FromArgb(CByte(255), CByte(243), CByte(205))
         _summaryDates.Font = New Font("Segoe UI Semibold", 10F)
         _summaryDates.ForeColor = Color.FromArgb(CByte(37), CByte(47), CByte(63))
-        _summaryDates.Location = New Point(216, 170)
+        _summaryDates.Location = New Point(224, 184)
         _summaryDates.Name = "_summaryDates"
-        _summaryDates.Size = New Size(206, 56)
+        _summaryDates.Size = New Size(210, 30)
         _summaryDates.TabIndex = 6
         _summaryDates.Text = "No dates"
         _summaryDates.TextAlign = ContentAlignment.MiddleLeft
@@ -436,9 +436,9 @@ Partial Class SMASchedulerForm
         _summaryResources.BackColor = Color.FromArgb(CByte(248), CByte(222), CByte(234))
         _summaryResources.Font = New Font("Segoe UI Semibold", 10F)
         _summaryResources.ForeColor = Color.FromArgb(CByte(37), CByte(47), CByte(63))
-        _summaryResources.Location = New Point(442, 170)
+        _summaryResources.Location = New Point(446, 184)
         _summaryResources.Name = "_summaryResources"
-        _summaryResources.Size = New Size(224, 56)
+        _summaryResources.Size = New Size(230, 30)
         _summaryResources.TabIndex = 8
         _summaryResources.Text = "No resources"
         _summaryResources.TextAlign = ContentAlignment.MiddleLeft
@@ -449,7 +449,7 @@ Partial Class SMASchedulerForm
         _projectDetailsCaptionLabel.AutoSize = True
         _projectDetailsCaptionLabel.BackColor = Color.Transparent
         _projectDetailsCaptionLabel.ForeColor = Color.FromArgb(CByte(55), CByte(65), CByte(81))
-        _projectDetailsCaptionLabel.Location = New Point(1010, 18)
+        _projectDetailsCaptionLabel.Location = New Point(886, 24)
         _projectDetailsCaptionLabel.Name = "_projectDetailsCaptionLabel"
         _projectDetailsCaptionLabel.Size = New Size(101, 20)
         _projectDetailsCaptionLabel.TabIndex = 21
@@ -461,10 +461,10 @@ Partial Class SMASchedulerForm
         _projectDetailsValueLabel.BackColor = Color.White
         _projectDetailsValueLabel.BorderStyle = BorderStyle.FixedSingle
         _projectDetailsValueLabel.Font = New Font("Segoe UI", 8.8F)
-        _projectDetailsValueLabel.Location = New Point(1010, 42)
+        _projectDetailsValueLabel.Location = New Point(886, 48)
         _projectDetailsValueLabel.Name = "_projectDetailsValueLabel"
         _projectDetailsValueLabel.Padding = New Padding(8, 5, 8, 5)
-        _projectDetailsValueLabel.Size = New Size(540, 112)
+        _projectDetailsValueLabel.Size = New Size(520, 106)
         _projectDetailsValueLabel.TabIndex = 22
         _projectDetailsValueLabel.TextAlign = ContentAlignment.TopLeft
         ' 
@@ -475,7 +475,7 @@ Partial Class SMASchedulerForm
         _scheduleProjectButton.FlatAppearance.BorderSize = 0
         _scheduleProjectButton.FlatStyle = FlatStyle.Flat
         _scheduleProjectButton.ForeColor = Color.White
-        _scheduleProjectButton.Location = New Point(1010, 168)
+        _scheduleProjectButton.Location = New Point(886, 168)
         _scheduleProjectButton.Name = "_scheduleProjectButton"
         _scheduleProjectButton.Size = New Size(220, 40)
         _scheduleProjectButton.TabIndex = 23
@@ -506,7 +506,7 @@ Partial Class SMASchedulerForm
         ' 
         contentSplit.BackColor = Color.FromArgb(CByte(224), CByte(229), CByte(236))
         contentSplit.Dock = DockStyle.Fill
-        contentSplit.Location = New Point(0, 297)
+        contentSplit.Location = New Point(0, 269)
         contentSplit.Margin = New Padding(3, 4, 3, 4)
         contentSplit.Name = "contentSplit"
         contentSplit.Orientation = Orientation.Horizontal
@@ -514,14 +514,14 @@ Partial Class SMASchedulerForm
         ' contentSplit.Panel1
         ' 
         contentSplit.Panel1.Controls.Add(_workspaceTabs)
-        contentSplit.Panel1MinSize = 430
+        contentSplit.Panel1MinSize = 360
         ' 
         ' contentSplit.Panel2
         ' 
         contentSplit.Panel2.Controls.Add(_detailsPanel)
         contentSplit.Panel2Collapsed = True
         contentSplit.Panel2MinSize = 130
-        contentSplit.Size = New Size(1577, 732)
+        contentSplit.Size = New Size(1440, 609)
         contentSplit.SplitterDistance = 430
         contentSplit.SplitterWidth = 5
         contentSplit.TabIndex = 2
@@ -539,7 +539,7 @@ Partial Class SMASchedulerForm
         _workspaceTabs.Name = "_workspaceTabs"
         _workspaceTabs.Padding = New Point(18, 6)
         _workspaceTabs.SelectedIndex = 0
-        _workspaceTabs.Size = New Size(1577, 732)
+        _workspaceTabs.Size = New Size(1440, 609)
         _workspaceTabs.TabIndex = 0
         ' 
         ' taskAllocationTab
@@ -549,7 +549,7 @@ Partial Class SMASchedulerForm
         taskAllocationTab.Location = New Point(4, 35)
         taskAllocationTab.Name = "taskAllocationTab"
         taskAllocationTab.Padding = New Padding(3)
-        taskAllocationTab.Size = New Size(1569, 693)
+        taskAllocationTab.Size = New Size(1432, 570)
         taskAllocationTab.TabIndex = 0
         taskAllocationTab.Text = "Task Allocation"
         ' 
@@ -564,14 +564,14 @@ Partial Class SMASchedulerForm
         ' mainSplit.Panel1
         ' 
         mainSplit.Panel1.Controls.Add(_grid)
-        mainSplit.Panel1MinSize = 620
+        mainSplit.Panel1MinSize = 640
         ' 
         ' mainSplit.Panel2
         ' 
         mainSplit.Panel2.Controls.Add(ganttPreviewSplit)
-        mainSplit.Panel2MinSize = 380
-        mainSplit.Size = New Size(1563, 687)
-        mainSplit.SplitterDistance = 934
+        mainSplit.Panel2MinSize = 320
+        mainSplit.Size = New Size(1426, 564)
+        mainSplit.SplitterDistance = 1027
         mainSplit.SplitterWidth = 5
         mainSplit.TabIndex = 0
         ' 
@@ -595,7 +595,7 @@ Partial Class SMASchedulerForm
         _grid.RowHeadersWidth = 51
         _grid.RowTemplate.Height = 30
         _grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect
-        _grid.Size = New Size(934, 687)
+        _grid.Size = New Size(1027, 564)
         _grid.TabIndex = 0
         ' 
         ' ganttPreviewSplit
@@ -615,8 +615,8 @@ Partial Class SMASchedulerForm
         ' 
         ganttPreviewSplit.Panel2.Controls.Add(allocationPreviewPanel)
         ganttPreviewSplit.Panel2MinSize = 200
-        ganttPreviewSplit.Size = New Size(624, 687)
-        ganttPreviewSplit.SplitterDistance = 418
+        ganttPreviewSplit.Size = New Size(394, 564)
+        ganttPreviewSplit.SplitterDistance = 326
         ganttPreviewSplit.SplitterWidth = 5
         ganttPreviewSplit.TabIndex = 0
         ' 
@@ -628,7 +628,7 @@ Partial Class SMASchedulerForm
         _gantt.Location = New Point(0, 0)
         _gantt.Margin = New Padding(3, 4, 3, 4)
         _gantt.Name = "_gantt"
-        _gantt.Size = New Size(624, 418)
+        _gantt.Size = New Size(394, 326)
         _gantt.TabIndex = 0
         ' 
         ' allocationPreviewPanel
@@ -641,7 +641,7 @@ Partial Class SMASchedulerForm
         allocationPreviewPanel.Location = New Point(0, 0)
         allocationPreviewPanel.Name = "allocationPreviewPanel"
         allocationPreviewPanel.Padding = New Padding(8)
-        allocationPreviewPanel.Size = New Size(624, 264)
+        allocationPreviewPanel.Size = New Size(394, 233)
         allocationPreviewPanel.TabIndex = 0
         ' 
         ' allocationPreviewBodySplit
@@ -657,8 +657,8 @@ Partial Class SMASchedulerForm
         ' allocationPreviewBodySplit.Panel2
         ' 
         allocationPreviewBodySplit.Panel2.Controls.Add(allocationLegendGrid)
-        allocationPreviewBodySplit.Size = New Size(608, 186)
-        allocationPreviewBodySplit.SplitterDistance = 260
+        allocationPreviewBodySplit.Size = New Size(378, 155)
+        allocationPreviewBodySplit.SplitterDistance = 190
         allocationPreviewBodySplit.TabIndex = 2
         ' 
         ' allocationPreviewChart
@@ -728,7 +728,7 @@ Partial Class SMASchedulerForm
         allocationPreviewTitle.Name = "allocationPreviewTitle"
         allocationPreviewTitle.Size = New Size(608, 28)
         allocationPreviewTitle.TabIndex = 0
-        allocationPreviewTitle.Text = "Planner Preview - Resources Used"
+        allocationPreviewTitle.Text = "Allocation Summary"
         ' 
         ' taskUsageTab
         ' 
@@ -750,12 +750,12 @@ Partial Class SMASchedulerForm
         ' taskUsageSplit.Panel1
         ' 
         taskUsageSplit.Panel1.Controls.Add(_taskUsageGrid)
-        taskUsageSplit.Panel1MinSize = 700
+        taskUsageSplit.Panel1MinSize = 680
         ' 
         ' taskUsageSplit.Panel2
         ' 
         taskUsageSplit.Panel2.Controls.Add(taskUsagePreviewPanel)
-        taskUsageSplit.Panel2MinSize = 360
+        taskUsageSplit.Panel2MinSize = 320
         taskUsageSplit.Size = New Size(1563, 687)
         taskUsageSplit.SplitterDistance = 1040
         taskUsageSplit.SplitterWidth = 5
@@ -874,7 +874,7 @@ Partial Class SMASchedulerForm
         taskUsagePreviewTitle.Name = "taskUsagePreviewTitle"
         taskUsagePreviewTitle.Size = New Size(494, 32)
         taskUsagePreviewTitle.TabIndex = 0
-        taskUsagePreviewTitle.Text = "Planner Preview - Task Count"
+        taskUsagePreviewTitle.Text = "Task Load Summary"
         ' 
         ' resourceUsageTab
         ' 
@@ -896,12 +896,12 @@ Partial Class SMASchedulerForm
         ' resourceUsageSplit.Panel1
         ' 
         resourceUsageSplit.Panel1.Controls.Add(_resourceUsageGrid)
-        resourceUsageSplit.Panel1MinSize = 700
+        resourceUsageSplit.Panel1MinSize = 680
         ' 
         ' resourceUsageSplit.Panel2
         ' 
         resourceUsageSplit.Panel2.Controls.Add(resourceUsagePreviewPanel)
-        resourceUsageSplit.Panel2MinSize = 360
+        resourceUsageSplit.Panel2MinSize = 320
         resourceUsageSplit.Size = New Size(1563, 687)
         resourceUsageSplit.SplitterDistance = 1040
         resourceUsageSplit.SplitterWidth = 5
@@ -1020,7 +1020,7 @@ Partial Class SMASchedulerForm
         resourceUsagePreviewTitle.Name = "resourceUsagePreviewTitle"
         resourceUsagePreviewTitle.Size = New Size(494, 32)
         resourceUsagePreviewTitle.TabIndex = 0
-        resourceUsagePreviewTitle.Text = "Planner Preview - Resource Contribution"
+        resourceUsagePreviewTitle.Text = "Resource Contribution"
         ' 
         ' capacityPlanningTab
         ' 
@@ -1427,15 +1427,16 @@ Partial Class SMASchedulerForm
         AutoScaleDimensions = New SizeF(8F, 20F)
         AutoScaleMode = AutoScaleMode.Font
         BackColor = Color.FromArgb(CByte(244), CByte(246), CByte(249))
-        ClientSize = New Size(1577, 1055)
+        ClientSize = New Size(1440, 900)
         Controls.Add(contentSplit)
         Controls.Add(statusBar)
         Controls.Add(headerPanel)
         Controls.Add(commandBar)
         Font = New Font("Segoe UI", 9F)
         Margin = New Padding(3, 4, 3, 4)
-        MinimumSize = New Size(1323, 891)
+        MinimumSize = New Size(1180, 760)
         Name = "SMASchedulerForm"
+        StartPosition = FormStartPosition.CenterScreen
         Text = "SMA Scheduler"
         commandBar.ResumeLayout(False)
         commandBar.PerformLayout()

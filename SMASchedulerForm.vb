@@ -140,6 +140,72 @@ Public Class SMASchedulerForm
         RecalculateAndRefresh(liveProject.TemplateName & " template loaded for " & projectSize & " project")
     End Sub
 
+    Public Sub LoadDemoProject(liveProject As LiveProjectItem)
+        If liveProject Is Nothing Then
+            Return
+        End If
+
+        ClearProjectForNewSchedule()
+        _projectName.Text = If(String.IsNullOrWhiteSpace(liveProject.ProjectName), "Demo SMA Planning Project", liveProject.ProjectName.Trim())
+        _versionNumber.Text = If(String.IsNullOrWhiteSpace(liveProject.VersionNumber), "1.0", liveProject.VersionNumber.Trim())
+        _projectType = If(String.IsNullOrWhiteSpace(liveProject.ProjectType), "New", liveProject.ProjectType.Trim())
+        _projectDetailsText = liveProject.ProjectDetailsText
+        _projectReportType = If(String.IsNullOrWhiteSpace(liveProject.ReportType), liveProject.TaskReportFilter, liveProject.ReportType)
+        _isPointcloudProject = liveProject.IsPointcloud
+        _hasTechPack = liveProject.TechPack
+        _hasDeedProfile = liveProject.DeedProfile
+        _hasShadowAnalysis = liveProject.ShadowAnalysis
+        _isUrgentSmallProject = liveProject.UrgentSmallProjects
+        SelectProjectSize(If(String.IsNullOrWhiteSpace(liveProject.ProjectSize), "Small", liveProject.ProjectSize))
+        UpdateProjectMetadataDisplay()
+
+        Dim demoTasks = CreateDemoTaskCatalog()
+        _taskCatalog.Clear()
+        For Each catalogTask In demoTasks
+            _taskCatalog.Add(catalogTask)
+        Next
+
+        For Each employeeName In {"Sheik.Ahsan", "Afzal.khan", "Devarajan"}
+            If Not _employees.Any(Function(existing) String.Equals(existing, employeeName, StringComparison.OrdinalIgnoreCase)) Then
+                _employees.Add(employeeName)
+            End If
+        Next
+
+        Dim projectSize = CStr(_projectSizeSelector.SelectedItem)
+        Dim startDate = NextWorkingDate(Date.Today)
+        Dim totalDemoHours = 0D
+        Dim demoAssignees = {"Sheik.Ahsan", "Afzal.khan", "Sheik.Ahsan; Afzal.khan", "Devarajan", "Afzal.khan"}
+
+        _suspendTaskEvents = True
+        Try
+            _tasks.Clear()
+            For index = 0 To demoTasks.Count - 1
+                Dim catalogTask = demoTasks(index)
+                Dim requestedHours = catalogTask.HoursForSize(projectSize)
+                If requestedHours <= 0D Then
+                    Continue For
+                End If
+
+                Dim task = CreateTemplateScheduleTask(catalogTask, _tasks.Count + 1, requestedHours, startDate.AddDays(index))
+                task.AssignedTo = demoAssignees(index Mod demoAssignees.Length)
+                task.ResourceNames = task.AssignedTo
+                SyncTaskResourceDistribution(task)
+                _tasks.Add(task)
+                totalDemoHours += requestedHours
+            Next
+        Finally
+            _suspendTaskEvents = False
+        End Try
+
+        _totalProjectHours.Value = ClampDecimal(totalDemoHours, _totalProjectHours.Minimum, _totalProjectHours.Maximum)
+        If _tasks.Count > 0 Then
+            SelectTask(1)
+        End If
+
+        RecalculateAndRefresh("Demo project loaded without SQL")
+        MarkCurrentStateSaved()
+    End Sub
+
     Public Sub LoadSavedProjectSchedule(savedSchedule As SavedProjectSchedule)
         If savedSchedule Is Nothing Then
             Return
@@ -509,9 +575,13 @@ Public Class SMASchedulerForm
         If IsInDesignerHost() Then
             ' Keep designer view empty; production task data comes only from SQL.
         Else
-            For Each item In _taskCatalogService.LoadAvailableTasks()
-                _taskCatalog.Add(item)
-            Next
+            Try
+                For Each item In _taskCatalogService.LoadAvailableTasks()
+                    _taskCatalog.Add(item)
+                Next
+            Catch
+                _taskCatalog.Clear()
+            End Try
 
             For Each employeeName In _employeeCatalogService.LoadEmployees()
                 If Not _employees.Contains(employeeName) Then
@@ -630,9 +700,9 @@ Public Class SMASchedulerForm
             _resourceUtilizationColorSelector.SelectedIndex = 0
         End If
         RefreshWorkspaceTabs()
-        ApplyResponsiveSplitter(mainSplit, 620, 380, 0.62R)
-        ApplyResponsiveSplitter(taskUsageSplit, 700, 360, 0.68R)
-        ApplyResponsiveSplitter(resourceUsageSplit, 700, 360, 0.68R)
+        ApplyResponsiveSplitter(mainSplit, 640, 320, 0.72R)
+        ApplyResponsiveSplitter(taskUsageSplit, 680, 320, 0.72R)
+        ApplyResponsiveSplitter(resourceUsageSplit, 680, 320, 0.72R)
     End Sub
 
     Private Sub ConfigurePreviewBadgeLabels()
@@ -650,15 +720,15 @@ Public Class SMASchedulerForm
     End Sub
 
     Private Sub MainSplitSizeChanged(sender As Object, e As EventArgs) Handles mainSplit.SizeChanged
-        ApplyResponsiveSplitter(mainSplit, 620, 380, 0.62R)
+        ApplyResponsiveSplitter(mainSplit, 640, 320, 0.72R)
     End Sub
 
     Private Sub TaskUsageSplitSizeChanged(sender As Object, e As EventArgs) Handles taskUsageSplit.SizeChanged
-        ApplyResponsiveSplitter(taskUsageSplit, 700, 360, 0.68R)
+        ApplyResponsiveSplitter(taskUsageSplit, 680, 320, 0.72R)
     End Sub
 
     Private Sub ResourceUsageSplitSizeChanged(sender As Object, e As EventArgs) Handles resourceUsageSplit.SizeChanged
-        ApplyResponsiveSplitter(resourceUsageSplit, 700, 360, 0.68R)
+        ApplyResponsiveSplitter(resourceUsageSplit, 680, 320, 0.72R)
     End Sub
 
     Private Sub ConfigureStaticWorkspaceGrid(grid As DataGridView, selectionMode As DataGridViewSelectionMode, readOnlyValue As Boolean, multiSelectValue As Boolean)
@@ -1593,6 +1663,16 @@ Public Class SMASchedulerForm
             SelectTask(1)
         End If
     End Sub
+
+    Private Shared Function CreateDemoTaskCatalog() As List(Of TaskCatalogItem)
+        Return New List(Of TaskCatalogItem) From {
+            New TaskCatalogItem With {.DatabaseTaskId = 9001, .Title = "Scope", .Predecessor = "", .DependencyType = "FS", .SmallHours = 4D, .MediumHours = 6D, .LargeHours = 8D, .VeryLargeHours = 10D, .Assignee = "Sheik.Ahsan", .ModuleId = 1, .ProjectType = "New", .TypeOfReport = "BRE/ROL", .TaskOrder = 1},
+            New TaskCatalogItem With {.DatabaseTaskId = 9002, .Title = "Gathering of Inputs", .Predecessor = "Previous Task", .DependencyType = "FS", .SmallHours = 8D, .MediumHours = 12D, .LargeHours = 16D, .VeryLargeHours = 24D, .Assignee = "Afzal.khan", .ModuleId = 1, .ProjectType = "New", .TypeOfReport = "BRE/ROL", .TaskOrder = 2},
+            New TaskCatalogItem With {.DatabaseTaskId = 9003, .Title = "3D Modelling", .Predecessor = "Previous Task", .DependencyType = "FS", .SmallHours = 12D, .MediumHours = 20D, .LargeHours = 32D, .VeryLargeHours = 48D, .Assignee = "Sheik.Ahsan; Afzal.khan", .ModuleId = 4, .ProjectType = "New", .TypeOfReport = "BRE/ROL", .TaskOrder = 3},
+            New TaskCatalogItem With {.DatabaseTaskId = 9004, .Title = "Quality Check", .Predecessor = "Previous Task", .DependencyType = "FS", .SmallHours = 6D, .MediumHours = 8D, .LargeHours = 12D, .VeryLargeHours = 16D, .Assignee = "Devarajan", .ModuleId = 5, .ProjectType = "New", .TypeOfReport = "BRE/ROL", .TaskOrder = 4},
+            New TaskCatalogItem With {.DatabaseTaskId = 9005, .Title = "Final Delivery", .Predecessor = "Previous Task", .DependencyType = "FS", .SmallHours = 4D, .MediumHours = 6D, .LargeHours = 8D, .VeryLargeHours = 10D, .Assignee = "Afzal.khan", .ModuleId = 6, .ProjectType = "New", .TypeOfReport = "BRE/ROL", .TaskOrder = 5}
+        }
+    End Function
 
     Private Function CreateTemplateScheduleTask(catalogTask As TaskCatalogItem, taskId As Integer, requestedHours As Decimal, startDate As Date) As ScheduleTask
         Dim predecessorText = catalogTask.Predecessor.Trim()
@@ -5424,7 +5504,13 @@ Public Class PlannerPieChartPanel
     End Function
 
     Private Sub DrawEmpty(graphics As Graphics, message As String)
-        DrawCenteredText(graphics, If(String.IsNullOrWhiteSpace(message), "No scheduled tasks", message), New Font("Segoe UI Semibold", 13.0F), Color.DimGray, ClientRectangle)
+        Dim bounds = Rectangle.Inflate(ClientRectangle, -12, -12)
+        If bounds.Width <= 0 OrElse bounds.Height <= 0 Then
+            bounds = ClientRectangle
+        End If
+
+        Dim fontSize = If(ClientSize.Width < 280 OrElse ClientSize.Height < 180, 10.0F, 12.0F)
+        DrawCenteredText(graphics, If(String.IsNullOrWhiteSpace(message), "No scheduled tasks", message), New Font("Segoe UI Semibold", fontSize), Color.DimGray, bounds)
     End Sub
 
     Private Sub DrawCenteredText(graphics As Graphics, text As String, font As Font, color As Color, bounds As Rectangle)

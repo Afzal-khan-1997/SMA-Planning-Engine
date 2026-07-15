@@ -410,14 +410,19 @@ Public Class SMAPlannerForm
     End Sub
 
     Private Sub btnScheduleProject_Click(sender As Object, e As EventArgs) Handles btnScheduleProject.Click
-        If _sqlRepository Is Nothing Then
-            MessageBox.Show(Me, "SQL connection is not configured. Update App.config with the SmaSchedulerDb connection string.", "SQL Not Configured", MessageBoxButtons.OK, MessageBoxIcon.Warning)
-            Return
-        End If
-
         Dim projectCode = _liveProjectSearchBox.Text.Trim()
         If projectCode.Length = 0 Then
             MessageBox.Show(Me, "Type a Project ID first.", "Schedule Project", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return
+        End If
+
+        If IsDemoProjectId(projectCode) Then
+            OpenDemoSchedulerProject()
+            Return
+        End If
+
+        If _sqlRepository Is Nothing Then
+            MessageBox.Show(Me, "SQL connection is not configured. Update App.config with the SmaSchedulerDb connection string.", "SQL Not Configured", MessageBoxButtons.OK, MessageBoxIcon.Warning)
             Return
         End If
 
@@ -525,6 +530,53 @@ Public Class SMAPlannerForm
 
         ApplyCurrentTheme()
         RefreshPlannerLists()
+    End Sub
+
+    Private Shared Function IsDemoProjectId(projectCode As String) As Boolean
+#If DEBUG Then
+        Return String.Equals(If(projectCode, "").Trim(), "12345", StringComparison.OrdinalIgnoreCase)
+#Else
+        Return False
+#End If
+    End Function
+
+    Private Shared Function CreateDemoProject() As LiveProjectItem
+        Return New LiveProjectItem With {
+            .ProjectCode = "12345",
+            .ProjectName = "Demo SMA Planning Project",
+            .ClientName = "Demo",
+            .VersionNumber = "1.0",
+            .ProjectSize = "Small",
+            .TemplateName = "Demo BRE/ROL",
+            .ProjectType = "New",
+            .ReportType = "BRE/ROL",
+            .TaskReportFilter = "BRE/ROL",
+            .ProjectDetailsText = "Debug demo project. SQL is not used for Project ID 12345.",
+            .PlanningMessage = "Demo scheduler loaded without SQL."
+        }
+    End Function
+
+    Private Sub OpenDemoSchedulerProject()
+#If DEBUG Then
+        Dim scheduler As SMASchedulerForm = Nothing
+        Try
+            scheduler = New SMASchedulerForm()
+            scheduler.LoadDemoProject(CreateDemoProject())
+            FormTransitionService.ShowDialogWithMotion(Me, scheduler)
+            SetPlannerStatus("Demo project 12345 opened without SQL.")
+        Catch ex As Exception
+            MessageBox.Show(Me, "Demo scheduler could not be opened." & Environment.NewLine & ex.Message, "Demo Project", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            SetPlannerStatus("Demo scheduler could not be opened.")
+        Finally
+            If scheduler IsNot Nothing Then
+                scheduler.Dispose()
+            End If
+        End Try
+
+        ApplyCurrentTheme()
+#Else
+        Throw New InvalidOperationException("Demo project loading is only available in Debug builds.")
+#End If
     End Sub
 
     Private Shared Function IsKnownProjectSize(projectSize As String) As Boolean

@@ -120,7 +120,7 @@ def build():
 
     doc.add_heading("1. How To Study This Code", level=1)
     add_numbered(doc, [
-        "Start with Program.vb and LoginForm.vb to understand how the application opens.",
+        "Start with LoginForm.vb to understand how the application opens and validates login.",
         "Read SMAPlannerForm.vb next because it is the first real business screen after login.",
         "Read SMASchedulerForm.vb in groups: project header, task buttons, task grid, task allocation, capacity planning, resource usage, save.",
         "Read SqlProjectRepository.vb alongside the forms because it explains where data comes from and where it is saved.",
@@ -130,8 +130,8 @@ def build():
 
     doc.add_heading("2. Project Architecture", level=1)
     add_table(doc, ["Layer", "Main files", "Purpose"], [
-        ("Startup and security", "Program.vb, LoginForm.vb", "Starts the app, checks username/password, then opens the planner form."),
-        ("Main planner UI", "SMAPlannerForm.vb", "Searches SQL by Project ID, validates project metadata, then opens the scheduler."),
+        ("Startup and security", "LoginForm.vb", "Starts the app, checks username/password, then opens the planner form directly from the login button success path."),
+        ("Main planner UI", "SMAPlannerForm.vb", "Opens after login without touching SQL, then searches SQL by Project ID only when Schedule Project is clicked."),
         ("Scheduler UI", "SMASchedulerForm.vb", "Shows tasks, allocation, capacity, resource usage, preview charts, save/refresh actions."),
         ("Scheduling logic", "ScheduleEngine.vb", "Recalculates start/finish dates, dependencies, working days, and 8-hour capacity."),
         ("SQL access", "SqlProjectRepository.vb", "Runs SQL SELECT/INSERT/UPDATE/DELETE and converts SQL rows into VB objects."),
@@ -141,32 +141,36 @@ def build():
     ], widths=[1.4, 2.1, 3.0])
 
     doc.add_paragraph("Simple runtime flow:")
-    add_code(doc, "Program.Main -> LoginForm -> SMAPlannerForm -> SQL Project ID lookup -> SMASchedulerForm -> SQL task templates -> user edits -> SaveProjectToSql -> SqlProjectRepository.SaveProject")
+    add_code(doc, "LoginForm.Main -> LoginForm -> successful Login button -> SMAPlannerForm.ShowDialog() -> user clicks Schedule Project -> SQL Project ID lookup -> SMASchedulerForm -> SQL task templates -> user edits -> SaveProjectToSql -> SqlProjectRepository.SaveProject")
 
     doc.add_heading("3. Startup And Login", level=1)
     add_table(doc, ["Function", "Where", "What it does"], [
-        ("Main", "Program.vb", "Enables WinForms visual styles, shows LoginForm, and opens SMAPlannerForm only when login succeeds."),
-        ("LoginForm.New", "LoginForm.vb", "Builds the login screen, centers it, sets Enter key to the Login button, and fills username with current Windows user."),
+        ("Main", "LoginForm.vb", "Enables WinForms visual styles and starts the application with LoginForm. Program.vb was removed."),
+        ("LoginForm.New", "LoginForm.vb", "Initializes the designer-built login controls, sets Enter key to the Login button, and fills username with current Windows user."),
         ("TryLogin", "LoginForm.vb", "Checks three rules: username is allowed, username matches the current Windows username, and password equals 12345."),
+        ("OpenPlannerForm", "LoginForm.vb", "Hides the login form, opens SMAPlannerForm with ShowDialog(), and closes the login form when planner closes."),
         ("CurrentWindowsUserName", "LoginForm.vb", "Reads WindowsIdentity.GetCurrent().Name, removes the domain prefix, and returns the local Windows username."),
         ("ShowLoginError", "LoginForm.vb", "Shows the error message, clears password, and keeps the user on the login form.")
     ], widths=[1.6, 1.4, 3.5])
     doc.add_paragraph("Allowed users are Sheik.Ahsan and Afzal.khan. Both currently use password 12345. Because the code also checks the Windows username, a user cannot simply type another allowed name unless the system username matches.")
 
     doc.add_heading("4. Planner Form Workflow", level=1)
-    doc.add_paragraph("SMAPlannerForm is the first business screen. Its main job is to let the user type a Project ID and open the scheduler only when SQL has enough valid project data.")
+    doc.add_paragraph("SMAPlannerForm is the first business screen after login. It opens without connecting to SQL. SQL is first used only when the user types a Project ID and clicks Schedule Project.")
     add_table(doc, ["Step", "Logic"], [
-        ("1. User enters Project ID", "The Project ID is read from _liveProjectSearchBox.Text."),
-        ("2. SQL connection check", "If _sqlRepository is Nothing, the app shows a SQL configuration warning."),
-        ("3. Load project metadata", "GetProjectPlanningInfo(projectCode) reads Version_Table and Table_Project_Tracking."),
-        ("4. Stop if missing", "If no project, missing project name, missing version, missing project size, invalid size, inactive project, or already planned, the scheduler does not open."),
-        ("5. Build LiveProjectItem", "The SQL metadata is copied into a LiveProjectItem, including version, size, report type, pointcloud, tech pack, deed profile, shadow analysis, urgent small project."),
-        ("6. Open scheduler", "SMASchedulerForm.LoadLiveProjectTemplate(projectToSchedule) loads SQL task templates and shows the scheduler with motion transition.")
+        ("1. Login succeeds", "LoginForm hides itself and opens SMAPlannerForm.ShowDialog()."),
+        ("2. Planner opens with no SQL call", "InitializePlannerWithoutSql clears the list, updates summary labels, and tells the user to enter a Project ID."),
+        ("3. User enters Project ID", "The Project ID is read from _liveProjectSearchBox.Text only when Schedule Project is clicked."),
+        ("4. SQL connection check", "If _sqlRepository is Nothing, the app shows a SQL configuration warning."),
+        ("5. Load project metadata", "GetProjectPlanningInfo(projectCode) reads Version_Table and Table_Project_Tracking."),
+        ("6. Stop if missing", "If no project, missing project name, missing version, missing project size, invalid size, inactive project, or already planned, the scheduler does not open."),
+        ("7. Build LiveProjectItem", "The SQL metadata is copied into a LiveProjectItem, including version, size, report type, pointcloud, tech pack, deed profile, shadow analysis, urgent small project."),
+        ("8. Open scheduler", "SMASchedulerForm.LoadLiveProjectTemplate(projectToSchedule) loads SQL task templates and shows the scheduler with motion transition.")
     ], widths=[1.8, 4.7])
 
     doc.add_heading("Important SMAPlannerForm Functions", level=2)
     add_table(doc, ["Function", "Purpose"], [
         ("btnScheduleProject_Click", "Main Schedule Project button handler. Validates SQL data and opens scheduler."),
+        ("InitializePlannerWithoutSql", "Opens Planner after login without connecting to SQL. Shows an instruction status message."),
         ("RefreshSearchProjectSuggestions", "Updates search suggestions while typing."),
         ("SearchStoredProjects", "Finds already scheduled projects that match search text."),
         ("LoadProjectList", "Loads recent scheduled projects from SQL."),
@@ -354,9 +358,9 @@ def build():
 
     doc.add_heading("19. Files To Read First", level=1)
     add_table(doc, ["Priority", "File", "Reason"], [
-        ("1", "Program.vb", "Small and easy; shows app entry point."),
-        ("2", "LoginForm.vb", "Shows login rules and button/Enter behavior."),
-        ("3", "SMAPlannerForm.vb", "Shows Project ID SQL validation and opening scheduler."),
+        ("1", "LoginForm.vb", "Shows the app entry point, login rules, button/Enter behavior, and opening SMAPlannerForm."),
+        ("2", "SMAPlannerForm.vb", "Shows delayed SQL loading, Project ID validation, and opening scheduler."),
+        ("3", "SMAPlannerForm.Designer.vb", "Shows planner UI controls and grid columns in designer-backed code."),
         ("4", "TaskCatalogService.vb", "Shows tasks are SQL-only at runtime."),
         ("5", "TaskCatalogItem.vb", "Shows project-size hours mapping."),
         ("6", "ScheduleTask.vb", "Shows each scheduler grid row property."),
@@ -377,6 +381,15 @@ def build():
         ("What does .json mean?", "JSON is a structured data format often used for configuration or metadata."),
         ("What does .md mean?", "Markdown is a readable text document format used for notes, guides, and GitHub documentation.")
     ], widths=[2.2, 4.3])
+
+    doc.add_heading("Current Startup Notes", level=2)
+    add_bullets(doc, [
+        "Program.vb has been removed.",
+        "The project startup object is SMAScheduler.LoginForm.",
+        "LoginForm.Main starts the application with Application.Run(New LoginForm()).",
+        "Successful login calls SMAPlannerForm.ShowDialog() from LoginForm.vb.",
+        "SMAPlannerForm no longer loads SQL on form startup; SQL starts when Schedule Project is clicked."
+    ])
 
     doc.add_heading("21. Debugging Checklist", level=1)
     add_bullets(doc, [
